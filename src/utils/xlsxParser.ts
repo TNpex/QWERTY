@@ -7,9 +7,12 @@ const STORE_NAME_MAPPING: Record<string, string> = {
   'спб_спортивная': 'Спб_Спортивная',
   'спортивная': 'Спб_Спортивная',
   'санкт-петербург (ярослава)': 'Спб_Ярослава',
+  'санкт-петербург (ярослава гашека)': 'Спб_Ярослава',
   'спб_ярослава': 'Спб_Ярослава',
   'ярослава': 'Спб_Ярослава',
+  'ярослава гашека': 'Спб_Ярослава',
   'екб_склад': 'Екб_Склад',
+  'основной склад екатеринбург': 'Екб_Склад',
   'склад': 'Екб_Склад',
   'екб_соболева': 'Екб_Соболева',
   'соболева': 'Екб_Соболева',
@@ -24,6 +27,7 @@ const STORE_NAME_MAPPING: Record<string, string> = {
   'екб_парина': 'Екб_Парина',
   'парина': 'Екб_Парина',
   'екб_елизавет': 'Екб_Елизавет',
+  'елизаветенское шоссе': 'Екб_Елизавет',
   'елизавет': 'Екб_Елизавет',
 };
 
@@ -47,48 +51,59 @@ function findColumn(headers: string[], possibleNames: string[]): string | null {
   return null;
 }
 
-// Парсинг "Размеры и наличие" - извлекает размеры (если есть)
-function parseSizes(value: any): string[] {
-  if (!value) return [];
-  const str = String(value).trim();
-  
-  // Ищем числа 36-46 (размеры обуви)
-  const sizes = new Set<string>();
-  const sizePattern = /\b(3[6-9]|4[0-6])\b/g;
-  let match;
-  while ((match = sizePattern.exec(str)) !== null) {
-    sizes.add(match[1]);
-  }
-  
-  // Ищем размеры одежды XS-XXL
-  const clothingPattern = /\b(XS|S|M|L|XL|XXL|2XL|3XL)\b/gi;
-  while ((match = clothingPattern.exec(str)) !== null) {
-    sizes.add(match[1].toUpperCase());
-  }
-  
-  return Array.from(sizes);
-}
-
-// Парсинг "Размеры и наличие" - извлекает {магазин: количество}
-function parseStoreQuantities(value: any): Map<string, number> {
+// Парсинг "Размеры и наличие" - возвращает Map<магазин, Map<размер, количество>>
+function parseSizesAndStores(value: any): Map<string, Map<string, number>> {
   if (!value) return new Map();
   const str = String(value).trim();
-  const result = new Map<string, number>();
+  if (!str) return new Map();
   
-  // Формат: "Санкт-Петербург (Спортивная) 1 шт | Ижевск 1 шт | ..."
+  const result = new Map<string, Map<string, number>>();
+  let currentSize = '';
+  
+  // Разбиваем по |
   const parts = str.split('|').map(p => p.trim());
   
   for (const part of parts) {
-    // Извлекаем название магазина и количество
-    const match = part.match(/^(.+?)\s+(\d+)\s*шт?/i);
-    if (match) {
-      const storeName = match[1].trim().toLowerCase();
-      const quantity = parseInt(match[2]);
+    // Проверяем есть ли размер в начале (например "L:" или "43:")
+    const sizeMatch = part.match(/^([A-Z0-9,\.]+):\s*(.+)/i);
+    
+    if (sizeMatch) {
+      // Есть размер
+      currentSize = sizeMatch[1].trim();
+      const rest = sizeMatch[2].trim();
       
-      // Находим соответствие колонке
-      const columnName = STORE_NAME_MAPPING[storeName];
-      if (columnName) {
-        result.set(columnName, quantity);
+      // Парсим магазин и количество
+      const storeQtyMatch = rest.match(/^(.+?)\s*-\s*(\d+)\s*(шт|пар)?/i);
+      if (storeQtyMatch) {
+        const storeName = storeQtyMatch[1].trim().toLowerCase();
+        const quantity = parseInt(storeQtyMatch[2]);
+        const columnName = STORE_NAME_MAPPING[storeName];
+        
+        if (columnName) {
+          if (!result.has(columnName)) {
+            result.set(columnName, new Map());
+          }
+          const storeSizes = result.get(columnName)!;
+          storeSizes.set(currentSize, (storeSizes.get(currentSize) || 0) + quantity);
+        }
+      }
+    } else {
+      // Нет размера - это продолжение предыдущего размера
+      if (currentSize) {
+        const storeQtyMatch = part.match(/^(.+?)\s*-\s*(\d+)\s*(шт|пар)?/i);
+        if (storeQtyMatch) {
+          const storeName = storeQtyMatch[1].trim().toLowerCase();
+          const quantity = parseInt(storeQtyMatch[2]);
+          const columnName = STORE_NAME_MAPPING[storeName];
+          
+          if (columnName) {
+            if (!result.has(columnName)) {
+              result.set(columnName, new Map());
+            }
+            const storeSizes = result.get(columnName)!;
+            storeSizes.set(currentSize, (storeSizes.get(currentSize) || 0) + quantity);
+          }
+        }
       }
     }
   }
@@ -124,7 +139,6 @@ export function parseXLSX(file: File): Promise<ParsedData> {
         const priceCol = findColumn(headers, ['цена', 'price', 'стоимость']);
         const articleCol = findColumn(headers, ['артикул', 'article', 'код', 'sku']);
         const sizesCol = findColumn(headers, ['размеры и наличие', 'размеры', 'sizes']);
-        const totalCol = findColumn(headers, ['всего', 'total', 'итого']);
         
         if (!nameCol) {
           reject(new Error(`Не найдена колонка "Название". Доступные: ${headers.join(', ')}`));
@@ -182,39 +196,37 @@ export function parseXLSX(file: File): Promise<ParsedData> {
             productsMap.set(productKey, product);
           }
           
-          // Парсим размеры из "Размеры и наличие"
-          const sizes = sizesCol ? parseSizes(row[sizesCol]) : [];
+          // Парсим размеры и наличие из текста
+          const sizesAndStores = sizesCol ? parseSizesAndStores(row[sizesCol]) : new Map();
           
-          // Парсим количества по магазинам из текста
-          const storeQuantitiesFromText = sizesCol ? parseStoreQuantities(row[sizesCol]) : new Map();
-          
-          // Если есть размеры — создаём записи для каждого размера
-          if (sizes.length > 0) {
+          if (sizesAndStores.size > 0) {
+            // Есть данные из текста - используем их
+            // Сначала собираем все размеры
+            const allSizes = new Set<string>();
+            sizesAndStores.forEach((storeSizes: Map<string, number>) => {
+              storeSizes.forEach((_: number, size: string) => allSizes.add(size));
+            });
+            
             // Для каждого магазина
             storeColumns.forEach(colName => {
               const store = storesMap.get(colName)!;
-              const quantity = Number(row[colName]) || 0;
+              const storeSizes = sizesAndStores.get(colName);
               
-              if (quantity > 0) {
-                // Распределяем количество по размерам равномерно
-                const perSize = Math.floor(quantity / sizes.length);
-                let remainder = quantity % sizes.length;
-                
-                sizes.forEach(size => {
-                  const qty = perSize + (remainder > 0 ? 1 : 0);
-                  if (remainder > 0) remainder--;
-                  
+              if (storeSizes && storeSizes.size > 0) {
+                // Есть данные для этого магазина
+                allSizes.forEach(size => {
+                  const quantity = storeSizes.get(size) || 0;
                   inventory.push({
                     productId: product!.id,
                     storeId: store.id,
                     size,
-                    quantity: qty,
+                    quantity,
                     lastUpdated: new Date().toISOString(),
                   });
                 });
               } else {
-                // Нет товара — записываем нули
-                sizes.forEach(size => {
+                // Нет данных - записываем нули для всех размеров
+                allSizes.forEach(size => {
                   inventory.push({
                     productId: product!.id,
                     storeId: store.id,
@@ -226,7 +238,7 @@ export function parseXLSX(file: File): Promise<ParsedData> {
               }
             });
           } else {
-            // Нет размеров (сумки, ракетки) — просто записываем количество
+            // Нет данных из текста - используем числа из колонок магазинов
             storeColumns.forEach(colName => {
               const store = storesMap.get(colName)!;
               const quantity = Number(row[colName]) || 0;
