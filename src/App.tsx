@@ -21,11 +21,11 @@ function AppContent() {
   }
 
   const tabs = [
-    { id: 'dashboard' as Tab, label: 'Обзор', icon: LayoutDashboard },
-    { id: 'inventory' as Tab, label: 'Инвентарь', icon: Package },
-    { id: 'transfers' as Tab, label: 'Перемещения', icon: ArrowLeftRight },
-    { id: 'restock' as Tab, label: 'Дозакупка', icon: ShoppingCart },
-    { id: 'analytics' as Tab, label: 'Аналитика', icon: BarChart3 },
+    { id: 'dashboard' as Tab, label: '📊 Обзор', icon: LayoutDashboard },
+    { id: 'inventory' as Tab, label: '🎾 Инвентарь', icon: Package },
+    { id: 'transfers' as Tab, label: '🔄 Перемещения', icon: ArrowLeftRight },
+    { id: 'restock' as Tab, label: '🛒 Дозакупка', icon: ShoppingCart },
+    { id: 'analytics' as Tab, label: '📈 Аналитика', icon: BarChart3 },
   ];
 
   const renderContent = () => {
@@ -102,17 +102,17 @@ function AppContent() {
       )}
 
       {/* Sidebar */}
-      <aside className={`fixed top-0 left-0 h-full w-64 bg-white border-r border-gray-200 z-50 transform transition-transform duration-300 ${
+      <aside className={`fixed top-0 left-0 h-full w-64 bg-gradient-to-b from-green-50 to-white border-r border-green-100 z-50 transform transition-transform duration-300 ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       } lg:translate-x-0`}>
         <div className="p-6">
           <div className="flex items-center gap-3 mb-8">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl flex items-center justify-center">
-              <span className="text-white font-bold text-lg">S</span>
+            <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg">
+              <span className="text-white text-2xl">🎾</span>
             </div>
             <div>
               <h1 className="font-bold text-gray-800 text-lg leading-tight">SaleTennis</h1>
-              <p className="text-[10px] text-gray-400 uppercase tracking-wider">BI Analytics</p>
+              <p className="text-[10px] text-green-600 uppercase tracking-wider font-semibold">BI Analytics</p>
             </div>
           </div>
 

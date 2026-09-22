@@ -1,11 +1,8 @@
 import { ArrowRight, AlertTriangle, Package } from 'lucide-react';
-import { useData, getTransferRecommendations } from '../context/DataContext';
+import { useTransferRecommendations } from '../hooks/useAnalytics';
 
 export function TransferRecommendations() {
-  const { data } = useData();
-  if (!data) return null;
-
-  const recommendations = getTransferRecommendations(data);
+  const recommendations = useTransferRecommendations();
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {

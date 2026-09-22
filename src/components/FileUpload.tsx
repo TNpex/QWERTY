@@ -75,11 +75,12 @@ export function FileUpload() {
       <div className="w-full max-w-2xl">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl mb-4 shadow-lg">
-            <span className="text-white font-bold text-2xl">S</span>
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-green-500 to-green-600 rounded-2xl mb-4 shadow-lg">
+            <span className="text-white text-4xl">🎾</span>
           </div>
           <h1 className="text-3xl font-bold text-gray-800 mb-2">SaleTennis BI Analytics</h1>
-          <p className="text-gray-500">Загрузите XLSX файл с данными по наличию товаров</p>
+          <p className="text-gray-500">Загрузите XLSX/CSV файл с данными по наличию товаров</p>
+          <p className="text-sm text-green-600 mt-2">🏆 Умная аналитика для теннисных магазинов</p>
         </div>
 
         {/* Upload Area */}

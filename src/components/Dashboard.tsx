@@ -1,13 +1,12 @@
 import { Package, AlertTriangle, TrendingUp, DollarSign, Store, BarChart3 } from 'lucide-react';
-import { useData, getMetrics, getTransferRecommendations, getRestockRecommendations } from '../context/DataContext';
+import { useMetrics, useTransferRecommendations, useRestockRecommendations } from '../hooks/useAnalytics';
 
 export function Dashboard() {
-  const { data } = useData();
-  if (!data) return null;
-
-  const metrics = getMetrics(data);
-  const transfers = getTransferRecommendations(data);
-  const restocks = getRestockRecommendations(data);
+  const metrics = useMetrics();
+  const transfers = useTransferRecommendations();
+  const restocks = useRestockRecommendations();
+  
+  if (!metrics) return null;
 
   const criticalRestocks = restocks.filter(r => r.urgency === 'critical').length;
   const highTransfers = transfers.filter(t => t.priority === 'high').length;

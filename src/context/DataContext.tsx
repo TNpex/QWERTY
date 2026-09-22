@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
 import type { ParsedData, Store, Product, InventoryItem, TransferRecommendation, RestockRecommendation } from '../types';
 
 interface DataContextType {

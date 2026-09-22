@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { Search, Filter, ChevronDown, ChevronUp } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
@@ -12,31 +12,46 @@ export function InventoryTable() {
   if (!data) return null;
 
   const { stores, products, inventory } = data;
-  const categories = ['all', ...new Set(products.map(p => p.category))];
   
-  const filteredProducts = products.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         p.brand.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
-
-  const getStockForProduct = (productId: string, storeId: string, size: string) => {
+  // Мемоизация категорий
+  const categories = useMemo(() => 
+    ['all', ...new Set(products.map(p => p.category))],
+    [products]
+  );
+  
+  // Мемоизация отображаемых магазинов
+  const displayStores = useMemo(() => 
+    selectedStore === 'all' ? stores : stores.filter(s => s.id === selectedStore),
+    [stores, selectedStore]
+  );
+  
+  // Мемоизация отфильтрованных продуктов
+  const filteredProducts = useMemo(() => 
+    products.filter(p => {
+      const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           p.brand.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
+      return matchesSearch && matchesCategory;
+    }),
+    [products, searchTerm, selectedCategory]
+  );
+  
+  // Мемоизация функции получения остатка
+  const getStockForProduct = useCallback((productId: string, storeId: string, size: string) => {
     const item = inventory.find(i => i.productId === productId && i.storeId === storeId && i.size === size);
     return item?.quantity || 0;
-  };
-
-  const getTotalStockForProduct = (productId: string) => {
+  }, [inventory]);
+  
+  // Мемоизация общего остатка
+  const getTotalStockForProduct = useCallback((productId: string) => {
     return inventory.filter(i => i.productId === productId).reduce((sum, i) => sum + i.quantity, 0);
-  };
-
+  }, [inventory]);
+  
   const getStockColor = (qty: number) => {
     if (qty === 0) return 'bg-red-100 text-red-700 font-bold';
     if (qty <= 2) return 'bg-amber-100 text-amber-700 font-semibold';
     return 'bg-emerald-100 text-emerald-700';
   };
-
-  const displayStores = selectedStore === 'all' ? stores : stores.filter(s => s.id === selectedStore);
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
@@ -77,11 +92,21 @@ export function InventoryTable() {
         </div>
       </div>
 
+      {/* Переключатель вида */}
+      <div className="flex gap-2 mb-4">
+        <button className="px-4 py-2 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600 transition-colors">
+          🎾 Карточки
+        </button>
+        <button className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors">
+          📊 Таблица
+        </button>
+      </div>
+      
       <div className="space-y-2">
         {/* Table Header */}
-        <div className="grid gap-2 px-4 py-2 bg-gray-50 rounded-lg text-xs font-semibold text-gray-600 uppercase tracking-wide"
+        <div className="grid gap-2 px-4 py-2 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg text-xs font-semibold text-gray-600 uppercase tracking-wide border border-green-100"
              style={{ gridTemplateColumns: `2fr 0.8fr 0.8fr ${displayStores.length}fr` }}>
-          <div>Товар</div>
+          <div>🎾 Товар</div>
           <div>Бренд</div>
           <div className="text-center">Общий остаток</div>
           <div className="text-center">По магазинам</div>

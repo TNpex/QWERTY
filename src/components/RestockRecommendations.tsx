@@ -1,11 +1,12 @@
 import { ShoppingCart, AlertCircle, Clock, TrendingUp } from 'lucide-react';
-import { useData, getRestockRecommendations } from '../context/DataContext';
+import { useData } from '../context/DataContext';
+import { useRestockRecommendations } from '../hooks/useAnalytics';
 
 export function RestockRecommendations() {
   const { data } = useData();
+  const recommendations = useRestockRecommendations();
+  
   if (!data) return null;
-
-  const recommendations = getRestockRecommendations(data);
 
   const getUrgencyColor = (urgency: string) => {
     switch (urgency) {

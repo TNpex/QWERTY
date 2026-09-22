@@ -1,13 +1,13 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { useData, getMetrics } from '../context/DataContext';
+import { useData } from '../context/DataContext';
+import { useMetrics } from '../hooks/useAnalytics';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
 export function StoreStockChart() {
   const { data } = useData();
-  if (!data) return null;
-  
-  const metrics = getMetrics(data);
+  const metrics = useMetrics();
+  if (!data || !metrics) return null;
   const storeData = metrics.storeMetrics.map(s => ({
     name: s.name.length > 20 ? s.name.substring(0, 20) + '...' : s.name,
     fullName: s.name,
@@ -35,10 +35,10 @@ export function StoreStockChart() {
 
 export function CategoryChart() {
   const { data } = useData();
-  if (!data) return null;
+  const metrics = useMetrics();
+  if (!data || !metrics) return null;
   
-  const metrics = getMetrics(data);
-  const categoryData = metrics.categoryMetrics.map(c => ({
+  const categoryData = metrics.categoryMetrics.map((c: any) => ({
     name: c.category,
     'В наличии': c.totalItems,
     'Нет в наличии': c.outOfStock,
@@ -105,9 +105,8 @@ export function SizeDistributionChart() {
 
 export function StockoutPieChart() {
   const { data } = useData();
-  if (!data) return null;
-  
-  const metrics = getMetrics(data);
+  const metrics = useMetrics();
+  if (!data || !metrics) return null;
   const pieData = [
     { name: 'В наличии', value: metrics.totalStock },
     { name: 'Нет в наличии', value: metrics.outOfStockSizes },
