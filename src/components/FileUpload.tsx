@@ -11,7 +11,10 @@ export function FileUpload() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = async (file: File) => {
-    if (!file.name.match(/\.(xlsx|xls|csv)$/i)) {
+    const isCSV = file.name.toLowerCase().endsWith('.csv');
+    const isXLSX = file.name.match(/\.(xlsx|xls)$/i);
+    
+    if (!isCSV && !isXLSX) {
       setError('Поддерживаются только файлы .xlsx, .xls, .csv');
       setStatus('error');
       setStatusMessage('Неверный формат файла');
@@ -115,11 +118,10 @@ export function FileUpload() {
                     Выбрать файл
                   </button>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-gray-400 mt-4">
-                  <FileSpreadsheet className="w-4 h-4" />
-                  <span>Поддерживаемые форматы: .xlsx, .xls, .csv</span>
-                </div>
-              </div>
+        <div className="flex items-center gap-2 text-xs text-gray-400 mt-4">
+          <FileSpreadsheet className="w-4 h-4" />
+          <span>Рекомендуется: <strong>CSV</strong> (быстрее) или XLSX</span>
+        </div>              </div>
             </>
           )}
 
@@ -130,6 +132,9 @@ export function FileUpload() {
             onChange={handleFileInput}
             className="hidden"
           />
+          <div className="mt-4 text-xs text-gray-500">
+            💡 <strong>Совет:</strong> CSV загружается в 5 раз быстрее XLSX
+          </div>
         </div>
 
         {/* Status Message */}

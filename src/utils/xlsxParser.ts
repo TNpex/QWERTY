@@ -119,163 +119,185 @@ function parseSizesAndStores(value: any): Map<string, Map<string, number>> {
   return result;
 }
 
-export async function parseXLSX(file: File): Promise<ParsedData> {
-  const xlsx = await loadXLSX();
+// Парсинг CSV (быстрее чем XLSX)
+function parseCSV(text: string): any[] {
+  const lines = text.split('\n').filter(line => line.trim());
+  if (lines.length === 0) return [];
   
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+  const result: any[] = [];
+  
+  for (let i = 1; i < lines.length; i++) {
+    const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+    const row: any = {};
+    headers.forEach((header, index) => {
+      row[header] = values[index] || '';
+    });
+    result.push(row);
+  }
+  
+  return result;
+}
+
+export async function parseXLSX(file: File): Promise<ParsedData> {
+  let jsonData: any[];
+  
+  // CSV - быстрый парсинг без библиотек
+  if (file.name.toLowerCase().endsWith('.csv')) {
+    const text = await file.text();
+    jsonData = parseCSV(text);
+  } else {
+    // XLSX - нужен xlsx
+    const xlsx = await loadXLSX();
     
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = xlsx.read(data, { type: 'array' });
-        
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
-        
-        if (jsonData.length === 0) {
-          reject(new Error('Файл пустой'));
-          return;
-        }
-        
-        const headers = Object.keys(jsonData[0]);
-        console.log('Найденные колонки:', headers);
-        
-        // Ищем стандартные колонки
-        const nameCol = findColumn(headers, ['название', 'товар', 'name', 'product']);
-        const brandCol = findColumn(headers, ['бренд', 'brand', 'производитель']);
-        const categoryCol = findColumn(headers, ['категория', 'category', 'тип']);
-        const priceCol = findColumn(headers, ['цена', 'price', 'стоимость']);
-        const articleCol = findColumn(headers, ['артикул', 'article', 'код', 'sku']);
-        const sizesCol = findColumn(headers, ['размеры и наличие', 'размеры', 'sizes']);
-        
-        if (!nameCol) {
-          reject(new Error(`Не найдена колонка "Название". Доступные: ${headers.join(', ')}`));
-          return;
-        }
-        
-        // Определяем колонки магазинов
-        const storeColumns = headers.filter(h => {
-          const normalized = normalize(h);
-          return !STANDARD_COLUMNS.map(normalize).includes(normalized);
+    const data = await new Promise<ArrayBuffer>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target?.result as ArrayBuffer);
+      reader.onerror = () => reject(new Error('Ошибка чтения файла'));
+      reader.readAsArrayBuffer(file);
+    });
+    
+    const workbook = xlsx.read(new Uint8Array(data), { type: 'array' });
+    const firstSheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[firstSheetName];
+    jsonData = xlsx.utils.sheet_to_json(worksheet) as any[];
+  }
+  
+  try {
+    if (jsonData.length === 0) {
+      throw new Error('Файл пустой');
+    }
+    
+    const headers = Object.keys(jsonData[0]);
+    console.log('Найденные колонки:', headers);
+    
+    // Ищем стандартные колонки
+    const nameCol = findColumn(headers, ['название', 'товар', 'name', 'product']);
+    const brandCol = findColumn(headers, ['бренд', 'brand', 'производитель']);
+    const categoryCol = findColumn(headers, ['категория', 'category', 'тип']);
+    const priceCol = findColumn(headers, ['цена', 'price', 'стоимость']);
+    const articleCol = findColumn(headers, ['артикул', 'article', 'код', 'sku']);
+    const sizesCol = findColumn(headers, ['размеры и наличие', 'размеры', 'sizes']);
+    
+    if (!nameCol) {
+      throw new Error(`Не найдена колонка "Название". Доступные: ${headers.join(', ')}`);
+    }
+    
+    // Определяем колонки магазинов
+    const storeColumns = headers.filter(h => {
+      const normalized = normalize(h);
+      return !STANDARD_COLUMNS.map(normalize).includes(normalized);
+    });
+    
+    console.log('Колонки магазинов:', storeColumns);
+    
+    if (storeColumns.length === 0) {
+      throw new Error(`Не найдены колонки магазинов`);
+    }
+    
+    // Создаём магазины
+    const stores: Store[] = storeColumns.map((colName, index) => ({
+      id: `store_${index + 1}`,
+      name: colName,
+    }));
+    
+    const storesMap = new Map<string, Store>();
+    stores.forEach(s => storesMap.set(s.name, s));
+    
+    const productsMap = new Map<string, Product>();
+    const inventory: InventoryItem[] = [];
+    let productIdCounter = 1;
+    
+    jsonData.forEach((row) => {
+      const productName = String(row[nameCol] || '').trim();
+      if (!productName) return;
+      
+      const brand = brandCol ? String(row[brandCol] || 'Неизвестно').trim() : 'Неизвестно';
+      const category = categoryCol ? String(row[categoryCol] || 'Другое').trim() : 'Другое';
+      const priceStr = priceCol ? String(row[priceCol] || '0').replace(/[^\d]/g, '') : '0';
+      const price = parseInt(priceStr) || 0;
+      const article = articleCol ? String(row[articleCol] || '').trim() : '';
+      
+      // Создаём товар
+      const productKey = `${productName}_${brand}_${article}`;
+      let product = productsMap.get(productKey);
+      if (!product) {
+        product = {
+          id: `p_${productIdCounter++}`,
+          name: productName,
+          brand,
+          category,
+          price,
+          article,
+        };
+        productsMap.set(productKey, product);
+      }
+      
+      // Парсим размеры и наличие из текста
+      const sizesAndStores = sizesCol ? parseSizesAndStores(row[sizesCol]) : new Map();
+      
+      if (sizesAndStores.size > 0) {
+        // Есть данные из текста - используем их
+        // Сначала собираем все размеры
+        const allSizes = new Set<string>();
+        sizesAndStores.forEach((storeSizes: Map<string, number>) => {
+          storeSizes.forEach((_: number, size: string) => allSizes.add(size));
         });
         
-        console.log('Колонки магазинов:', storeColumns);
-        
-        if (storeColumns.length === 0) {
-          reject(new Error(`Не найдены колонки магазинов`));
-          return;
-        }
-        
-        // Создаём магазины
-        const stores: Store[] = storeColumns.map((colName, index) => ({
-          id: `store_${index + 1}`,
-          name: colName,
-        }));
-        
-        const storesMap = new Map<string, Store>();
-        stores.forEach(s => storesMap.set(s.name, s));
-        
-        const productsMap = new Map<string, Product>();
-        const inventory: InventoryItem[] = [];
-        let productIdCounter = 1;
-        
-        jsonData.forEach((row) => {
-          const productName = String(row[nameCol] || '').trim();
-          if (!productName) return;
+        // Для каждого магазина
+        storeColumns.forEach(colName => {
+          const store = storesMap.get(colName)!;
+          const storeSizes = sizesAndStores.get(colName);
           
-          const brand = brandCol ? String(row[brandCol] || 'Неизвестно').trim() : 'Неизвестно';
-          const category = categoryCol ? String(row[categoryCol] || 'Другое').trim() : 'Другое';
-          const priceStr = priceCol ? String(row[priceCol] || '0').replace(/[^\d]/g, '') : '0';
-          const price = parseInt(priceStr) || 0;
-          const article = articleCol ? String(row[articleCol] || '').trim() : '';
-          
-          // Создаём товар
-          const productKey = `${productName}_${brand}_${article}`;
-          let product = productsMap.get(productKey);
-          if (!product) {
-            product = {
-              id: `p_${productIdCounter++}`,
-              name: productName,
-              brand,
-              category,
-              price,
-              article,
-            };
-            productsMap.set(productKey, product);
-          }
-          
-          // Парсим размеры и наличие из текста
-          const sizesAndStores = sizesCol ? parseSizesAndStores(row[sizesCol]) : new Map();
-          
-          if (sizesAndStores.size > 0) {
-            // Есть данные из текста - используем их
-            // Сначала собираем все размеры
-            const allSizes = new Set<string>();
-            sizesAndStores.forEach((storeSizes: Map<string, number>) => {
-              storeSizes.forEach((_: number, size: string) => allSizes.add(size));
-            });
-            
-            // Для каждого магазина
-            storeColumns.forEach(colName => {
-              const store = storesMap.get(colName)!;
-              const storeSizes = sizesAndStores.get(colName);
-              
-              if (storeSizes && storeSizes.size > 0) {
-                // Есть данные для этого магазина
-                allSizes.forEach(size => {
-                  const quantity = storeSizes.get(size) || 0;
-                  inventory.push({
-                    productId: product!.id,
-                    storeId: store.id,
-                    size,
-                    quantity,
-                    lastUpdated: new Date().toISOString(),
-                  });
-                });
-              } else {
-                // Нет данных - записываем нули для всех размеров
-                allSizes.forEach(size => {
-                  inventory.push({
-                    productId: product!.id,
-                    storeId: store.id,
-                    size,
-                    quantity: 0,
-                    lastUpdated: new Date().toISOString(),
-                  });
-                });
-              }
-            });
-          } else {
-            // Нет данных из текста - используем числа из колонок магазинов
-            storeColumns.forEach(colName => {
-              const store = storesMap.get(colName)!;
-              const quantity = Number(row[colName]) || 0;
-              
+          if (storeSizes && storeSizes.size > 0) {
+            // Есть данные для этого магазина
+            allSizes.forEach(size => {
+              const quantity = storeSizes.get(size) || 0;
               inventory.push({
                 productId: product!.id,
                 storeId: store.id,
-                size: '—',
+                size,
                 quantity,
+                lastUpdated: new Date().toISOString(),
+              });
+            });
+          } else {
+            // Нет данных - записываем нули для всех размеров
+            allSizes.forEach(size => {
+              inventory.push({
+                productId: product!.id,
+                storeId: store.id,
+                size,
+                quantity: 0,
                 lastUpdated: new Date().toISOString(),
               });
             });
           }
         });
-        
-        const products = Array.from(productsMap.values());
-        
-        console.log(`✅ Загружено: ${products.length} товаров, ${stores.length} магазинов, ${inventory.length} записей`);
-        console.log('Магазины:', stores.map(s => s.name));
-        
-        resolve({ stores, products, inventory });
-      } catch (error) {
-        reject(new Error(`Ошибка парсинга: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`));
+      } else {
+        // Нет данных из текста - используем числа из колонок магазинов
+        storeColumns.forEach(colName => {
+          const store = storesMap.get(colName)!;
+          const quantity = Number(row[colName]) || 0;
+          
+          inventory.push({
+            productId: product!.id,
+            storeId: store.id,
+            size: '—',
+            quantity,
+            lastUpdated: new Date().toISOString(),
+          });
+        });
       }
-    };
+    });
     
-    reader.onerror = () => reject(new Error('Ошибка чтения файла'));
-    reader.readAsArrayBuffer(file);
-  });
+    const products = Array.from(productsMap.values());
+    
+    console.log(`✅ Загружено: ${products.length} товаров, ${stores.length} магазинов, ${inventory.length} записей`);
+    console.log('Магазины:', stores.map(s => s.name));
+    
+    return { stores, products, inventory };
+  } catch (error) {
+    throw new Error(`Ошибка парсинга: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`);
+  }
 }
