@@ -1,6 +1,26 @@
-import { useState, useMemo, useCallback } from 'react';
-import { Search, Filter, ChevronDown, ChevronUp } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Search, Filter, ChevronDown, ChevronUp, PackageSearch } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { compareSizes } from '../utils/sizes';
+import type { InventoryItem } from '../types';
+
+// Единые пороги цветов (совпадают с легендой внизу таблицы)
+const SIZE_LOW = 2; // ≤ 2 шт одного размера в магазине — «мало»
+const STORE_LOW = 5; // < 5 шт суммарно в магазине — «мало»
+
+function sizeCellClass(qty: number): string {
+  if (qty === 0) return 'bg-red-100 text-red-700 font-bold';
+  if (qty <= SIZE_LOW) return 'bg-amber-100 text-amber-700 font-semibold';
+  return 'bg-emerald-100 text-emerald-700';
+}
+
+function storeCellClass(qty: number): string {
+  if (qty === 0) return 'bg-red-100 text-red-700';
+  if (qty < STORE_LOW) return 'bg-amber-100 text-amber-600';
+  return 'bg-emerald-100 text-emerald-700';
+}
+
+const NOT_CARRIED_CLASS = 'bg-gray-50 text-gray-400';
 
 export function InventoryTable() {
   const { data } = useData();
@@ -9,49 +29,69 @@ export function InventoryTable() {
   const [selectedStore, setSelectedStore] = useState<string>('all');
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
 
-  if (!data) return null;
+  // Стабильные ссылки даже когда data === null (иначе useMemo-зависимости менялись бы каждый рендер)
+  const stores = useMemo(() => data?.stores ?? [], [data]);
+  const products = useMemo(() => data?.products ?? [], [data]);
+  const inventory = useMemo(() => data?.inventory ?? [], [data]);
 
-  const { stores, products, inventory } = data;
-  
-  // Мемоизация категорий
-  const categories = useMemo(() => 
-    ['all', ...new Set(products.map(p => p.category))],
+  // ВАЖНО: все хуки вызываются ДО условного return (правила хуков React)
+  const categories = useMemo(
+    () => ['all', ...new Set(products.map((p) => p.category))],
     [products]
   );
-  
-  // Мемоизация отображаемых магазинов
-  const displayStores = useMemo(() => 
-    selectedStore === 'all' ? stores : stores.filter(s => s.id === selectedStore),
+
+  const displayStores = useMemo(
+    () => (selectedStore === 'all' ? stores : stores.filter((s) => s.id === selectedStore)),
     [stores, selectedStore]
   );
-  
-  // Мемоизация отфильтрованных продуктов
-  const filteredProducts = useMemo(() => 
-    products.filter(p => {
-      const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           p.brand.toLowerCase().includes(searchTerm.toLowerCase());
+
+  const filteredProducts = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    return products.filter((p) => {
+      const matchesSearch =
+        !term ||
+        p.name.toLowerCase().includes(term) ||
+        p.brand.toLowerCase().includes(term) ||
+        (p.article ?? '').toLowerCase().includes(term);
       const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
       return matchesSearch && matchesCategory;
-    }),
-    [products, searchTerm, selectedCategory]
-  );
-  
-  // Мемоизация функции получения остатка
-  const getStockForProduct = useCallback((productId: string, storeId: string, size: string) => {
-    const item = inventory.find(i => i.productId === productId && i.storeId === storeId && i.size === size);
-    return item?.quantity || 0;
+    });
+  }, [products, searchTerm, selectedCategory]);
+
+  // Индексы O(N) вместо inventory.find() на каждую ячейку при рендере
+  const indexes = useMemo(() => {
+    const byKey = new Map<string, InventoryItem>(); // pid|sid|size → item
+    const storeTotals = new Map<string, { total: number; carried: number }>(); // pid|sid
+    const productTotals = new Map<string, number>(); // pid → всего единиц
+    const sizesByProduct = new Map<string, Set<string>>(); // pid → размеры (только возящие)
+
+    for (const item of inventory) {
+      if (item.notCarried) continue;
+      byKey.set(`${item.productId}|${item.storeId}|${item.size}`, item);
+
+      const storeKey = `${item.productId}|${item.storeId}`;
+      const agg = storeTotals.get(storeKey) ?? { total: 0, carried: 0 };
+      agg.total += item.quantity;
+      agg.carried++;
+      storeTotals.set(storeKey, agg);
+
+      productTotals.set(item.productId, (productTotals.get(item.productId) ?? 0) + item.quantity);
+
+      let sizes = sizesByProduct.get(item.productId);
+      if (!sizes) {
+        sizes = new Set();
+        sizesByProduct.set(item.productId, sizes);
+      }
+      sizes.add(item.size);
+    }
+    return { byKey, storeTotals, productTotals, sizesByProduct };
   }, [inventory]);
-  
-  // Мемоизация общего остатка
-  const getTotalStockForProduct = useCallback((productId: string) => {
-    return inventory.filter(i => i.productId === productId).reduce((sum, i) => sum + i.quantity, 0);
-  }, [inventory]);
-  
-  const getStockColor = (qty: number) => {
-    if (qty === 0) return 'bg-red-100 text-red-700 font-bold';
-    if (qty <= 2) return 'bg-amber-100 text-amber-700 font-semibold';
-    return 'bg-emerald-100 text-emerald-700';
-  };
+
+  if (!data) return null;
+
+  const uploadedAtText = data.uploadedAt
+    ? new Date(data.uploadedAt).toLocaleString('ru-RU')
+    : '—';
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
@@ -60,7 +100,7 @@ export function InventoryTable() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
           <input
             type="text"
-            placeholder="Поиск по названию или бренду..."
+            placeholder="Поиск по названию, бренду или артикулу..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
@@ -74,8 +114,10 @@ export function InventoryTable() {
               onChange={(e) => setSelectedCategory(e.target.value)}
               className="pl-10 pr-8 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm appearance-none bg-white cursor-pointer"
             >
-              {categories.map(cat => (
-                <option key={cat} value={cat}>{cat === 'all' ? 'Все категории' : cat}</option>
+              {categories.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat === 'all' ? 'Все категории' : cat}
+                </option>
               ))}
             </select>
           </div>
@@ -85,27 +127,26 @@ export function InventoryTable() {
             className="px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm appearance-none bg-white cursor-pointer"
           >
             <option value="all">Все магазины</option>
-            {stores.map(store => (
-              <option key={store.id} value={store.id}>{store.name}</option>
+            {stores.map((store) => (
+              <option key={store.id} value={store.id}>
+                {store.name}
+              </option>
             ))}
           </select>
         </div>
       </div>
 
-      {/* Переключатель вида */}
-      <div className="flex gap-2 mb-4">
-        <button className="px-4 py-2 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600 transition-colors">
-          🎾 Карточки
-        </button>
-        <button className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors">
-          📊 Таблица
-        </button>
+      <div className="mb-3 text-xs text-gray-500">
+        Найдено товаров: <span className="font-semibold text-gray-700">{filteredProducts.length}</span>{' '}
+        из {products.length}
       </div>
-      
+
       <div className="space-y-2">
         {/* Table Header */}
-        <div className="grid gap-2 px-4 py-2 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg text-xs font-semibold text-gray-600 uppercase tracking-wide border border-green-100"
-             style={{ gridTemplateColumns: `2fr 0.8fr 0.8fr ${displayStores.length}fr` }}>
+        <div
+          className="grid gap-2 px-4 py-2 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg text-xs font-semibold text-gray-600 uppercase tracking-wide border border-green-100"
+          style={{ gridTemplateColumns: `2fr 0.8fr 0.8fr ${Math.max(displayStores.length, 1)}fr` }}
+        >
           <div>🎾 Товар</div>
           <div>Бренд</div>
           <div className="text-center">Общий остаток</div>
@@ -113,46 +154,74 @@ export function InventoryTable() {
         </div>
 
         {/* Product Rows */}
-        {filteredProducts.map(product => {
-          const sizes = [...new Set(inventory.filter(i => i.productId === product.id).map(i => i.size))].sort();
+        {filteredProducts.map((product) => {
           const isExpanded = expandedProduct === product.id;
-          const totalStock = getTotalStockForProduct(product.id);
-          
+          const totalStock = indexes.productTotals.get(product.id) ?? 0;
+          const sizes = [...(indexes.sizesByProduct.get(product.id) ?? [])].sort(compareSizes);
+
           return (
-            <div key={product.id} className="border border-gray-100 rounded-lg overflow-hidden hover:border-blue-200 transition-colors">
+            <div
+              key={product.id}
+              className="border border-gray-100 rounded-lg overflow-hidden hover:border-blue-200 transition-colors"
+            >
               {/* Main Row */}
-              <div 
+              <div
                 className="grid gap-2 px-4 py-3 items-center cursor-pointer hover:bg-blue-50/30 transition-colors"
-                style={{ gridTemplateColumns: `2fr 0.8fr 0.8fr ${displayStores.length}fr` }}
+                style={{ gridTemplateColumns: `2fr 0.8fr 0.8fr ${Math.max(displayStores.length, 1)}fr` }}
                 onClick={() => setExpandedProduct(isExpanded ? null : product.id)}
               >
-                <div className="flex items-center gap-2">
-                  {isExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
-                  <div>
-                    <div className="font-medium text-gray-800 text-sm">{product.name}</div>
-                    <div className="text-xs text-gray-500">{product.category}</div>
+                <div className="flex items-center gap-2 min-w-0">
+                  {isExpanded ? (
+                    <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  )}
+                  <div className="min-w-0">
+                    <div className="font-medium text-gray-800 text-sm truncate" title={product.name}>
+                      {product.name}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {product.category}
+                      {product.article ? ` · ${product.article}` : ''}
+                    </div>
                   </div>
                 </div>
-                <div className="text-sm text-gray-600">{product.brand}</div>
+                <div className="text-sm text-gray-600 truncate">{product.brand}</div>
                 <div className="text-center">
-                  <span className={`inline-flex items-center justify-center min-w-[2rem] h-7 px-2 rounded-full text-xs ${
-                    totalStock === 0 ? 'bg-red-100 text-red-700' : totalStock < 10 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
-                  }`}>
+                  <span
+                    className={`inline-flex items-center justify-center min-w-[2rem] h-7 px-2 rounded-full text-xs ${
+                      totalStock === 0
+                        ? 'bg-red-100 text-red-700'
+                        : totalStock < 10
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-emerald-100 text-emerald-700'
+                    }`}
+                  >
                     {totalStock} шт.
                   </span>
                 </div>
-                <div className="flex gap-2 justify-center">
-                  {displayStores.map(store => {
-                    const storeStock = inventory
-                      .filter(i => i.productId === product.id && i.storeId === store.id)
-                      .reduce((sum, i) => sum + i.quantity, 0);
-                    return (
-                      <div key={store.id} className="text-center">
-                        <div className={`inline-flex items-center justify-center min-w-[2rem] h-7 px-2 rounded text-xs font-medium ${
-                          storeStock === 0 ? 'bg-red-100 text-red-700' : storeStock < 5 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
-                        }`}>
-                          {storeStock}
+                <div className="flex gap-2 justify-center flex-wrap">
+                  {displayStores.map((store) => {
+                    const agg = indexes.storeTotals.get(`${product.id}|${store.id}`);
+                    if (!agg) {
+                      // Магазин не возит товар
+                      return (
+                        <div key={store.id} className="text-center" title={`${store.name}: не возит`}>
+                          <span
+                            className={`inline-flex items-center justify-center min-w-[2rem] h-7 px-2 rounded text-xs font-medium ${NOT_CARRIED_CLASS}`}
+                          >
+                            —
+                          </span>
                         </div>
+                      );
+                    }
+                    return (
+                      <div key={store.id} className="text-center" title={store.name}>
+                        <span
+                          className={`inline-flex items-center justify-center min-w-[2rem] h-7 px-2 rounded text-xs font-medium ${storeCellClass(agg.total)}`}
+                        >
+                          {agg.total}
+                        </span>
                       </div>
                     );
                   })}
@@ -167,8 +236,11 @@ export function InventoryTable() {
                       <thead>
                         <tr>
                           <th className="text-left py-2 px-2 text-gray-500 font-medium">Размер</th>
-                          {displayStores.map(store => (
-                            <th key={store.id} className="text-center py-2 px-2 text-gray-500 font-medium">
+                          {displayStores.map((store) => (
+                            <th
+                              key={store.id}
+                              className="text-center py-2 px-2 text-gray-500 font-medium"
+                            >
                               {store.name}
                             </th>
                           ))}
@@ -176,53 +248,92 @@ export function InventoryTable() {
                         </tr>
                       </thead>
                       <tbody>
-                        {sizes.map(size => (
-                          <tr key={size} className="border-t border-gray-100">
-                            <td className="py-2 px-2 font-medium text-gray-700">{size}</td>
-                            {displayStores.map(store => {
-                              const qty = getStockForProduct(product.id, store.id, size);
+                        {sizes.map((size) => {
+                          let rowTotal = 0;
+                          const cells = displayStores.map((store) => {
+                            const item = indexes.byKey.get(
+                              `${product.id}|${store.id}|${size}`
+                            );
+                            if (!item) {
                               return (
                                 <td key={store.id} className="text-center py-2 px-2">
-                                  <span className={`inline-flex items-center justify-center w-8 h-6 rounded text-xs ${getStockColor(qty)}`}>
-                                    {qty}
+                                  <span
+                                    className={`inline-flex items-center justify-center w-8 h-6 rounded text-xs ${NOT_CARRIED_CLASS}`}
+                                    title="Магазин не возит эту позицию"
+                                  >
+                                    —
                                   </span>
                                 </td>
                               );
-                            })}
-                            <td className="text-center py-2 px-2 font-semibold text-gray-700">
-                              {inventory
-                                .filter(i => i.productId === product.id && i.size === size)
-                                .reduce((sum, i) => sum + i.quantity, 0)}
-                            </td>
-                          </tr>
-                        ))}
+                            }
+                            rowTotal += item.quantity;
+                            return (
+                              <td key={store.id} className="text-center py-2 px-2">
+                                <span
+                                  className={`inline-flex items-center justify-center w-8 h-6 rounded text-xs ${sizeCellClass(item.quantity)}`}
+                                >
+                                  {item.quantity}
+                                </span>
+                              </td>
+                            );
+                          });
+                          return (
+                            <tr key={size} className="border-t border-gray-100">
+                              <td className="py-2 px-2 font-medium text-gray-700">{size}</td>
+                              {cells}
+                              <td className="text-center py-2 px-2 font-semibold text-gray-700">
+                                {rowTotal}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
                   <div className="mt-2 text-xs text-gray-500">
-                    {product.price > 0 && <>Цена: {product.price.toLocaleString()} ₽ | </>}
-                    Обновлено: {new Date().toLocaleDateString('ru-RU')}
+                    {product.price > 0 && <>Цена: {product.price.toLocaleString('ru-RU')} ₽ | </>}
+                    Обновлено: {uploadedAtText}
                   </div>
                 </div>
               )}
             </div>
           );
         })}
+
+        {filteredProducts.length === 0 && (
+          <div className="text-center py-10 text-gray-500">
+            <PackageSearch className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+            <p className="text-sm">Ничего не найдено</p>
+            <p className="text-xs mt-1">Попробуйте изменить поисковый запрос или фильтры</p>
+          </div>
+        )}
       </div>
 
       {/* Legend */}
-      <div className="mt-6 flex items-center gap-6 text-xs text-gray-500 border-t border-gray-100 pt-4">
+      <div className="mt-6 flex items-center gap-6 text-xs text-gray-500 border-t border-gray-100 pt-4 flex-wrap">
         <span className="flex items-center gap-1.5">
-          <span className="w-5 h-5 rounded bg-emerald-100 border border-emerald-200 flex items-center justify-center text-[10px] text-emerald-700 font-bold">5</span>
-          В наличии (3+)
+          <span className="w-5 h-5 rounded bg-emerald-100 border border-emerald-200 flex items-center justify-center text-[10px] text-emerald-700 font-bold">
+            5
+          </span>
+          В наличии (&gt;{SIZE_LOW} на размер, ≥{STORE_LOW} на магазин)
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-5 h-5 rounded bg-amber-100 border border-amber-200 flex items-center justify-center text-[10px] text-amber-700 font-bold">2</span>
-          Мало (1-2)
+          <span className="w-5 h-5 rounded bg-amber-100 border border-amber-200 flex items-center justify-center text-[10px] text-amber-700 font-bold">
+            2
+          </span>
+          Мало (≤{SIZE_LOW} на размер)
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-5 h-5 rounded bg-red-100 border border-red-200 flex items-center justify-center text-[10px] text-red-700 font-bold">0</span>
+          <span className="w-5 h-5 rounded bg-red-100 border border-red-200 flex items-center justify-center text-[10px] text-red-700 font-bold">
+            0
+          </span>
           Нет в наличии
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className={`w-5 h-5 rounded border border-gray-200 flex items-center justify-center text-[10px] ${NOT_CARRIED_CLASS}`}>
+            —
+          </span>
+          Магазин не возит товар
         </span>
       </div>
     </div>
