@@ -20,6 +20,7 @@ export function FileUpload() {
 
     setLoading(true);
     setStatus('idle');
+    setStatusMessage('Загрузка библиотеки парсинга...');
 
     try {
       const parsedData = await parseXLSX(file);

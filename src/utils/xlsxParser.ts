@@ -1,5 +1,13 @@
-import * as XLSX from 'xlsx';
 import type { ParsedData, Store, Product, InventoryItem } from '../types';
+
+// Динамический импорт xlsx для уменьшения размера бандла
+let XLSX: any = null;
+async function loadXLSX() {
+  if (!XLSX) {
+    XLSX = await import('xlsx');
+  }
+  return XLSX;
+}
 
 // Маппинг названий магазинов из текста к колонкам
 const STORE_NAME_MAPPING: Record<string, string> = {
@@ -111,14 +119,16 @@ function parseSizesAndStores(value: any): Map<string, Map<string, number>> {
   return result;
 }
 
-export function parseXLSX(file: File): Promise<ParsedData> {
+export async function parseXLSX(file: File): Promise<ParsedData> {
+  const xlsx = await loadXLSX();
+  
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
+        const workbook = xlsx.read(data, { type: 'array' });
         
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
