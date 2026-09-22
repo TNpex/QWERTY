@@ -1,10 +1,13 @@
 import { Package, AlertTriangle, TrendingUp, DollarSign, Store, BarChart3 } from 'lucide-react';
-import { getMetrics, getTransferRecommendations, getRestockRecommendations } from '../data/mockData';
+import { useData, getMetrics, getTransferRecommendations, getRestockRecommendations } from '../context/DataContext';
 
 export function Dashboard() {
-  const metrics = getMetrics();
-  const transfers = getTransferRecommendations();
-  const restocks = getRestockRecommendations();
+  const { data } = useData();
+  if (!data) return null;
+
+  const metrics = getMetrics(data);
+  const transfers = getTransferRecommendations(data);
+  const restocks = getRestockRecommendations(data);
 
   const criticalRestocks = restocks.filter(r => r.urgency === 'critical').length;
   const highTransfers = transfers.filter(t => t.priority === 'high').length;
@@ -38,7 +41,7 @@ export function Dashboard() {
         <KPICard
           icon={<DollarSign className="w-5 h-5" />}
           label="Стоимость остатков"
-          value={`${(metrics.totalValue / 1000000).toFixed(1)}М`}
+          value={metrics.totalValue > 1000000 ? `${(metrics.totalValue / 1000000).toFixed(1)}М` : `${(metrics.totalValue / 1000).toFixed(0)}к`}
           sublabel="рублей"
           color="purple"
         />
@@ -64,8 +67,8 @@ export function Dashboard() {
         {metrics.storeMetrics.map(store => (
           <div key={store.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-3">
-              <h4 className="font-semibold text-sm text-gray-800">{store.name.replace('SaleTennis ', '')}</h4>
-              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+              <h4 className="font-semibold text-sm text-gray-800 truncate" title={store.name}>{store.name}</h4>
+              <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ml-2 ${
                 store.outOfStockPercent > 30 ? 'bg-red-100 text-red-700' :
                 store.outOfStockPercent > 15 ? 'bg-amber-100 text-amber-700' :
                 'bg-emerald-100 text-emerald-700'

@@ -1,8 +1,11 @@
 import { ArrowRight, AlertTriangle, Package } from 'lucide-react';
-import { getTransferRecommendations } from '../data/mockData';
+import { useData, getTransferRecommendations } from '../context/DataContext';
 
 export function TransferRecommendations() {
-  const recommendations = getTransferRecommendations();
+  const { data } = useData();
+  if (!data) return null;
+
+  const recommendations = getTransferRecommendations(data);
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -49,17 +52,19 @@ export function TransferRecommendations() {
         </div>
       </div>
 
-      <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
+      <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
         {recommendations.map((rec, index) => (
           <div key={index} className={`p-4 rounded-lg border ${getPriorityColor(rec.priority)} transition-all hover:shadow-md`}>
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1">
                 <div className="font-medium text-sm mb-1">{rec.productName}</div>
-                <div className="text-xs opacity-80 mb-2">Размер: <span className="font-semibold">{rec.size}</span> | Количество: <span className="font-semibold">{rec.quantity} шт.</span></div>
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="font-medium">{rec.fromStore.replace('SaleTennis ', '')}</span>
+                <div className="text-xs opacity-80 mb-2">
+                  Размер: <span className="font-semibold">{rec.size}</span> | Количество: <span className="font-semibold">{rec.quantity} шт.</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs flex-wrap">
+                  <span className="font-medium bg-white/60 px-2 py-0.5 rounded">{rec.fromStore}</span>
                   <ArrowRight className="w-3 h-3" />
-                  <span className="font-medium">{rec.toStore.replace('SaleTennis ', '')}</span>
+                  <span className="font-medium bg-white/60 px-2 py-0.5 rounded">{rec.toStore}</span>
                 </div>
                 <div className="text-xs mt-2 opacity-70 italic">{rec.reason}</div>
               </div>
@@ -79,6 +84,7 @@ export function TransferRecommendations() {
         <div className="text-center py-8 text-gray-500">
           <Package className="w-12 h-12 mx-auto mb-3 text-gray-300" />
           <p>Нет рекомендаций по перемещению</p>
+          <p className="text-xs mt-1">Все размеры равномерно распределены по магазинам</p>
         </div>
       )}
     </div>

@@ -1,0 +1,220 @@
+import { useState, useRef } from 'react';
+import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { parseXLSX } from '../utils/xlsxParser';
+import { useData } from '../context/DataContext';
+
+export function FileUpload() {
+  const { setData, setError, loading, setLoading } = useData();
+  const [dragActive, setDragActive] = useState(false);
+  const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [statusMessage, setStatusMessage] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = async (file: File) => {
+    if (!file.name.match(/\.(xlsx|xls|csv)$/i)) {
+      setError('Поддерживаются только файлы .xlsx, .xls, .csv');
+      setStatus('error');
+      setStatusMessage('Неверный формат файла');
+      return;
+    }
+
+    setLoading(true);
+    setStatus('idle');
+
+    try {
+      const parsedData = await parseXLSX(file);
+      
+      if (parsedData.products.length === 0) {
+        throw new Error('Не удалось найти данные в файле');
+      }
+
+      setData(parsedData);
+      setStatus('success');
+      setStatusMessage(
+        `✅ Загружено: ${parsedData.products.length} товаров, ${parsedData.stores.length} магазинов, ${parsedData.inventory.length} записей`
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Ошибка загрузки';
+      setError(message);
+      setStatus('error');
+      setStatusMessage(`❌ ${message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragActive(false);
+    if (e.dataTransfer.files[0]) {
+      handleFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragActive(true);
+  };
+
+  const handleDragLeave = () => {
+    setDragActive(false);
+  };
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.[0]) {
+      handleFile(e.target.files[0]);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50 p-4">
+      <div className="w-full max-w-2xl">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl mb-4 shadow-lg">
+            <span className="text-white font-bold text-2xl">S</span>
+          </div>
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">SaleTennis BI Analytics</h1>
+          <p className="text-gray-500">Загрузите XLSX файл с данными по наличию товаров</p>
+        </div>
+
+        {/* Upload Area */}
+        <div
+          className={`relative border-2 border-dashed rounded-2xl p-12 text-center transition-all ${
+            dragActive
+              ? 'border-blue-500 bg-blue-50'
+              : 'border-gray-300 bg-white hover:border-blue-400 hover:bg-blue-50/50'
+          }`}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+        >
+          {loading ? (
+            <div className="flex flex-col items-center gap-4">
+              <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
+              <p className="text-gray-600 font-medium">Обработка файла...</p>
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-col items-center gap-4">
+                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
+                  <Upload className="w-8 h-8 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-lg font-semibold text-gray-700 mb-1">
+                    Перетащите файл сюда
+                  </p>
+                  <p className="text-sm text-gray-500 mb-4">
+                    или нажмите для выбора
+                  </p>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-sm"
+                  >
+                    Выбрать файл
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-gray-400 mt-4">
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>Поддерживаемые форматы: .xlsx, .xls, .csv</span>
+                </div>
+              </div>
+            </>
+          )}
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            onChange={handleFileInput}
+            className="hidden"
+          />
+        </div>
+
+        {/* Status Message */}
+        {statusMessage && (
+          <div className={`mt-4 p-4 rounded-xl flex items-start gap-3 ${
+            status === 'success' ? 'bg-emerald-50 border border-emerald-200' :
+            status === 'error' ? 'bg-red-50 border border-red-200' :
+            'bg-blue-50 border border-blue-200'
+          }`}>
+            {status === 'success' ? (
+              <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+            ) : status === 'error' ? (
+              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+            ) : null}
+            <p className={`text-sm ${
+              status === 'success' ? 'text-emerald-700' :
+              status === 'error' ? 'text-red-700' :
+              'text-blue-700'
+            }`}>{statusMessage}</p>
+          </div>
+        )}
+
+        {/* Expected Format */}
+        <div className="mt-8 bg-white rounded-xl border border-gray-200 p-6">
+          <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+            <FileSpreadsheet className="w-4 h-4 text-gray-500" />
+            Ожидаемый формат файла
+          </h3>
+          <p className="text-sm text-gray-500 mb-4">
+            Ваш XLSX должен содержать следующие колонки (названия могут отличаться):
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="text-left py-2 px-3 font-medium text-gray-600">Колонка</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-600">Варианты названий</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-600">Обязательная</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                <tr>
+                  <td className="py-2 px-3 font-medium">Товар</td>
+                  <td className="py-2 px-3 text-gray-500">товар, название, name, product, наименование</td>
+                  <td className="py-2 px-3"><span className="text-red-600 font-bold">Да</span></td>
+                </tr>
+                <tr>
+                  <td className="py-2 px-3 font-medium">Размер</td>
+                  <td className="py-2 px-3 text-gray-500">размер, size, р-р</td>
+                  <td className="py-2 px-3"><span className="text-red-600 font-bold">Да</span></td>
+                </tr>
+                <tr>
+                  <td className="py-2 px-3 font-medium">Магазин</td>
+                  <td className="py-2 px-3 text-gray-500">магазин, store, точка, адрес</td>
+                  <td className="py-2 px-3"><span className="text-red-600 font-bold">Да</span></td>
+                </tr>
+                <tr>
+                  <td className="py-2 px-3 font-medium">Количество</td>
+                  <td className="py-2 px-3 text-gray-500">количество, quantity, остаток, кол-во</td>
+                  <td className="py-2 px-3"><span className="text-red-600 font-bold">Да</span></td>
+                </tr>
+                <tr>
+                  <td className="py-2 px-3 font-medium">Бренд</td>
+                  <td className="py-2 px-3 text-gray-500">бренд, brand, производитель</td>
+                  <td className="py-2 px-3 text-gray-400">Нет</td>
+                </tr>
+                <tr>
+                  <td className="py-2 px-3 font-medium">Цена</td>
+                  <td className="py-2 px-3 text-gray-500">цена, price, стоимость</td>
+                  <td className="py-2 px-3 text-gray-400">Нет</td>
+                </tr>
+                <tr>
+                  <td className="py-2 px-3 font-medium">Категория</td>
+                  <td className="py-2 px-3 text-gray-500">категория, category, тип, группа</td>
+                  <td className="py-2 px-3 text-gray-400">Нет</td>
+                </tr>
+                <tr>
+                  <td className="py-2 px-3 font-medium">Артикул</td>
+                  <td className="py-2 px-3 text-gray-500">артикул, article, код, sku</td>
+                  <td className="py-2 px-3 text-gray-400">Нет</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

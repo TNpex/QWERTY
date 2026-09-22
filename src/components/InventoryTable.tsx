@@ -1,13 +1,17 @@
 import { useState } from 'react';
-import { products, stores, inventory } from '../data/mockData';
 import { Search, Filter, ChevronDown, ChevronUp } from 'lucide-react';
+import { useData } from '../context/DataContext';
 
 export function InventoryTable() {
+  const { data } = useData();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedStore, setSelectedStore] = useState<string>('all');
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
 
+  if (!data) return null;
+
+  const { stores, products, inventory } = data;
   const categories = ['all', ...new Set(products.map(p => p.category))];
   
   const filteredProducts = products.filter(p => {
@@ -67,7 +71,7 @@ export function InventoryTable() {
           >
             <option value="all">Все магазины</option>
             {stores.map(store => (
-              <option key={store.id} value={store.id}>{store.name.replace('SaleTennis ', '')}</option>
+              <option key={store.id} value={store.id}>{store.name}</option>
             ))}
           </select>
         </div>
@@ -85,8 +89,7 @@ export function InventoryTable() {
 
         {/* Product Rows */}
         {filteredProducts.map(product => {
-          const sizes = product.category === 'Обувь' ? ['39', '40', '41', '42', '43', '44', '45'] :
-                       product.category === 'Одежда' ? ['S', 'M', 'L', 'XL'] : ['—'];
+          const sizes = [...new Set(inventory.filter(i => i.productId === product.id).map(i => i.size))].sort();
           const isExpanded = expandedProduct === product.id;
           const totalStock = getTotalStockForProduct(product.id);
           
@@ -141,7 +144,7 @@ export function InventoryTable() {
                           <th className="text-left py-2 px-2 text-gray-500 font-medium">Размер</th>
                           {displayStores.map(store => (
                             <th key={store.id} className="text-center py-2 px-2 text-gray-500 font-medium">
-                              {store.name.replace('SaleTennis ', '')}
+                              {store.name}
                             </th>
                           ))}
                           <th className="text-center py-2 px-2 text-gray-500 font-medium">Итого</th>
@@ -162,9 +165,9 @@ export function InventoryTable() {
                               );
                             })}
                             <td className="text-center py-2 px-2 font-semibold text-gray-700">
-                              {sizes.length > 0 ? inventory
+                              {inventory
                                 .filter(i => i.productId === product.id && i.size === size)
-                                .reduce((sum, i) => sum + i.quantity, 0) : 0}
+                                .reduce((sum, i) => sum + i.quantity, 0)}
                             </td>
                           </tr>
                         ))}
@@ -172,7 +175,8 @@ export function InventoryTable() {
                     </table>
                   </div>
                   <div className="mt-2 text-xs text-gray-500">
-                    Цена: {product.price.toLocaleString()} ₽ | Обновлено: {new Date().toLocaleDateString('ru-RU')}
+                    {product.price > 0 && <>Цена: {product.price.toLocaleString()} ₽ | </>}
+                    Обновлено: {new Date().toLocaleDateString('ru-RU')}
                   </div>
                 </div>
               )}

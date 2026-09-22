@@ -1,8 +1,11 @@
 import { ShoppingCart, AlertCircle, Clock, TrendingUp } from 'lucide-react';
-import { getRestockRecommendations } from '../data/mockData';
+import { useData, getRestockRecommendations } from '../context/DataContext';
 
 export function RestockRecommendations() {
-  const recommendations = getRestockRecommendations();
+  const { data } = useData();
+  if (!data) return null;
+
+  const recommendations = getRestockRecommendations(data);
 
   const getUrgencyColor = (urgency: string) => {
     switch (urgency) {
@@ -25,9 +28,10 @@ export function RestockRecommendations() {
   const criticalCount = recommendations.filter(r => r.urgency === 'critical').length;
   const highCount = recommendations.filter(r => r.urgency === 'high').length;
   const totalUnits = recommendations.reduce((sum, r) => sum + r.totalNeeded, 0);
+  
   const estimatedCost = recommendations.reduce((sum, r) => {
-    const product = { p1: 8990, p2: 12490, p3: 11990, p4: 24990, p5: 19990, p6: 3490, p7: 2990, p8: 3990, p9: 9990, p10: 8490, p11: 13990, p12: 2790 };
-    return sum + (product[r.productId as keyof typeof product] || 0) * r.totalNeeded;
+    const product = data.products.find(p => p.id === r.productId);
+    return sum + (product?.price || 0) * r.totalNeeded;
   }, 0);
 
   return (
@@ -57,12 +61,14 @@ export function RestockRecommendations() {
           <div className="text-xs text-blue-600">Единиц нужно</div>
         </div>
         <div className="bg-emerald-50 rounded-lg p-3 text-center">
-          <div className="text-2xl font-bold text-emerald-700">{(estimatedCost / 1000).toFixed(0)}к</div>
+          <div className="text-2xl font-bold text-emerald-700">
+            {estimatedCost > 1000000 ? `${(estimatedCost / 1000000).toFixed(1)}М` : `${(estimatedCost / 1000).toFixed(0)}к`}
+          </div>
           <div className="text-xs text-emerald-600">Оценка, ₽</div>
         </div>
       </div>
 
-      <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
+      <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
         {recommendations.map((rec, index) => {
           const badge = getUrgencyBadge(rec.urgency);
           return (
@@ -86,7 +92,7 @@ export function RestockRecommendations() {
                 ))}
               </div>
               
-              <div className="flex items-center gap-4 text-xs text-gray-600">
+              <div className="flex items-center gap-4 text-xs text-gray-600 flex-wrap">
                 <span className="flex items-center gap-1">
                   <TrendingUp className="w-3 h-3" />
                   ~{rec.avgDailySales} шт/день
@@ -109,6 +115,7 @@ export function RestockRecommendations() {
         <div className="text-center py-8 text-gray-500">
           <ShoppingCart className="w-12 h-12 mx-auto mb-3 text-gray-300" />
           <p>Все товары в наличии</p>
+          <p className="text-xs mt-1">Дозакупка не требуется</p>
         </div>
       )}
     </div>

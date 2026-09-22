@@ -1,16 +1,24 @@
 import { useState } from 'react';
+import { DataProvider, useData } from './context/DataContext';
+import { FileUpload } from './components/FileUpload';
 import { Dashboard } from './components/Dashboard';
 import { InventoryTable } from './components/InventoryTable';
 import { TransferRecommendations } from './components/TransferRecommendations';
 import { RestockRecommendations } from './components/RestockRecommendations';
 import { StoreStockChart, CategoryChart, SizeDistributionChart, StockoutPieChart, StoreComparisonChart } from './components/Charts';
-import { LayoutDashboard, Package, ArrowLeftRight, ShoppingCart, BarChart3, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Package, ArrowLeftRight, ShoppingCart, BarChart3, Menu, X, Upload } from 'lucide-react';
 
 type Tab = 'dashboard' | 'inventory' | 'transfers' | 'restock' | 'analytics';
 
-function App() {
+function AppContent() {
+  const { data, clearData } = useData();
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Если данные не загружены — показываем экран загрузки
+  if (!data) {
+    return <FileUpload />;
+  }
 
   const tabs = [
     { id: 'dashboard' as Tab, label: 'Обзор', icon: LayoutDashboard },
@@ -35,17 +43,9 @@ function App() {
       case 'inventory':
         return <InventoryTable />;
       case 'transfers':
-        return (
-          <div className="space-y-6">
-            <TransferRecommendations />
-          </div>
-        );
+        return <TransferRecommendations />;
       case 'restock':
-        return (
-          <div className="space-y-6">
-            <RestockRecommendations />
-          </div>
-        );
+        return <RestockRecommendations />;
       case 'analytics':
         return (
           <div className="space-y-6">
@@ -60,25 +60,30 @@ function App() {
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Сводка по магазинам</h3>
                 <div className="space-y-3">
-                  {[
-                    { name: 'ТЦ "Европа"', stock: 87, oos: 13, trend: '+2%' },
-                    { name: 'ТЦ "Галерея"', stock: 72, oos: 28, trend: '-5%' },
-                    { name: 'ТЦ "Мега"', stock: 91, oos: 9, trend: '+4%' },
-                    { name: 'ТЦ "Арена"', stock: 68, oos: 32, trend: '-8%' },
-                  ].map((store, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-3 h-3 rounded-full ${store.oos > 25 ? 'bg-red-500' : store.oos > 15 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-                        <span className="font-medium text-sm text-gray-700">{store.name}</span>
+                  {data.stores.map((store, i) => {
+                    const storeStock = data.inventory
+                      .filter(i => i.storeId === store.id)
+                      .reduce((sum, i) => sum + i.quantity, 0);
+                    const storeOOS = data.inventory
+                      .filter(i => i.storeId === store.id && i.quantity === 0).length;
+                    const storeTotal = data.inventory.filter(i => i.storeId === store.id).length;
+                    const oosPercent = storeTotal > 0 ? Math.round((storeOOS / storeTotal) * 100) : 0;
+                    
+                    return (
+                      <div key={store.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-3 h-3 rounded-full ${oosPercent > 25 ? 'bg-red-500' : oosPercent > 15 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                          <span className="font-medium text-sm text-gray-700">{store.name}</span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <span className="text-xs text-gray-500">Остаток: {storeStock} шт.</span>
+                          <span className={`text-xs font-medium ${oosPercent > 25 ? 'text-red-600' : oosPercent > 15 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                            {oosPercent}% нет
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-4">
-                        <span className="text-xs text-gray-500">Заполнен: {store.stock}%</span>
-                        <span className={`text-xs font-medium ${store.trend.startsWith('+') ? 'text-emerald-600' : 'text-red-600'}`}>
-                          {store.trend}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -124,20 +129,31 @@ function App() {
                       : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
                   }`}
                 >
-                  <Icon className="w-4.5 h-4.5" />
+                  <Icon className="w-4 h-4" />
                   {tab.label}
                 </button>
               );
             })}
           </nav>
+
+          {/* Reload Data Button */}
+          <div className="mt-6 pt-6 border-t border-gray-100">
+            <button
+              onClick={clearData}
+              className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-800 transition-all"
+            >
+              <Upload className="w-4 h-4" />
+              Загрузить другой файл
+            </button>
+          </div>
         </div>
 
         <div className="absolute bottom-0 left-0 right-0 p-6 border-t border-gray-100">
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4">
-            <div className="text-xs font-medium text-blue-800 mb-1">Данные обновлены</div>
+            <div className="text-xs font-medium text-blue-800 mb-1">Данные загружены</div>
             <div className="text-[10px] text-blue-600">{new Date().toLocaleString('ru-RU')}</div>
             <div className="mt-2 text-[10px] text-blue-500">
-              4 магазина • 12 товаров • {new Date().toLocaleDateString('ru-RU')}
+              {data.stores.length} магазинов • {data.products.length} товаров
             </div>
           </div>
         </div>
@@ -160,7 +176,7 @@ function App() {
                   {tabs.find(t => t.id === activeTab)?.label}
                 </h2>
                 <p className="text-xs text-gray-500">
-                  {activeTab === 'dashboard' && 'Общая сводка по всем магазинам сети'}
+                  {activeTab === 'dashboard' && 'Общая сводка по всем магазинам'}
                   {activeTab === 'inventory' && 'Детальная таблица наличия товаров и размеров'}
                   {activeTab === 'transfers' && 'Рекомендации по перемещению между магазинами'}
                   {activeTab === 'restock' && 'Что нужно дозакупить у поставщика'}
@@ -171,7 +187,7 @@ function App() {
             <div className="flex items-center gap-3">
               <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-emerald-50 rounded-full">
                 <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                <span className="text-xs font-medium text-emerald-700">Онлайн</span>
+                <span className="text-xs font-medium text-emerald-700">Данные загружены</span>
               </div>
             </div>
           </div>
@@ -183,6 +199,14 @@ function App() {
         </div>
       </main>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <DataProvider>
+      <AppContent />
+    </DataProvider>
   );
 }
 
