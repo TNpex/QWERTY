@@ -17,6 +17,8 @@ export const MIN_PER_STORE = 2;
 export const TRANSFER_CAP = 3;
 /** Сколько рекомендаций показывать в списке UI (KPI считаются по полному списку!) */
 export const MAX_TRANSFER_DISPLAY = 50;
+export const MAX_RESTOCK_DISPLAY = 100;
+export const MAX_SALES_DISPLAY = 50;
 /** Порог «внимание» для доли OOS, % */
 export const OOS_WARN_PERCENT = 15;
 /** Порог «критично» для доли OOS, % */
@@ -97,6 +99,8 @@ export interface Metrics {
   /** % от carriedSKUs — корректная доля «нет в наличии» */
   outOfStockPercent: number;
   totalValue: number;
+  /** Товары с нулевым суммарным остатком по всей сети (включая товары без строк остатков) */
+  soldOutProducts: number;
   storeMetrics: StoreMetric[];
   categoryMetrics: CategoryMetric[];
 }
@@ -117,6 +121,8 @@ export function getMetrics(data: ParsedData): Metrics {
 
   const perCategory = new Map<string, { stock: number; carried: number; oos: number }>();
 
+  const totalByProduct = new Map<string, number>();
+
   for (const item of inventory) {
     if (item.notCarried) {
       notCarriedSKUs++;
@@ -125,6 +131,7 @@ export function getMetrics(data: ParsedData): Metrics {
     carriedSKUs++;
     totalStock += item.quantity;
     if (item.quantity === 0) outOfStockSizes++;
+    totalByProduct.set(item.productId, (totalByProduct.get(item.productId) ?? 0) + item.quantity);
 
     const product = productById.get(item.productId);
     if (product) totalValue += product.price * item.quantity;
@@ -172,6 +179,12 @@ export function getMetrics(data: ParsedData): Metrics {
     })
   );
 
+  // Распродано: товар с нулевым суммарным остатком (либо вообще без строк остатков)
+  let soldOutProducts = 0;
+  for (const product of products) {
+    if ((totalByProduct.get(product.id) ?? 0) === 0) soldOutProducts++;
+  }
+
   return {
     totalProducts: products.length,
     totalSKUs: inventory.length,
@@ -181,6 +194,7 @@ export function getMetrics(data: ParsedData): Metrics {
     outOfStockSizes,
     outOfStockPercent: percent(outOfStockSizes, carriedSKUs),
     totalValue,
+    soldOutProducts,
     storeMetrics,
     categoryMetrics,
   };
