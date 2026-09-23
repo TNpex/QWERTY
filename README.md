@@ -261,11 +261,44 @@ Vitest / ESLint / GitHub Actions
 
 ---
 
-## 🌐 Деплой
+## 🌐 Деплой (Vercel)
+
+Сайт размещается на Vercel (бесплатный тариф Hobby) и защищён паролем.
+
+### Как это работает
+
+- Vercel сам собирает сайт: build command `npm run build`, output `dist`
+  (фреймворк Vite определяется автоматически).
+- Файл `middleware.ts` в корне проекта закрывает паролем **весь сайт**, включая
+  CSV/JSON/фото в `/data/*`. Это бесплатный механизм Vercel Routing Middleware
+  (встроенная «Password Protection» у Vercel — только на платном тарифе).
+- Пароль хранится в переменной окружения `SITE_PASSWORD`
+  (Settings → Environment Variables) — в коде и в git его нет.
+- Посетитель вводит пароль на странице `/login`; браузер запоминает доступ
+  на 30 дней (httpOnly-cookie). Выход — адрес `/logout`.
+- Если `SITE_PASSWORD` не задана — сайт закрыт и показывает подсказку
+  администратору (данные не утекут).
+- Каждый push в главную ветку (включая ежедневные коммиты данных от
+  робота-парсера) автоматически пересобирает сайт за 1–2 минуты.
+
+### Смена пароля
+
+Settings → Environment Variables → `SITE_PASSWORD` → Edit → новое значение →
+Deployments → последний деплой → ⋯ → Redeploy.
+
+### Деплой с нуля
+
+1. [vercel.com](https://vercel.com) → Sign Up → войти через GitHub.
+2. Add New… → Project → Import Git Repository → выбрать `TNpex/QWERTY`.
+3. Перед деплоем раскрыть Environment Variables и добавить:
+   ключ `SITE_PASSWORD`, значение — придуманный пароль (не от saletennis.com!).
+4. Deploy. Через 1–3 минуты сайт доступен по адресу `https://<имя-проекта>.vercel.app`.
+
+### Локальная сборка (без Vercel)
 
 ```bash
 npm run build   # → dist/
 ```
 
-Vercel/Netlify: build command `npm run build`, output `dist`. Свой сервер:
-скопировать содержимое `dist/`.
+Свой сервер: скопировать содержимое `dist/`. Внимание: защита паролем
+(`middleware.ts`) работает только на Vercel.
