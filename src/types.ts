@@ -19,8 +19,18 @@ export interface InventoryItem {
   storeId: string;
   size: string;
   quantity: number;
+  /**
+   * true — магазин НЕ возит эту позицию (пустая ячейка в файле либо
+   * магазин вообще не упоминается в данных товара).
+   * Такие строки не участвуют в метрике «нет в наличии» (OOS)
+   * и в рекомендациях по перемещению — это не дефицит, а отсутствие
+   * товара в ассортименте точки.
+   */
+  notCarried?: boolean;
   lastUpdated: string;
 }
+
+export type TransferPriority = 'high' | 'medium' | 'low';
 
 export interface TransferRecommendation {
   productId: string;
@@ -30,22 +40,42 @@ export interface TransferRecommendation {
   size: string;
   quantity: number;
   reason: string;
-  priority: 'high' | 'medium' | 'low';
+  priority: TransferPriority;
 }
+
+export type RestockUrgency = 'critical' | 'high' | 'medium';
 
 export interface RestockRecommendation {
   productId: string;
   productName: string;
   brand: string;
   sizes: { size: string; quantity: number }[];
+  /** Сколько единиц не хватает до норматива (MIN_PER_STORE на каждый возящий магазин) */
   totalNeeded: number;
-  urgency: 'critical' | 'high' | 'medium';
-  avgDailySales: number;
-  daysUntilStockout: number;
+  /** Текущий суммарный остаток по магазинам, которые возят товар, шт. */
+  currentStock: number;
+  /** Покрытие норматива запасом, 0..100 (%) */
+  coveragePercent: number;
+  /**
+   * Детерминированная срочность (без случайных чисел):
+   * - critical: товар полностью отсутствует во всех возящих магазинах;
+   * - high: покрытие норматива < 50% либо более половины размеров с нулём;
+   * - medium: остальное.
+   */
+  urgency: RestockUrgency;
 }
+
+/** Формат исходного файла: «длинный» (строка на остаток) или «широкий» (магазины-колонки) */
+export type FileFormat = 'long' | 'wide';
 
 export interface ParsedData {
   stores: Store[];
   products: Product[];
   inventory: InventoryItem[];
+  /** Момент загрузки файла (ISO-строка) */
+  uploadedAt?: string;
+  /** Определённый парсером формат файла */
+  format?: FileFormat;
+  /** Предупреждения парсера (пропущенные строки, нераспознанные магазины и т.п.) */
+  warnings?: string[];
 }
