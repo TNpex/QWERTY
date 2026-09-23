@@ -15,6 +15,20 @@ export function toProductPath(link: string): string {
 
 export type ProductImageMap = Record<string, string>;
 
+/** Базовый URL локальных фото: public/data/product_images/<имя файла> */
+export function localPhotoUrl(fileName: string): string {
+  const base = `${import.meta.env.BASE_URL ?? '/'}data/product_images/`;
+  return `${base}${encodeURIComponent(fileName)}`;
+}
+
+/** Приводит путь из колонки «Фото» (data\product_images\x.png) к имени файла */
+export function photoFileName(raw: unknown): string | undefined {
+  const text = String(raw ?? '').trim();
+  if (!text) return undefined;
+  const name = text.replace(/\\/g, '/').split('/').pop()?.trim();
+  return name && /\.(png|jpe?g|webp|gif|avif)$/i.test(name) ? name : undefined;
+}
+
 /** Загружает карту картинок один раз. При ошибке (нет файла) — пустая карта. */
 let imagesPromise: Promise<ProductImageMap> | null = null;
 

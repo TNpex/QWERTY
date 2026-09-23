@@ -14,6 +14,8 @@ export interface Product {
   article?: string;
   /** Ссылка на страницу товара (saletennis.com) — стабильный уникальный идентификатор */
   link?: string;
+  /** Имя файла фотографии из колонки «Фото» (лежит в public/data/product_images/) */
+  photo?: string;
 }
 
 export interface InventoryItem {

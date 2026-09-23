@@ -1,10 +1,52 @@
 import { useEffect, useMemo, useState } from 'react';
 import { X, ExternalLink, Package, Store as StoreIcon, Flame } from 'lucide-react';
 import { useData } from '../context/DataContext';
-import { toProductPath } from '../utils/images';
+import { toProductPath, localPhotoUrl } from '../utils/images';
 import { compareSizes } from '../utils/sizes';
 import { isWarehouse, getStoreCity } from '../utils/storeGroups';
-import type { InventoryItem } from '../types';
+import type { InventoryItem, Product } from '../types';
+
+/**
+ * Фото товара с каскадом источников:
+ * 1. локальный файл из public/data/product_images/ (колонка «Фото» парсера —
+ *    основной источник, работает быстро и без зависимости от внешнего сайта);
+ * 2. URL из product-images.json (собран scrape-images.mjs) — резерв;
+ * 3. заглушка.
+ */
+function ProductImage({ product, alt }: { product: Product; alt: string }) {
+  const { productImages } = useData();
+  const sources = useMemo(() => {
+    const list: string[] = [];
+    if (product.photo) list.push(localPhotoUrl(product.photo));
+    if (product.link) {
+      const remote = productImages[toProductPath(product.link)];
+      if (remote) list.push(remote);
+    }
+    return list;
+  }, [product.photo, product.link, productImages]);
+
+  const [failedCount, setFailedCount] = useState(0);
+  useEffect(() => setFailedCount(0), [sources]);
+
+  const src = sources[failedCount];
+  if (!src) {
+    return (
+      <div className="flex flex-col items-center gap-2 text-gray-300 py-10">
+        <Package className="w-16 h-16" />
+        <span className="text-xs">Фото недоступно</span>
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className="w-full h-full object-contain max-h-[340px]"
+      loading="lazy"
+      onError={() => setFailedCount((c) => c + 1)}
+    />
+  );
+}
 
 /**
  * Модальная карточка товара: картинка с saletennis.com, цена, артикул,
@@ -17,8 +59,7 @@ export function ProductCardModal({
   productId: string;
   onClose: () => void;
 }) {
-  const { data, productImages } = useData();
-  const [imageFailed, setImageFailed] = useState(false);
+  const { data } = useData();
 
   // Закрытие по Escape
   useEffect(() => {
@@ -54,8 +95,6 @@ export function ProductCardModal({
 
   if (!data || !product || !view) return null;
 
-  const image =
-    !imageFailed && product.link ? productImages[toProductPath(product.link)] : undefined;
   const soldOut = view.total === 0;
 
   const cellClass = (qty: number) =>
@@ -124,20 +163,7 @@ export function ProductCardModal({
         <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-5">
           {/* Картинка */}
           <div className="rounded-xl overflow-hidden bg-gradient-to-br from-gray-50 to-blue-50 border border-gray-100 flex items-center justify-center min-h-[220px]">
-            {image ? (
-              <img
-                src={image}
-                alt={product.name}
-                className="w-full h-full object-contain max-h-[340px]"
-                loading="lazy"
-                onError={() => setImageFailed(true)}
-              />
-            ) : (
-              <div className="flex flex-col items-center gap-2 text-gray-300 py-10">
-                <Package className="w-16 h-16" />
-                <span className="text-xs">Фото недоступно</span>
-              </div>
-            )}
+            <ProductImage product={product} alt={product.name} />
           </div>
 
           {/* Наличие по магазинам */}

@@ -2,6 +2,9 @@ import type { ParsedData, Store, Product, InventoryItem } from '../types';
 import { parseCSVText } from './csv';
 import { compareSizes, normalizeSize } from './sizes';
 import { sortStoresForDisplay } from './storeGroups';
+import { photoFileName } from './images';
+
+const PHOTO_ALIASES = ['фото', 'photo', 'изображение', 'картинка', 'image'];
 
 // Динамический импорт xlsx: тяжёлая библиотека грузится только при загрузке файла
 let xlsxModule: typeof import('xlsx') | null = null;
@@ -405,6 +408,7 @@ function parseLongFormat(
   const storesMap = new Map<string, Store>();
   const productsMap = new Map<string, Product>();
   const inventoryMap = new Map<string, InventoryItem>(); // дубли строки суммируются
+  const photoCol = findColumn(Object.keys(rows[0] ?? {}), PHOTO_ALIASES);
   let skipped = 0;
 
   for (const row of rows) {
@@ -422,6 +426,7 @@ function parseLongFormat(
     const price = mapping.priceCol ? parsePrice(row[mapping.priceCol]) : 0;
     const article = mapping.articleCol ? String(row[mapping.articleCol] ?? '').trim() : '';
     const size = mapping.sizeCol ? normalizeSize(row[mapping.sizeCol]) : '—';
+    const photo = photoCol ? photoFileName(row[photoCol]) : undefined;
 
     let store = storesMap.get(normalize(storeName));
     if (!store) {
@@ -432,7 +437,15 @@ function parseLongFormat(
     const pKey = productKey(name, brand, article);
     let product = productsMap.get(pKey);
     if (!product) {
-      product = { id: `p_${productsMap.size + 1}`, name, brand, category, price, article };
+      product = {
+        id: `p_${productsMap.size + 1}`,
+        name,
+        brand,
+        category,
+        price,
+        article,
+        ...(photo ? { photo } : {}),
+      };
       productsMap.set(pKey, product);
     }
 
@@ -487,6 +500,7 @@ function parseWideFormat(
 
   const productsMap = new Map<string, Product>();
   const inventory: InventoryItem[] = [];
+  const photoColW = findColumn(Object.keys(rows[0] ?? {}), PHOTO_ALIASES);
   let skipped = 0;
   let badValueWarnings = 0;
   let badValueTotal = 0;
@@ -513,11 +527,20 @@ function parseWideFormat(
     const category = mapping.categoryCol ? String(row[mapping.categoryCol] ?? '').trim() || 'Другое' : 'Другое';
     const price = mapping.priceCol ? parsePrice(row[mapping.priceCol]) : 0;
     const article = mapping.articleCol ? String(row[mapping.articleCol] ?? '').trim() : '';
+    const photo = photoColW ? photoFileName(row[photoColW]) : undefined;
 
     const pKey = productKey(name, brand, article);
     let product = productsMap.get(pKey);
     if (!product) {
-      product = { id: `p_${productsMap.size + 1}`, name, brand, category, price, article };
+      product = {
+        id: `p_${productsMap.size + 1}`,
+        name,
+        brand,
+        category,
+        price,
+        article,
+        ...(photo ? { photo } : {}),
+      };
       productsMap.set(pKey, product);
     }
 

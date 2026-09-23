@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "snapshot": "node scripts/add-snapshot.mjs",
+    "images": "node scripts/sync-images.mjs",
     "scrape-images": "node scripts/scrape-images.mjs"
   },
   "dependencies": {

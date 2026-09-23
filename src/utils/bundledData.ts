@@ -4,6 +4,7 @@ import { normalizeSize } from './sizes';
 import { detectColumns, findColumn, parsePrice, parseQuantity, buildStoreResolver } from './xlsxParser';
 import { parseSnapshotRows, type HistorySnapshot } from './historyCore';
 import { sortStoresForDisplay } from './storeGroups';
+import { photoFileName } from './images';
 
 /**
  * Загрузка встроенного набора данных из public/data/:
@@ -18,6 +19,7 @@ import { sortStoresForDisplay } from './storeGroups';
  */
 
 const LINK_ALIASES = ['ссылка', 'link', 'url'];
+const PHOTO_ALIASES = ['фото', 'photo', 'изображение', 'картинка', 'image'];
 
 /** Стабильный детерминированный id товара из его ссылки (djb2-хэш) */
 export function hashString(text: string): string {
@@ -53,6 +55,7 @@ export function parseBundledRows(
   const productHeaders = Object.keys(productsRows[0]);
   const mapping = detectColumns(productHeaders);
   const linkCol = findColumn(productHeaders, LINK_ALIASES);
+  const photoCol = findColumn(productHeaders, PHOTO_ALIASES);
 
   // Магазины — из колонок products.csv (канонические полные названия)
   let storeColumns: string[];
@@ -101,7 +104,17 @@ export function parseBundledRows(
     const id = `p_${hashString(link || `${article}|${name}`)}`;
     if (productById.has(id)) continue;
 
-    const product: Product = { id, name, brand, category, price, article, ...(link ? { link } : {}) };
+    const photo = photoCol ? photoFileName(row[photoCol]) : undefined;
+    const product: Product = {
+      id,
+      name,
+      brand,
+      category,
+      price,
+      article,
+      ...(link ? { link } : {}),
+      ...(photo ? { photo } : {}),
+    };
     products.push(product);
     productById.set(id, product);
     if (link) byLink.set(link, product);
