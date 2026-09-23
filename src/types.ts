@@ -12,6 +12,8 @@ export interface Product {
   category: string;
   price: number;
   article?: string;
+  /** Ссылка на страницу товара (saletennis.com) — стабильный уникальный идентификатор */
+  link?: string;
 }
 
 export interface InventoryItem {
@@ -78,4 +80,8 @@ export interface ParsedData {
   format?: FileFormat;
   /** Предупреждения парсера (пропущенные строки, нераспознанные магазины и т.п.) */
   warnings?: string[];
+  /** Источник данных: встроенный набор (public/data) или загруженный пользователем файл */
+  source?: 'bundled' | 'upload';
+  /** Дата снимка остатков (для встроенных данных — дата последнего парсинга) */
+  asOf?: string;
 }

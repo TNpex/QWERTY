@@ -1,6 +1,6 @@
 import type { ParsedData, Store, Product, InventoryItem } from '../types';
 import { parseCSVText } from './csv';
-import { compareSizes } from './sizes';
+import { compareSizes, normalizeSize } from './sizes';
 
 // Динамический импорт xlsx: тяжёлая библиотека грузится только при загрузке файла
 let xlsxModule: typeof import('xlsx') | null = null;
@@ -34,34 +34,43 @@ const STANDARD_COLUMNS = [
   'магазин', 'точка', 'количество', 'кол-во', 'остаток', 'описание', 'description',
 ];
 
-/** Маппинг свободных названий магазинов из текста «Размеры и наличие» к колонкам файла */
+/** Маппинг свободных названий магазинов из текста «Размеры и наличие» к каноническим названиям */
 const STORE_NAME_MAPPING: Record<string, string> = {
-  'санкт-петербург (спортивная)': 'Спб_Спортивная',
-  'спб_спортивная': 'Спб_Спортивная',
-  'спортивная': 'Спб_Спортивная',
-  'санкт-петербург (ярослава)': 'Спб_Ярослава',
-  'санкт-петербург (ярослава гашека)': 'Спб_Ярослава',
-  'спб_ярослава': 'Спб_Ярослава',
-  'ярослава': 'Спб_Ярослава',
-  'ярослава гашека': 'Спб_Ярослава',
-  'екб_склад': 'Екб_Склад',
-  'основной склад екатеринбург': 'Екб_Склад',
-  'склад': 'Екб_Склад',
-  'екб_соболева': 'Екб_Соболева',
-  'соболева': 'Екб_Соболева',
+  // Полные названия (канонические, как в колонках products.csv)
+  'санкт-петербург (ярослава гашека)': 'Санкт-Петербург (Ярослава Гашека)',
+  'санкт-петербург (спортивная)': 'Санкт-Петербург (Спортивная)',
+  'екатеринбург (основной склад)': 'Екатеринбург (Основной склад)',
+  'екатеринбург (соболева)': 'Екатеринбург (Соболева)',
+  'екатеринбург (парина)': 'Екатеринбург (Парина)',
+  'екатеринбург (бисертская)': 'Екатеринбург (Бисертская)',
+  'екатеринбург (елизаветинское шоссе)': 'Екатеринбург (Елизаветинское шоссе)',
+  'тюмень (народная)': 'Тюмень (Народная)',
   'уфа': 'Уфа',
   'ижевск': 'Ижевск',
-  'тюмень (народная)': 'Тюмень_Народная',
-  'тюмень_народная': 'Тюмень_Народная',
-  'народная': 'Тюмень_Народная',
-  'тюмень': 'Тюмень_Народная',
-  'екб_бисертская': 'Екб_Бисертская',
-  'бисертская': 'Екб_Бисертская',
-  'екб_парина': 'Екб_Парина',
-  'парина': 'Екб_Парина',
-  'екб_елизавет': 'Екб_Елизавет',
-  'елизаветенское шоссе': 'Екб_Елизавет',
-  'елизавет': 'Екб_Елизавет',
+  // Короткие варианты из текста «Размеры и наличие»
+  'ярослава': 'Санкт-Петербург (Ярослава Гашека)',
+  'ярослава гашека': 'Санкт-Петербург (Ярослава Гашека)',
+  'спортивная': 'Санкт-Петербург (Спортивная)',
+  'основной склад екатеринбург': 'Екатеринбург (Основной склад)',
+  'основной склад': 'Екатеринбург (Основной склад)',
+  'склад': 'Екатеринбург (Основной склад)',
+  'соболева': 'Екатеринбург (Соболева)',
+  'парина': 'Екатеринбург (Парина)',
+  'бисертская': 'Екатеринбург (Бисертская)',
+  'елизаветенское шоссе': 'Екатеринбург (Елизаветинское шоссе)',
+  'елизаветинское шоссе': 'Екатеринбург (Елизаветинское шоссе)',
+  'народная': 'Тюмень (Народная)',
+  'тюмень': 'Тюмень (Народная)',
+  // Устаревшие короткие колонки (совместимость со старыми файлами)
+  'спб_спортивная': 'Санкт-Петербург (Спортивная)',
+  'спб_ярослава': 'Санкт-Петербург (Ярослава Гашека)',
+  'екб_склад': 'Екатеринбург (Основной склад)',
+  'екб_соболева': 'Екатеринбург (Соболева)',
+  'екб_парина': 'Екатеринбург (Парина)',
+  'екб_бисертская': 'Екатеринбург (Бисертская)',
+  'екб_елизавет': 'Екатеринбург (Елизаветинское шоссе)',
+  'елизавет': 'Екатеринбург (Елизаветинское шоссе)',
+  'тюмень_народная': 'Тюмень (Народная)',
 };
 
 // ============ Нормализация и поиск колонок ============
@@ -70,7 +79,8 @@ export function normalize(name: string): string {
   return name
     .toLowerCase()
     .trim()
-    .replace(/[\s.]+/g, '_')
+    .replace(/[().,]/g, ' ') // скобки и запятые — как пробелы: «Тюмень (Народная)» = «тюмень народная»
+    .replace(/[\s_]+/g, '_')
     .replace(/_+/g, '_')
     .replace(/^_|_$/g, '');
 }
@@ -224,7 +234,12 @@ export function parsePrice(raw: unknown): number {
 // ============ «Размеры и наличие»: резолвер магазинов ============
 
 interface StoreResolver {
+  /** Резолвит название магазина; нераспознанные названия запоминаются для предупреждения */
   resolve: (rawName: string) => string | null;
+  /** Резолвит без записи в «нераспознанные» (для пробных проверок) */
+  probe: (rawName: string) => string | null;
+  /** Явно отметить название как нераспознанное */
+  markUnknown: (rawName: string) => void;
   getUnknown: () => string[];
 }
 
@@ -244,7 +259,7 @@ export function buildStoreResolver(storeColumns: string[]): StoreResolver {
   const cache = new Map<string, string | null>();
   const unknown = new Set<string>();
 
-  const resolve = (rawName: string): string | null => {
+  const resolveCore = (rawName: string): string | null => {
     const key = normalize(rawName);
     if (!key) return null;
     if (cache.has(key)) return cache.get(key)!;
@@ -275,17 +290,32 @@ export function buildStoreResolver(storeColumns: string[]): StoreResolver {
       if (best) result = best.col;
     }
 
-    if (!result) unknown.add(rawName.trim());
     cache.set(key, result);
     return result;
   };
 
-  return { resolve, getUnknown: () => [...unknown] };
+  const resolve = (rawName: string): string | null => {
+    if (!String(rawName).trim()) return null;
+    const result = resolveCore(rawName);
+    if (!result) unknown.add(String(rawName).trim());
+    return result;
+  };
+
+  const probe = (rawName: string): string | null => resolveCore(rawName);
+
+  const markUnknown = (rawName: string) => {
+    const name = String(rawName).trim();
+    if (name) unknown.add(name);
+  };
+
+  return { resolve, probe, markUnknown, getUnknown: () => [...unknown] };
 }
 
 /**
- * Парсинг ячейки «Размеры и наличие».
- * Формат: «43: Спб_Спортивная - 2 шт | Екб_Склад - 1 пар | 44: Уфа - 3»
+ * Парсинг ячейки «Размеры и наличие». Поддерживаемые форматы сегментов (через «|»):
+ * - «43: Спб_Спортивная - 2 шт»  (размер, затем магазин с количеством);
+ * - «Спб_Спортивная - 2 шт»      (продолжение предыдущего размера);
+ * - «Уфа: 4 шт»                  (магазин с количеством, без размера — товары без размерной сетки).
  * Возвращает Map<колонка магазина, Map<размер, количество>>.
  */
 export function parseSizesAndStores(
@@ -300,8 +330,7 @@ export function parseSizesAndStores(
   let currentSize = '';
   const parts = str.split('|').map((p) => p.trim());
 
-  const addStoreQty = (rawStore: string, size: string, quantity: number) => {
-    const columnName = resolver.resolve(rawStore);
+  const addResolved = (columnName: string, size: string, quantity: number) => {
     if (!columnName || !size) return;
     let storeSizes = result.get(columnName);
     if (!storeSizes) {
@@ -311,17 +340,47 @@ export function parseSizesAndStores(
     storeSizes.set(size, (storeSizes.get(size) ?? 0) + quantity);
   };
 
+  const addStoreQty = (rawStore: string, size: string, quantity: number) => {
+    const columnName = resolver.resolve(rawStore);
+    if (columnName) addResolved(columnName, size, quantity);
+  };
+
+  const dashPattern = /^(.+?)\s*-\s*(\d+)\s*(шт\.?|пар\.?|ед\.?)?$/i;
+  const qtyOnlyPattern = /^(\d+)\s*(шт\.?|пар\.?|ед\.?)?$/i;
+
   for (const part of parts) {
     if (!part) continue;
-    // Есть ли размер в начале сегмента («L:», «43:», «42,5:»)?
-    const sizeMatch = part.match(/^([A-Z0-9А-ЯЁ,./-]+):\s*(.+)$/i);
-    const rest = sizeMatch ? sizeMatch[2].trim() : part;
-    if (sizeMatch) currentSize = sizeMatch[1].trim();
 
-    // «Магазин - 3 шт» (магазин может содержать дефисы, поэтому берём последнюю « - число»)
-    const storeQtyMatch = rest.match(/^(.+?)\s*-\s*(\d+)\s*(шт\.?|пар\.?|ед\.?)?$/i);
-    if (storeQtyMatch && currentSize) {
-      addStoreQty(storeQtyMatch[1].trim(), currentSize, parseInt(storeQtyMatch[2], 10));
+    const colonMatch = part.match(/^([^:]+):\s*(.+)$/);
+    if (colonMatch) {
+      const prefix = colonMatch[1].trim();
+      const rest = colonMatch[2].trim();
+
+      // Формат «Магазин: 4 шт» (безразмерный товар)
+      const qtyOnly = rest.match(qtyOnlyPattern);
+      if (qtyOnly) {
+        const resolvedStore = resolver.probe(prefix);
+        if (resolvedStore) {
+          addResolved(resolvedStore, '—', parseInt(qtyOnly[1], 10));
+          continue;
+        }
+        // Префикс не магазин: буквенный — вероятно, неизвестное название магазина
+        if (!/^[\d.,/\s-]+$/.test(prefix)) resolver.markUnknown(prefix);
+      }
+
+      // Формат «43: Магазин - 2 шт» — префикс является размером
+      currentSize = normalizeSize(prefix);
+      const dashMatch = rest.match(dashPattern);
+      if (dashMatch && currentSize) {
+        addStoreQty(dashMatch[1].trim(), currentSize, parseInt(dashMatch[2], 10));
+      }
+      continue;
+    }
+
+    // Формат «Магазин - 2 шт» — продолжение предыдущего размера
+    const dashMatch = part.match(dashPattern);
+    if (dashMatch && currentSize) {
+      addStoreQty(dashMatch[1].trim(), currentSize, parseInt(dashMatch[2], 10));
     }
   }
 
@@ -361,7 +420,7 @@ function parseLongFormat(
     const category = mapping.categoryCol ? String(row[mapping.categoryCol] ?? '').trim() || 'Другое' : 'Другое';
     const price = mapping.priceCol ? parsePrice(row[mapping.priceCol]) : 0;
     const article = mapping.articleCol ? String(row[mapping.articleCol] ?? '').trim() : '';
-    const size = mapping.sizeCol ? String(row[mapping.sizeCol] ?? '').trim() || '—' : '—';
+    const size = mapping.sizeCol ? normalizeSize(row[mapping.sizeCol]) : '—';
 
     let store = storesMap.get(normalize(storeName));
     if (!store) {
@@ -476,11 +535,20 @@ function parseWideFormat(
       for (const colName of mapping.storeColumns) {
         const store = storeByColumn.get(colName)!;
         const storeSizes = sizesAndStores.get(colName);
-        // Магазин упоминается в данных товара → возит его (нули размеров = реальный OOS).
-        // Не упоминается → notCarried (не путать с «нет в наличии»).
-        const carried = storeSizes !== undefined;
-        for (const size of sortedSizes) {
-          pushItem(product, store, size, carried ? storeSizes!.get(size) ?? 0 : 0, !carried);
+
+        if (storeSizes) {
+          // Магазин упоминается в тексте — возит товар; отсутствующий размер = реальный ноль
+          for (const size of sortedSizes) {
+            pushItem(product, store, size, storeSizes.get(size) ?? 0, false);
+          }
+        } else {
+          // Магазин не упоминается в тексте: смотрим на его числовую колонку.
+          // Явный «0» — возит, но нет в наличии; пустая ячейка — не возит.
+          const cellText = String(row[colName] ?? '').trim();
+          const explicitNumber = cellText !== '' && parseQuantity(cellText) !== null;
+          for (const size of sortedSizes) {
+            pushItem(product, store, size, 0, !explicitNumber);
+          }
         }
       }
     } else {
