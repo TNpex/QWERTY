@@ -218,9 +218,10 @@ export function parseQuantity(raw: unknown): number | null {
   if (typeof raw === 'number') return isFinite(raw) ? Math.max(0, Math.round(raw)) : null;
   const text = String(raw ?? '').trim();
   if (!text) return null;
-  const match = text.replace(/\u00a0/g, ' ').match(/-?\d+/);
+  // Поддержка дробных количеств парсера: «8,5 сет» → 9 (округление), «3 шт» → 3
+  const match = text.replace(/\u00a0/g, ' ').match(/-?\d+(?:[.,]\d+)?/);
   if (!match) return null;
-  return Math.max(0, parseInt(match[0], 10));
+  return Math.max(0, Math.round(parseFloat(match[0].replace(',', '.'))));
 }
 
 /** Цена: «8 990 ₽», «8990,00» → 8990 */

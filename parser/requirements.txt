@@ -1,0 +1,7 @@
+# Зависимости парсера SaleTennis
+# Установка: pip install -r parser/requirements.txt
+pandas>=2.0
+requests>=2.31
+selenium>=4.15
+# Нужен только если Selenium Manager не сможет сам найти драйвер Edge:
+webdriver-manager>=4.0

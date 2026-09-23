@@ -1,0 +1,60 @@
+name: Парсинг остатков SaleTennis
+
+on:
+  schedule:
+    # Каждый день в 07:00 UTC (12:00 по Екатеринбургу). Измените при желании.
+    - cron: '0 7 * * *'
+  workflow_dispatch:   # ручной запуск кнопкой во вкладке Actions
+
+permissions:
+  contents: write      # чтобы бот мог закоммитить обновлённые данные
+
+concurrency:
+  group: parse
+  cancel-in-progress: false
+
+jobs:
+  parse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      SALETENNIS_EMAIL: ${{ secrets.SALETENNIS_EMAIL }}
+      SALETENNIS_PASSWORD: ${{ secrets.SALETENNIS_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Настроить Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Установить зависимости парсера
+        run: pip install -r parser/requirements.txt
+
+      - name: Кэш фотографий (не скачивать заново каждый раз)
+        uses: actions/cache@v4
+        with:
+          path: public/data/product_images
+          key: product-images-${{ github.run_id }}
+          restore-keys: product-images-
+
+      - name: Запуск парсера (данные сразу в public/data)
+        run: python parser/saletennis_parser.py --out public/data
+
+      - name: Сжать новые фотографии (PNG → WebP)
+        run: |
+          npm ci
+          npm run compress-images
+
+      - name: Закоммитить обновлённые данные
+        run: |
+          git config user.name "saletennis-parser[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/data
+          if git diff --cached --quiet; then
+            echo "Данные не изменились — коммит не нужен"
+          else
+            git commit -m "data: автоматический парсинг остатков $(date -u +%Y-%m-%d)"
+            git push
+          fi

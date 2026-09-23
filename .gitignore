@@ -5,4 +5,12 @@ coverage/
 *.log
 .env
 .env.*
+!.env.example
+!parser/.env.example
 .DS_Store
+
+# парсер
+parser/.env
+parser/data/
+__pycache__/
+*.pyc

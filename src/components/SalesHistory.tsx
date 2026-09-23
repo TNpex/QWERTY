@@ -38,6 +38,7 @@ const CHANGE_TYPES = [
   'Товар закончился',
   'Изменение количества',
   'Новый товар',
+  'Товар появился',
   'Товар удалён с сайта',
 ] as const;
 
@@ -45,6 +46,7 @@ const CHANGE_BADGE: Record<string, string> = {
   'Товар закончился': 'bg-red-100 text-red-700',
   'Изменение количества': 'bg-amber-100 text-amber-700',
   'Новый товар': 'bg-emerald-100 text-emerald-700',
+  'Товар появился': 'bg-sky-100 text-sky-700',
   'Товар удалён с сайта': 'bg-gray-200 text-gray-600',
 };
 
