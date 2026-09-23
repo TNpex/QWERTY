@@ -4,6 +4,7 @@ import {
   getStoreCity,
   sortStoresForDisplay,
   getTransferRoute,
+  shortStoreLabel,
 } from './storeGroups';
 
 describe('isWarehouse', () => {
@@ -65,5 +66,42 @@ describe('getTransferRoute', () => {
     expect(getTransferRoute('Екатеринбург (Парина)', 'Уфа')).toBe('intercity');
     expect(getTransferRoute('Санкт-Петербург (Спортивная)', 'Уфа')).toBe('spb-expensive');
     expect(getTransferRoute('Санкт-Петербург (Спортивная)', 'Екатеринбург (Парина)')).toBe('spb-expensive');
+  });
+});
+
+describe('shortStoreLabel', () => {
+  it('реальные магазины сети SaleTennis', () => {
+    expect(shortStoreLabel('Санкт-Петербург (Ярослава Гашека)')).toBe('СПБ-Я');
+    expect(shortStoreLabel('Санкт-Петербург (Спортивная)')).toBe('СПБ-С');
+    expect(shortStoreLabel('Екатеринбург (Парина)')).toBe('ЕКБ-П');
+    expect(shortStoreLabel('Екатеринбург (Соболева)')).toBe('ЕКБ-С');
+    expect(shortStoreLabel('Екатеринбург (Бисертская)')).toBe('ЕКБ-Б');
+    expect(shortStoreLabel('Екатеринбург (Елизаветинское шоссе)')).toBe('ЕКБ-Е');
+    expect(shortStoreLabel('Тюмень (Народная)')).toBe('ТЮМ-Н');
+    expect(shortStoreLabel('Уфа')).toBe('УФА');
+    expect(shortStoreLabel('Ижевск')).toBe('ИЖ');
+    expect(shortStoreLabel('Екатеринбург (Основной склад)')).toBe('СКЛАД');
+  });
+
+  it('подписи уникальны для всех магазинов сети', () => {
+    const names = [
+      'Санкт-Петербург (Ярослава Гашека)',
+      'Санкт-Петербург (Спортивная)',
+      'Екатеринбург (Основной склад)',
+      'Екатеринбург (Соболева)',
+      'Екатеринбург (Парина)',
+      'Екатеринбург (Бисертская)',
+      'Екатеринбург (Елизаветинское шоссе)',
+      'Тюмень (Народная)',
+      'Уфа',
+      'Ижевск',
+    ];
+    const labels = names.map(shortStoreLabel);
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it('неизвестные названия получают осмысленный фолбэк', () => {
+    expect(shortStoreLabel('Казань (Центральная)')).toBe('КЗН-Ц');
+    expect(shortStoreLabel('Новосибирск')).toBe('НОВ');
   });
 });

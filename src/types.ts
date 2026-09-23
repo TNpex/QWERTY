@@ -43,6 +43,7 @@ export interface TransferRecommendation {
   productId: string;
   productName: string;
   productLink?: string;
+  brand: string;
   fromStore: string;
   fromStoreId: string;
   toStore: string;

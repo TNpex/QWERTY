@@ -3,7 +3,7 @@ import { X, ExternalLink, Package, Store as StoreIcon, Flame } from 'lucide-reac
 import { useData } from '../context/DataContext';
 import { toProductPath, localPhotoCandidates } from '../utils/images';
 import { compareSizes } from '../utils/sizes';
-import { isWarehouse, getStoreCity } from '../utils/storeGroups';
+import { isWarehouse, getStoreCity, shortStoreLabel } from '../utils/storeGroups';
 import type { InventoryItem, Product } from '../types';
 
 /**
@@ -223,12 +223,13 @@ export function ProductCardModal({
                     {view.carryingStores.map((store) => (
                       <th
                         key={store.id}
-                        className={`text-center py-2 px-2 font-medium whitespace-nowrap ${
+                        className={`text-center py-2 px-1 font-medium whitespace-nowrap ${
                           isWarehouse(store.name) ? 'bg-blue-50 text-blue-700' : 'text-gray-500'
                         }`}
                         title={store.name}
                       >
-                        {isWarehouse(store.name) ? '📦' : ''} {store.name}
+                        {isWarehouse(store.name) ? '📦 ' : ''}
+                        {shortStoreLabel(store.name)}
                       </th>
                     ))}
                     <th className="text-center py-2 px-2 font-medium text-gray-500">Итого</th>

@@ -19,7 +19,7 @@ import {
   DONOR_KEEP,
   getOverstockPositions,
 } from '../utils/analyticsCore';
-import { isWarehouse, getStoreCity, ROUTE_LABELS, type TransferRoute } from '../utils/storeGroups';
+import { isWarehouse, shortStoreLabel, ROUTE_LABELS, type TransferRoute } from '../utils/storeGroups';
 import { ProductCardModal } from './ProductCardModal';
 import type { TransferRecommendation } from '../types';
 
@@ -49,19 +49,6 @@ const ROUTE_ICONS: Record<TransferRoute, typeof Warehouse> = {
   'spb-expensive': Banknote,
 };
 
-/** Короткое имя магазина для чипов: «Санкт-Петербург (Спортивная)» → «СПб Спортивная» */
-function shortStoreName(name: string): string {
-  if (isWarehouse(name)) return '📦 Склад';
-  const city = getStoreCity(name);
-  const prefixMap: Record<string, string> = {
-    'Санкт-Петербург': 'СПб',
-    Екатеринбург: 'Екб',
-  };
-  const prefix = prefixMap[city] ?? city;
-  const tail = name.includes('(') ? name.split('(')[1].replace(')', '') : name.split(' ').slice(1).join(' ');
-  return tail && tail !== name ? `${prefix} ${tail}` : prefix;
-}
-
 interface ProductGroup {
   productId: string;
   productName: string;
@@ -75,9 +62,18 @@ export function TransferRecommendations() {
   const recommendations = useTransferRecommendations();
   const [toStoreId, setToStoreId] = useState('all');
   const [fromStoreId, setFromStoreId] = useState('all');
+  const [selectedBrand, setSelectedBrand] = useState('all');
   const [showSpbExpensive, setShowSpbExpensive] = useState(false);
   const [showOverstock, setShowOverstock] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
+
+  const brands = useMemo(
+    () =>
+      ['all', ...new Set(recommendations.map((r) => r.brand))].sort((a, b) =>
+        a === 'all' ? -1 : b === 'all' ? 1 : a.localeCompare(b, 'ru')
+      ),
+    [recommendations]
+  );
 
   // Остатки по товарам для наглядных чипов: productId → (storeId → qty)
   const productStoreTotals = useMemo(() => {
@@ -105,9 +101,10 @@ export function TransferRecommendations() {
         (r) =>
           (toStoreId === 'all' || r.toStoreId === toStoreId) &&
           (fromStoreId === 'all' || r.fromStoreId === fromStoreId) &&
+          (selectedBrand === 'all' || r.brand === selectedBrand) &&
           (showSpbExpensive || r.route !== 'spb-expensive')
       ),
-    [recommendations, toStoreId, fromStoreId, showSpbExpensive]
+    [recommendations, toStoreId, fromStoreId, selectedBrand, showSpbExpensive]
   );
 
   const groups = useMemo(() => {
@@ -152,6 +149,17 @@ export function TransferRecommendations() {
             </p>
           </div>
           <div className="flex gap-2 flex-wrap">
+            <select
+              value={selectedBrand}
+              onChange={(e) => setSelectedBrand(e.target.value)}
+              className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white cursor-pointer focus:ring-2 focus:ring-blue-500"
+            >
+              {brands.map((brand) => (
+                <option key={brand} value={brand}>
+                  {brand === 'all' ? 'Все бренды' : brand}
+                </option>
+              ))}
+            </select>
             <select
               value={toStoreId}
               onChange={(e) => setToStoreId(e.target.value)}
@@ -273,7 +281,7 @@ export function TransferRecommendations() {
                                   : 'bg-gray-50 border-gray-200 text-gray-600'
                           }`}
                         >
-                          {shortStoreName(store.name)}: <b>{qty}</b>
+                          {shortStoreLabel(store.name)}: <b>{qty}</b>
                         </span>
                       );
                     })}
@@ -293,12 +301,12 @@ export function TransferRecommendations() {
                         {rec.size}
                       </span>
                       <span className="text-gray-600">
-                        {shortStoreName(rec.fromStore)}{' '}
+                        {shortStoreLabel(rec.fromStore)}{' '}
                         <span className="text-gray-400">({rec.fromQty} шт.)</span>
                       </span>
                       <ArrowRight className="w-3.5 h-3.5 text-gray-400" />
                       <span className="text-gray-600">
-                        {shortStoreName(rec.toStore)}{' '}
+                        {shortStoreLabel(rec.toStore)}{' '}
                         <span className="text-red-400">({rec.toQty} шт.)</span>
                       </span>
                       <span className="font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2 py-0.5">
@@ -376,7 +384,7 @@ export function TransferRecommendations() {
                     </button>
                     <div className="text-[10px] text-gray-500">
                       {isWarehouse(pos.storeName) ? '📦 ' : ''}
-                      {shortStoreName(pos.storeName)} · размер {pos.size}
+                      {shortStoreLabel(pos.storeName)} · размер {pos.size}
                     </div>
                   </div>
                   <div className="text-right flex-shrink-0">
