@@ -21,10 +21,17 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { useData } from '../context/DataContext';
-import { useMetrics, useSalesReport, useFilteredData } from '../hooks/useAnalytics';
+import {
+  useMetrics,
+  useSalesReport,
+  useFilteredData,
+  useSizeSalesReport,
+} from '../hooks/useAnalytics';
 import { MAX_SALES_DISPLAY } from '../utils/analyticsCore';
-import { detectGender } from '../utils/productMeta';
+import { detectGender, GENDER_LABELS } from '../utils/productMeta';
+import { normalizeLink } from '../utils/historyCore';
 import type { ProductMovement, ParserChange } from '../utils/historyCore';
+import { ProductCardModal } from './ProductCardModal';
 
 const CHANGE_TYPES = [
   'all',
@@ -127,13 +134,41 @@ function formatDate(iso: string): string {
   return isNaN(date.getTime()) ? iso : date.toLocaleDateString('ru-RU');
 }
 
-function MovementRow({ mv, days }: { mv: ProductMovement; days: number }) {
+function MovementRow({
+  mv,
+  days,
+  onSelect,
+}: {
+  mv: ProductMovement;
+  days: number;
+  onSelect?: (mv: ProductMovement) => void;
+}) {
   const perDay = days > 0 ? (mv.sold / days).toFixed(1) : '—';
   return (
     <div className="flex items-center justify-between gap-3 p-3 bg-gray-50 rounded-lg">
       <div className="min-w-0 flex-1">
         <div className="text-sm font-medium text-gray-800 truncate" title={mv.name}>
-          {mv.name}
+          {onSelect ? (
+            <button
+              onClick={() => onSelect(mv)}
+              className="hover:text-blue-600 hover:underline text-left"
+            >
+              {mv.name}
+            </button>
+          ) : (
+            mv.name
+          )}
+          {mv.link && (
+            <a
+              href={mv.link}
+              target="_blank"
+              rel="noreferrer"
+              className="ml-1.5 text-gray-400 hover:text-blue-500"
+              title="Открыть на saletennis.com"
+            >
+              <ExternalLink className="w-3 h-3 inline" />
+            </a>
+          )}
         </div>
         <div className="text-xs text-gray-500">
           {mv.brand}
@@ -162,6 +197,26 @@ export function SalesHistory() {
   const filteredData = useFilteredData();
   const report = useSalesReport();
   const metrics = useMetrics();
+  const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
+
+  // Сопоставление движения товара с текущим каталогом (для клика → карточка)
+  const productIdForMovement = (mv: ProductMovement): string | null => {
+    if (!data) return null;
+    const link = mv.link ? normalizeLink(mv.link) : '';
+    for (const p of data.products) {
+      if (link && p.link && normalizeLink(p.link) === link) return p.id;
+    }
+    for (const p of data.products) {
+      if (mv.article && p.article === mv.article && p.name === mv.name) return p.id;
+    }
+    return null;
+  };
+
+  const openMovement = (mv: ProductMovement) => {
+    const id = productIdForMovement(mv);
+    if (id) setSelectedProduct(id);
+    else if (mv.link) window.open(mv.link, '_blank', 'noopener');
+  };
 
   // Глобальные фильтры (бренд/категория/пол) применяются и к движению товаров
   const matchesFilters = (m: { category: string; brand: string; name: string }) =>
@@ -294,7 +349,12 @@ export function SalesHistory() {
               </h3>
               <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
                 {topSold.slice(0, MAX_SALES_DISPLAY).map((mv) => (
-                  <MovementRow key={mv.link || `${mv.article}|${mv.name}`} mv={mv} days={report.days} />
+                  <MovementRow
+                    key={mv.link || `${mv.article}|${mv.name}`}
+                    mv={mv}
+                    days={report.days}
+                    onSelect={openMovement}
+                  />
                 ))}
                 {topSold.length === 0 && (
                   <p className="text-sm text-gray-400 py-6 text-center">За период продаж не зафиксировано</p>
@@ -320,7 +380,22 @@ export function SalesHistory() {
                     className="p-3 bg-red-50 border border-red-100 rounded-lg"
                   >
                     <div className="text-sm font-medium text-gray-800 truncate" title={mv.name}>
-                      {mv.name}
+                      <button
+                        onClick={() => openMovement(mv)}
+                        className="hover:text-blue-600 hover:underline text-left"
+                      >
+                        {mv.name}
+                      </button>
+                      {mv.link && (
+                        <a
+                          href={mv.link}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="ml-1.5 text-gray-400 hover:text-blue-500"
+                        >
+                          <ExternalLink className="w-3 h-3 inline" />
+                        </a>
+                      )}
                     </div>
                     <div className="text-xs text-gray-500 mt-0.5">
                       {mv.brand}
@@ -340,6 +415,10 @@ export function SalesHistory() {
               </div>
             </div>
           </div>
+
+          <SizeSalesSection />
+
+          <ParserChangeJournal changes={parserChanges} />
         </>
       ) : (
         <>
@@ -416,7 +495,77 @@ npm run snapshot -- путь/к/2026-09-24.csv
             )}
           </div>
 
+          <SizeSalesSection />
+
           <ParserChangeJournal changes={parserChanges} />
+        </>
+      )}
+
+      {selectedProduct && (
+        <ProductCardModal productId={selectedProduct} onClose={() => setSelectedProduct(null)} />
+      )}
+    </div>
+  );
+}
+
+/** Продажи по размерам — популярность размерного ряда (мужчины/женщины/дети) */
+function SizeSalesSection() {
+  const sizeReport = useSizeSalesReport();
+  const { sizeSnapshots } = useData();
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+      <h3 className="text-lg font-semibold text-gray-800 mb-1 flex items-center gap-2">
+        <TrendingDown className="w-5 h-5 text-pink-500" />
+        Продажи по размерам
+      </h3>
+      {!sizeReport ? (
+        <p className="text-sm text-gray-400 mt-2">
+          Накоплено снимков размеров: {sizeSnapshots.length}. Размерная аналитика появится,
+          когда их станет минимум два — скрипт <code className="bg-gray-100 px-1 rounded">npm run snapshot</code>{' '}
+          уже автоматически сохраняет снимки sizes.csv в историю.
+        </p>
+      ) : (
+        <>
+          <p className="text-xs text-gray-500 mb-4">
+            Период: {new Date(sizeReport.fromDate).toLocaleDateString('ru-RU')} →{' '}
+            {new Date(sizeReport.toDate).toLocaleDateString('ru-RU')} — какие размеры продавались
+            (уменьшение остатков между снимками размеров).
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            {sizeReport.byGender.map((g) => (
+              <div key={g.gender} className="bg-gray-50 rounded-lg p-3">
+                <div className="text-sm font-semibold text-gray-700 mb-2">
+                  {GENDER_LABELS[g.gender] ?? g.gender}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {g.rows.slice(0, 14).map((row) => (
+                    <span
+                      key={row.size}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white border border-gray-200 text-xs"
+                    >
+                      <b>{row.size}</b>
+                      <span className="text-pink-600">−{row.sold}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-1">
+            {sizeReport.entries.slice(0, 60).map((entry) => (
+              <div
+                key={`${entry.key}|${entry.size}`}
+                className="flex items-center justify-between gap-3 bg-gray-50 rounded-lg px-3 py-2 text-xs"
+              >
+                <span className="truncate text-gray-700" title={entry.name}>
+                  {entry.name}
+                  <span className="text-gray-400"> · {entry.size}</span>
+                </span>
+                <span className="font-bold text-pink-600 flex-shrink-0">−{entry.sold}</span>
+              </div>
+            ))}
+          </div>
         </>
       )}
     </div>

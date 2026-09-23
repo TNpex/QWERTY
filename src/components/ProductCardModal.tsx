@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X, ExternalLink, Package, Store as StoreIcon, Flame } from 'lucide-react';
+import { X, ExternalLink, Package, Store as StoreIcon, Flame, Pencil, Check } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { toProductPath, localPhotoCandidates } from '../utils/images';
 import { compareSizes } from '../utils/sizes';
@@ -48,9 +48,76 @@ function ProductImage({ product, alt }: { product: Product; alt: string }) {
   );
 }
 
+/** Инлайн-редактор бренда: правка сохраняется по артикулу (localStorage) */
+function BrandEditor({ product }: { product: Product }) {
+  const { setBrandOverride, brandOverrides } = useData();
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(product.brand);
+
+  useEffect(() => setValue(product.brand), [product.brand]);
+
+  const overridden = Boolean(product.article && brandOverrides[product.article]);
+
+  if (!editing) {
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+          {product.brand || 'Не определен'}
+          {overridden && <span title="Бренд указан вручную"> ✎</span>}
+        </span>
+        {product.article && (
+          <button
+            onClick={() => setEditing(true)}
+            className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-600"
+            title="Изменить бренд вручную (правка запомнится и будет экспортирована в CSV)"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </span>
+    );
+  }
+
+  const save = () => {
+    if (product.article && value.trim() && value.trim() !== product.brand) {
+      setBrandOverride(product.article, value.trim());
+    }
+    setEditing(false);
+  };
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      <input
+        autoFocus
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') save();
+          if (e.key === 'Escape') setEditing(false);
+        }}
+        className="px-2 py-0.5 text-xs border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 w-32"
+        placeholder="Бренд"
+      />
+      <button
+        onClick={save}
+        className="p-1 rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+        title="Сохранить (применится ко всем товарам с этим артикулом)"
+      >
+        <Check className="w-3.5 h-3.5" />
+      </button>
+      <button
+        onClick={() => setEditing(false)}
+        className="p-1 rounded bg-gray-100 text-gray-500 hover:bg-gray-200"
+      >
+        <X className="w-3.5 h-3.5" />
+      </button>
+    </span>
+  );
+}
+
 /**
  * Модальная карточка товара: картинка с saletennis.com, цена, артикул,
- * наличие по магазинам и размерам. Склад подсвечен синим.
+ * наличие по ВСЕМ магазинам и размерам (не возит — «—»). Склад подсвечен синим.
  */
 export function ProductCardModal({
   productId,
@@ -59,7 +126,7 @@ export function ProductCardModal({
   productId: string;
   onClose: () => void;
 }) {
-  const { data } = useData();
+  const { data, hotProducts } = useData();
 
   // Закрытие по Escape
   useEffect(() => {
@@ -77,9 +144,7 @@ export function ProductCardModal({
 
   const view = useMemo(() => {
     if (!data || !product) return null;
-    const items = data.inventory.filter(
-      (i) => i.productId === product.id && !i.notCarried
-    );
+    const items = data.inventory.filter((i) => i.productId === product.id && !i.notCarried);
     const sizes = [...new Set(items.map((i) => i.size))].sort(compareSizes);
     const byKey = new Map<string, InventoryItem>();
     const storeTotals = new Map<string, number>();
@@ -87,15 +152,16 @@ export function ProductCardModal({
       byKey.set(`${item.storeId}|${item.size}`, item);
       storeTotals.set(item.storeId, (storeTotals.get(item.storeId) ?? 0) + item.quantity);
     }
-    // Магазины, которые возят товар (в порядке витрины: склад последний)
-    const carryingStores = data.stores.filter((s) => storeTotals.has(s.id));
     const total = [...storeTotals.values()].reduce((a, b) => a + b, 0);
-    return { items, sizes, byKey, storeTotals, carryingStores, total };
+    return { items, sizes, byKey, storeTotals, total };
   }, [data, product]);
 
   if (!data || !product || !view) return null;
 
   const soldOut = view.total === 0;
+  const hotRule = hotProducts.find(
+    (h) => h.article.trim().toLowerCase() === (product.article ?? '').trim().toLowerCase()
+  );
 
   const cellClass = (qty: number) =>
     qty === 0
@@ -120,23 +186,32 @@ export function ProductCardModal({
         <div className="sticky top-0 bg-white/95 backdrop-blur flex items-start justify-between gap-3 p-5 border-b border-gray-100 z-10">
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700">
-                {product.brand}
-              </span>
+              <BrandEditor product={product} />
               <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
                 {product.category}
               </span>
+              {hotRule && (
+                <span
+                  className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700"
+                  title={hotRule.note ?? 'Ходовой товар'}
+                >
+                  🔥 Топ: минимум {hotRule.minPerStore} в магазине
+                </span>
+              )}
               {soldOut && (
                 <span className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
                   <Flame className="w-3 h-3" /> Распродано
                 </span>
               )}
             </div>
-            <h2 className="text-lg font-bold text-gray-800 mt-2 leading-snug">{product.name}</h2>
+            <h2 className="text-lg font-bold text-gray-800 mt-2 leading-snug break-words">
+              {product.name}
+            </h2>
             <div className="text-xs text-gray-500 mt-1">
               {product.article ? <>Артикул: {product.article} · </> : null}
               {product.price > 0 && <>Цена: {product.price.toLocaleString('ru-RU')} ₽ · </>}
-              Остаток: <b className={soldOut ? 'text-red-600' : 'text-emerald-600'}>{view.total} шт.</b>
+              Остаток:{' '}
+              <b className={soldOut ? 'text-red-600' : 'text-emerald-600'}>{view.total} шт.</b>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -166,16 +241,17 @@ export function ProductCardModal({
             <ProductImage product={product} alt={product.name} />
           </div>
 
-          {/* Наличие по магазинам */}
+          {/* Наличие по ВСЕМ магазинам */}
           <div>
             <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
               <StoreIcon className="w-4 h-4 text-gray-400" />
               Наличие по магазинам
             </h3>
             <div className="space-y-1.5">
-              {view.carryingStores.map((store) => {
+              {data.stores.map((store) => {
                 const warehouse = isWarehouse(store.name);
-                const total = view.storeTotals.get(store.id) ?? 0;
+                const total = view.storeTotals.get(store.id);
+                const carried = view.items.some((i) => i.storeId === store.id);
                 return (
                   <div
                     key={store.id}
@@ -194,25 +270,33 @@ export function ProductCardModal({
                         {getStoreCity(store.name)}
                       </span>
                     </div>
-                    <span
-                      className={`flex-shrink-0 inline-flex items-center justify-center min-w-[2rem] h-6 px-2 rounded text-xs ${cellClass(total)}`}
-                    >
-                      {total}
-                    </span>
+                    {carried ? (
+                      <span
+                        className={`flex-shrink-0 inline-flex items-center justify-center min-w-[2rem] h-6 px-2 rounded text-xs ${cellClass(total ?? 0)}`}
+                      >
+                        {total ?? 0}
+                      </span>
+                    ) : (
+                      <span
+                        className="flex-shrink-0 inline-flex items-center justify-center min-w-[2rem] h-6 px-2 rounded text-xs bg-gray-100 text-gray-400"
+                        title="Магазин не возит товар"
+                      >
+                        —
+                      </span>
+                    )}
                   </div>
                 );
               })}
-              {view.carryingStores.length === 0 && (
-                <p className="text-xs text-gray-400">Нет в наличии ни в одном магазине</p>
-              )}
             </div>
           </div>
         </div>
 
-        {/* Размерная сетка */}
-        {view.sizes.length > 0 && !(view.sizes.length === 1 && view.sizes[0] === '—') && (
+        {/* Размерная сетка — ВСЕ магазины */}
+        {view.sizes.length > 0 && (
           <div className="px-5 pb-5">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">Размерная сетка</h3>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">
+              Размерная сетка{view.sizes.length === 1 && view.sizes[0] === '—' ? '' : ' (по всем магазинам)'}
+            </h3>
             <div className="overflow-x-auto border border-gray-100 rounded-lg">
               <table className="w-full text-xs">
                 <thead>
@@ -220,7 +304,7 @@ export function ProductCardModal({
                     <th className="text-left py-2 px-2 font-medium text-gray-500 sticky left-0 bg-gray-50">
                       Размер
                     </th>
-                    {view.carryingStores.map((store) => (
+                    {data.stores.map((store) => (
                       <th
                         key={store.id}
                         className={`text-center py-2 px-1 font-medium whitespace-nowrap ${
@@ -238,16 +322,27 @@ export function ProductCardModal({
                 <tbody>
                   {view.sizes.map((size) => {
                     let rowTotal = 0;
-                    const cells = view.carryingStores.map((store) => {
+                    const cells = data.stores.map((store) => {
                       const item = view.byKey.get(`${store.id}|${size}`);
-                      const qty = item?.quantity ?? 0;
-                      rowTotal += qty;
+                      if (!item) {
+                        return (
+                          <td key={store.id} className="text-center py-1.5 px-2 border-t border-gray-50">
+                            <span
+                              className="inline-flex items-center justify-center w-8 h-6 rounded text-xs bg-gray-50 text-gray-300"
+                              title="Магазин не возит товар"
+                            >
+                              —
+                            </span>
+                          </td>
+                        );
+                      }
+                      rowTotal += item.quantity;
                       return (
                         <td key={store.id} className="text-center py-1.5 px-2 border-t border-gray-50">
                           <span
-                            className={`inline-flex items-center justify-center w-8 h-6 rounded text-xs ${cellClass(qty)}`}
+                            className={`inline-flex items-center justify-center w-8 h-6 rounded text-xs ${cellClass(item.quantity)}`}
                           >
-                            {qty}
+                            {item.quantity}
                           </span>
                         </td>
                       );
@@ -267,6 +362,10 @@ export function ProductCardModal({
                 </tbody>
               </table>
             </div>
+            <p className="mt-2 text-[10px] text-gray-400">
+              «—» — магазин не возит товар. Правка бренда (✎) сохраняется в браузере и
+              экспортируется для записи в CSV (см. README: npm run apply-edits).
+            </p>
           </div>
         )}
       </div>

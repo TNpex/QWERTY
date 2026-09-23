@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Search, ChevronDown, ChevronUp, PackageSearch, Flame, ExternalLink } from 'lucide-react';
-import { useFilteredData } from '../hooks/useAnalytics';
+import { useFilteredData, useHotArticles } from '../hooks/useAnalytics';
 import { compareSizes } from '../utils/sizes';
 import { isWarehouse, shortStoreLabel } from '../utils/storeGroups';
 import { ProductCardModal } from './ProductCardModal';
@@ -26,8 +26,9 @@ function storeCellClass(qty: number): string {
 const NOT_CARRIED_CLASS = 'bg-gray-50 text-gray-400';
 
 export function InventoryTable() {
-  // Данные уже отфильтрованы глобальной панелью (бренд / категория / пол)
+  // Данные уже отфильтрованы глобальной панелью (бренд / категория / пол / подтип)
   const data = useFilteredData();
+  const hotArticles = useHotArticles();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStore, setSelectedStore] = useState<string>('all');
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
@@ -165,7 +166,7 @@ export function InventoryTable() {
         {/* Table Header */}
         <div
           className="grid gap-2 px-4 py-2 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg text-xs font-semibold text-gray-600 uppercase tracking-wide border border-green-100"
-          style={{ gridTemplateColumns: `2fr 0.8fr 0.8fr ${Math.max(displayStores.length, 1)}fr` }}
+          style={{ gridTemplateColumns: `2.6fr 0.7fr 0.8fr ${Math.max(displayStores.length, 1)}fr` }}
         >
           <div>🎾 Товар</div>
           <div>Бренд</div>
@@ -188,7 +189,7 @@ export function InventoryTable() {
               {/* Main Row */}
               <div
                 className="grid gap-2 px-4 py-3 items-center cursor-pointer hover:bg-blue-50/30 transition-colors"
-                style={{ gridTemplateColumns: `2fr 0.8fr 0.8fr ${Math.max(displayStores.length, 1)}fr` }}
+                style={{ gridTemplateColumns: `2.6fr 0.7fr 0.8fr ${Math.max(displayStores.length, 1)}fr` }}
                 onClick={() => setExpandedProduct(isExpanded ? null : product.id)}
               >
                 <div className="flex items-center gap-2 min-w-0">
@@ -198,13 +199,13 @@ export function InventoryTable() {
                     <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
                   )}
                   <div className="min-w-0">
-                    <div className="text-sm truncate" title="Открыть карточку товара">
+                    <div className="text-sm leading-snug" title={product.name}>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedProduct(product.id);
                         }}
-                        className="font-medium text-gray-800 hover:text-blue-600 hover:underline text-left"
+                        className="font-medium text-gray-800 hover:text-blue-600 hover:underline text-left break-words line-clamp-2"
                       >
                         {product.name}
                       </button>
@@ -214,14 +215,22 @@ export function InventoryTable() {
                           target="_blank"
                           rel="noreferrer"
                           onClick={(e) => e.stopPropagation()}
-                          className="ml-1.5 inline-block text-gray-400 hover:text-blue-500"
+                          className="ml-1.5 inline-block text-gray-400 hover:text-blue-500 align-middle"
                           title="Открыть на saletennis.com"
                         >
                           <ExternalLink className="w-3 h-3 inline" />
                         </a>
                       )}
+                      {product.article && hotArticles.has(product.article.toLowerCase()) && (
+                        <span
+                          className="ml-1.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 text-[10px] font-bold uppercase tracking-wide align-middle"
+                          title="Ходовой товар — на особом контроле (индивидуальный норматив запаса)"
+                        >
+                          🔥 Топ
+                        </span>
+                      )}
                       {isSoldOut && (
-                        <span className="ml-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-bold uppercase tracking-wide align-middle">
+                        <span className="ml-1.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-bold uppercase tracking-wide align-middle">
                           <Flame className="w-2.5 h-2.5" /> Распродано
                         </span>
                       )}

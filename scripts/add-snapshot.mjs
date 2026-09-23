@@ -100,30 +100,46 @@ copyFileSync(snapshotFile, join(dataDir, 'products.csv'));
 console.log(`✅ Снимок: history/${destName}`);
 console.log('✅ products.csv обновлён');
 
+// ---- manifest.json ----
+const manifestPath = join(historyDir, 'manifest.json');
+let manifest = { snapshots: [], sizeSnapshots: [] };
+if (existsSync(manifestPath)) {
+  try {
+    manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  } catch {
+    console.warn('⚠️ manifest.json повреждён — создаю заново');
+    manifest = { snapshots: [], sizeSnapshots: [] };
+  }
+}
+if (!Array.isArray(manifest.snapshots)) manifest.snapshots = [];
+if (!Array.isArray(manifest.sizeSnapshots)) manifest.sizeSnapshots = [];
 if (sizesFile) {
   copyFileSync(sizesFile, join(dataDir, 'sizes.csv'));
-  console.log(`✅ sizes.csv обновлён из «${basename(sizesFile)}»`);
+  // Снимок размеров — в историю (для анализа продаж по размерам)
+  const sizesExt = extname(sizesFile).toLowerCase() || '.csv';
+  const sizesDestName = `sizes-${dateStamp}${sizesExt}`;
+  copyFileSync(sizesFile, join(historyDir, sizesDestName));
+  if (!Array.isArray(manifest.sizeSnapshots)) manifest.sizeSnapshots = [];
+  console.log(`✅ sizes.csv обновлён из «${basename(sizesFile)}» (+ снимок history/${sizesDestName})`);
 }
 if (changesFile) {
   copyFileSync(changesFile, join(dataDir, 'changes.csv'));
   console.log(`✅ changes.csv (журнал парсера) обновлён`);
 }
 
-// ---- manifest.json ----
-const manifestPath = join(historyDir, 'manifest.json');
-let manifest = { snapshots: [] };
-if (existsSync(manifestPath)) {
-  try {
-    manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-  } catch {
-    console.warn('⚠️ manifest.json повреждён — создаю заново');
-    manifest = { snapshots: [] };
-  }
-}
-if (!Array.isArray(manifest.snapshots)) manifest.snapshots = [];
 manifest.snapshots = manifest.snapshots.filter((s) => s && s.file !== destName && s.date !== isoDate);
 manifest.snapshots.push({ file: destName, date: isoDate });
 manifest.snapshots.sort((a, b) => a.date.localeCompare(b.date));
+if (sizesFile) {
+  manifest.sizeSnapshots = manifest.sizeSnapshots.filter(
+    (s) => s && s.file !== `sizes-${dateStamp}${extname(sizesFile).toLowerCase() || '.csv'}` && s.date !== isoDate
+  );
+  manifest.sizeSnapshots.push({
+    file: `sizes-${dateStamp}${extname(sizesFile).toLowerCase() || '.csv'}`,
+    date: isoDate,
+  });
+  manifest.sizeSnapshots.sort((a, b) => a.date.localeCompare(b.date));
+}
 writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
 
 console.log(`📈 Снимков в истории: ${manifest.snapshots.length}`);

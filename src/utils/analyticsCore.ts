@@ -493,25 +493,101 @@ const URGENCY_ORDER: Record<RestockUrgency, number> = { critical: 0, high: 1, me
  * - мужская обувь: 41:8, 42:11, 42,5:11, 43:11, 43,5:11, 44:10, 44,5:8, 45:6, 46:3, 47:1;
  * - неизвестный пол или уникальный размер (сет/банка/ростовка и т.п.) — минимум 4.
  *
+ * ХОДОВЫЕ ТОВАРЫ (hotRules, из public/data/hot-products.json): норматив
+ * «minPerStore единиц в КАЖДОМ розничном магазине» (суммарно по размерам);
+ * нехватка распределяется по размерам round-robin (популярные размеры первыми).
+ *
  * Текущий остаток считается по всей сети (включая склад), поэтому покрытие
  * перемещением не требуется: нехватка относительно норматива — это чистый заказ.
  */
-export function getRestockRecommendations(data: ParsedData): RestockRecommendation[] {
+export function getRestockRecommendations(
+  data: ParsedData,
+  hotRules?: { article: string; minPerStore: number }[]
+): RestockRecommendation[] {
   const { itemsByProduct } = buildIndex(data);
   const recommendations: RestockRecommendation[] = [];
+
+  const hotByArticle = new Map<string, number>();
+  for (const rule of hotRules ?? []) {
+    const article = rule.article.trim().toLowerCase();
+    if (article && rule.minPerStore > 0) hotByArticle.set(article, rule.minPerStore);
+  }
+  const retailStores = data.stores.filter((s) => !isWarehouse(s.name));
 
   for (const product of data.products) {
     const items = itemsByProduct.get(product.id);
     if (!items || items.length === 0) continue;
 
-    const gender = product.gender ?? detectGender(product.name, product.category);
     const bySize = groupBySize(items);
+    const hotMin = hotByArticle.get((product.article ?? '').trim().toLowerCase());
 
+    // ---- Ходовой товар: минимум в каждом розничном магазине ----
+    if (hotMin) {
+      const storeTotals = new Map<string, number>();
+      for (const item of items) {
+        storeTotals.set(item.storeId, (storeTotals.get(item.storeId) ?? 0) + item.quantity);
+      }
+      let totalNeeded = 0;
+      let currentStock = 0;
+      for (const store of retailStores) {
+        const have = storeTotals.get(store.id) ?? 0;
+        currentStock += have;
+        totalNeeded += Math.max(0, hotMin - have);
+      }
+      // Складской запас тоже учитываем в «сейчас» (он покрывает сеть)
+      const warehouseStore = data.stores.find((s) => isWarehouse(s.name));
+      if (warehouseStore) currentStock += storeTotals.get(warehouseStore.id) ?? 0;
+
+      if (totalNeeded === 0) continue;
+
+      // Распределение заказа по размерам: round-robin, популярные (с остатком) первыми
+      const sizeOrder = [...bySize.entries()]
+        .sort((a, b) => b[1].total - a[1].total || compareSizes(a[0], b[0]))
+        .map(([size, stock]) => ({ size, current: stock.total, quantity: 0 }));
+      if (sizeOrder.length === 0) sizeOrder.push({ size: '—', current: 0, quantity: 0 });
+      let left = totalNeeded;
+      let idx = 0;
+      while (left > 0 && sizeOrder.length > 0) {
+        sizeOrder[idx % sizeOrder.length].quantity++;
+        left--;
+        idx++;
+      }
+      const neededSizes = sizeOrder
+        .filter((s) => s.quantity > 0)
+        .map((s) => ({ size: s.size, quantity: s.quantity, target: s.current + s.quantity, current: s.current }))
+        .sort((a, b) => compareSizes(a.size, b.size));
+
+      const normTotal = hotMin * retailStores.length;
+      const coveragePercent = normTotal > 0 ? Math.round((currentStock / normTotal) * 100) : 100;
+
+      recommendations.push({
+        productId: product.id,
+        productName: product.name,
+        ...(product.link ? { productLink: product.link } : {}),
+        brand: product.brand,
+        category: product.category,
+        ...(product.subtype ? { subtype: product.subtype } : {}),
+        gender: product.gender ?? detectGender(product.name, product.category),
+        sizes: neededSizes,
+        totalNeeded,
+        transferCover: 0,
+        toPurchase: totalNeeded,
+        currentStock,
+        coveragePercent,
+        urgency: currentStock === 0 ? 'critical' : 'high',
+        isHot: true,
+        hotMinPerStore: hotMin,
+      });
+      continue;
+    }
+
+    // ---- Обычный товар: норматив на размер по всей сети ----
     const neededSizes: RestockRecommendation['sizes'] = [];
     let totalNeeded = 0;
     let currentStock = 0;
     let targetTotal = 0;
     let sizesFullyOut = 0;
+    const gender = product.gender ?? detectGender(product.name, product.category);
 
     for (const [size, stock] of bySize) {
       const target = getRestockMinimum(gender, product.category, size);
@@ -556,6 +632,7 @@ export function getRestockRecommendations(data: ParsedData): RestockRecommendati
 
   return recommendations.sort(
     (a, b) =>
+      (b.isHot ? 1 : 0) - (a.isHot ? 1 : 0) ||
       URGENCY_ORDER[a.urgency] - URGENCY_ORDER[b.urgency] ||
       b.toPurchase - a.toPurchase ||
       a.productName.localeCompare(b.productName, 'ru')

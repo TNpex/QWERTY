@@ -337,3 +337,42 @@ describe('производительность (регрессия против 
     expect(elapsed).toBeLessThan(5000);
   });
 });
+
+describe('ходовые товары (hot-products)', () => {
+  it('минимум N штук в каждом розничном магазине, склад не считается', () => {
+    const data: ParsedData = {
+      stores: [
+        { id: 'a', name: 'Магазин А' },
+        { id: 'b', name: 'Магазин Б' },
+        { id: 'w', name: 'Основной склад' },
+      ],
+      products: [{ id: 'p', name: 'Носки 7/6 Socks Pro - White', brand: '7/6', category: 'Аксессуары', price: 990, article: 'SL76-WH' }],
+      inventory: [
+        { productId: 'p', storeId: 'a', size: '39-42', quantity: 2, lastUpdated: '' },
+        { productId: 'p', storeId: 'b', size: '39-42', quantity: 6, lastUpdated: '' },
+        { productId: 'p', storeId: 'w', size: '39-42', quantity: 10, lastUpdated: '' },
+      ],
+    };
+    const recs = getRestockRecommendations(data, [{ article: 'SL76-WH', minPerStore: 5 }]);
+    expect(recs).toHaveLength(1);
+    const r = recs[0];
+    expect(r.isHot).toBe(true);
+    expect(r.hotMinPerStore).toBe(5);
+    // А: 2 → не хватает 3; Б: 6 → 0; склад не учитывается как розница
+    expect(r.totalNeeded).toBe(3);
+    expect(r.toPurchase).toBe(3);
+    expect(r.urgency).toBe('high');
+    // в списке — первыми (сортировка: ходовые сверху)
+  });
+
+  it('без правила ходового товара — обычный норматив 4 на позицию', () => {
+    const data: ParsedData = {
+      stores: [{ id: 'a', name: 'Магазин А' }],
+      products: [{ id: 'p', name: 'Носки 7/6 Socks Pro - White', brand: '7/6', category: 'Аксессуары', price: 990, article: 'SL76-WH' }],
+      inventory: [{ productId: 'p', storeId: 'a', size: '39-42', quantity: 2, lastUpdated: '' }],
+    };
+    const recs = getRestockRecommendations(data);
+    expect(recs[0].sizes[0].target).toBe(4); // DEFAULT_MINIMUM для аксессуаров
+    expect(recs[0].sizes[0].quantity).toBe(2);
+  });
+});
