@@ -3,6 +3,7 @@ import { parseCSVText } from './csv';
 import { normalizeSize } from './sizes';
 import { detectColumns, findColumn, parsePrice, parseQuantity, buildStoreResolver } from './xlsxParser';
 import { parseSnapshotRows, type HistorySnapshot } from './historyCore';
+import { sortStoresForDisplay } from './storeGroups';
 
 /**
  * Загрузка встроенного набора данных из public/data/:
@@ -72,10 +73,12 @@ export function parseBundledRows(
     throw new Error('Не удалось определить список магазинов');
   }
 
-  const stores: Store[] = storeColumns.map((name, index) => ({
-    id: `store_${index + 1}`,
-    name,
-  }));
+  const stores: Store[] = sortStoresForDisplay(
+    storeColumns.map((name, index) => ({
+      id: `store_${index + 1}`,
+      name,
+    }))
+  );
   const storeIdByName = new Map(stores.map((s) => [s.name, s.id]));
   const resolver = buildStoreResolver(storeColumns);
 

@@ -34,15 +34,27 @@ export interface InventoryItem {
 
 export type TransferPriority = 'high' | 'medium' | 'low';
 
+/** Маршрут перемещения (см. utils/storeGroups.ts) */
+export type TransferRoute = 'warehouse' | 'same-city' | 'intercity' | 'spb-expensive';
+
 export interface TransferRecommendation {
   productId: string;
   productName: string;
+  productLink?: string;
   fromStore: string;
+  fromStoreId: string;
   toStore: string;
+  toStoreId: string;
   size: string;
   quantity: number;
   reason: string;
   priority: TransferPriority;
+  /** Маршрут: склад→магазин, внутри города, между городами, из СПб (дорого) */
+  route: TransferRoute;
+  /** Текущий остаток этого размера у донора (до перемещения) */
+  fromQty: number;
+  /** Текущий остаток этого размера у получателя */
+  toQty: number;
 }
 
 export type RestockUrgency = 'critical' | 'high' | 'medium';
@@ -50,10 +62,24 @@ export type RestockUrgency = 'critical' | 'high' | 'medium';
 export interface RestockRecommendation {
   productId: string;
   productName: string;
+  productLink?: string;
   brand: string;
-  sizes: { size: string; quantity: number }[];
+  category: string;
+  sizes: {
+    size: string;
+    /** Сколько не хватает до норматива */
+    quantity: number;
+    /** Сколько из недостающего покрывается перемещением (склад/избытки) */
+    transferCover: number;
+    /** Сколько нужно заказать у поставщика */
+    toPurchase: number;
+  }[];
   /** Сколько единиц не хватает до норматива (MIN_PER_STORE на каждый возящий магазин) */
   totalNeeded: number;
+  /** Сколько из недостающего можно покрыть перемещением (склад / избытки магазинов) */
+  transferCover: number;
+  /** Сколько реально нужно заказать у поставщика (totalNeeded − transferCover) */
+  toPurchase: number;
   /** Текущий суммарный остаток по магазинам, которые возят товар, шт. */
   currentStock: number;
   /** Покрытие норматива запасом, 0..100 (%) */

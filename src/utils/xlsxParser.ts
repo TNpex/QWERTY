@@ -1,6 +1,7 @@
 import type { ParsedData, Store, Product, InventoryItem } from '../types';
 import { parseCSVText } from './csv';
 import { compareSizes, normalizeSize } from './sizes';
+import { sortStoresForDisplay } from './storeGroups';
 
 // Динамический импорт xlsx: тяжёлая библиотека грузится только при загрузке файла
 let xlsxModule: typeof import('xlsx') | null = null;
@@ -460,7 +461,7 @@ function parseLongFormat(
   }
 
   return {
-    stores: [...storesMap.values()],
+    stores: sortStoresForDisplay([...storesMap.values()]),
     products: [...productsMap.values()],
     inventory: [...inventoryMap.values()],
     uploadedAt: now,
@@ -596,7 +597,7 @@ function parseWideFormat(
   }
 
   return {
-    stores,
+    stores: sortStoresForDisplay(stores),
     products: [...productsMap.values()],
     inventory,
     uploadedAt: now,

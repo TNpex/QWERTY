@@ -1,6 +1,7 @@
 import { Package, AlertTriangle, TrendingUp, DollarSign, Store, BarChart3, Flame } from 'lucide-react';
 import { useMetrics, useTransferRecommendations, useRestockRecommendations } from '../hooks/useAnalytics';
 import { oosLevel } from '../utils/analyticsCore';
+import { isWarehouse } from '../utils/storeGroups';
 
 const LEVEL_BADGE = {
   ok: 'bg-emerald-100 text-emerald-700',
@@ -90,13 +91,20 @@ export function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {metrics.storeMetrics.map((store) => {
           const level = oosLevel(store.outOfStockPercent);
+          const warehouse = isWarehouse(store.name);
           return (
             <div
               key={store.id}
-              className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md transition-shadow"
+              className={`rounded-xl shadow-sm border p-4 hover:shadow-md transition-shadow ${
+                warehouse ? 'bg-blue-50/60 border-blue-200' : 'bg-white border-gray-100'
+              }`}
             >
               <div className="flex items-center justify-between mb-3">
-                <h4 className="font-semibold text-sm text-gray-800 truncate" title={store.name}>
+                <h4
+                  className={`font-semibold text-sm truncate ${warehouse ? 'text-blue-800' : 'text-gray-800'}`}
+                  title={warehouse ? `${store.name} — склад` : store.name}
+                >
+                  {warehouse ? '📦 ' : ''}
                   {store.name}
                 </h4>
                 <span

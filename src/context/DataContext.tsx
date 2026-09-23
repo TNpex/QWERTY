@@ -10,6 +10,7 @@ import type { ParsedData } from '../types';
 import { saveParsedData, loadParsedData, clearSavedData } from '../utils/storage';
 import { loadBundledDataset } from '../utils/bundledData';
 import type { HistorySnapshot } from '../utils/historyCore';
+import { loadProductImages, type ProductImageMap } from '../utils/images';
 
 interface DataContextType {
   data: ParsedData | null;
@@ -21,6 +22,8 @@ interface DataContextType {
   history: HistorySnapshot[];
   /** Встроенный набор данных (public/data), если он доступен */
   bundledData: ParsedData | null;
+  /** Карта «путь товара → URL картинки» (public/data/product-images.json) */
+  productImages: ProductImageMap;
   setData: (data: ParsedData) => void;
   setError: (error: string | null) => void;
   setLoading: (loading: boolean) => void;
@@ -42,15 +45,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [data, setDataState] = useState<ParsedData | null>(null);
   const [bundledData, setBundledData] = useState<ParsedData | null>(null);
   const [history, setHistory] = useState<HistorySnapshot[]>([]);
+  const [productImages, setProductImages] = useState<ProductImageMap>({});
   const [hydrated, setHydrated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Стартовая загрузка: встроенные данные из public/data + история снимков,
+  // Стартовая загрузка: встроенные данные из public/data + история снимков + картинки,
   // затем — сохранённый в IndexedDB файл пользователя (если он свежее).
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // Картинки товаров грузим параллельно, их отсутствие не блокирует данные
+      loadProductImages().then((map) => {
+        if (!cancelled) setProductImages(map);
+      });
+
       let bundled: ParsedData | null = null;
       let snapshots: HistorySnapshot[] = [];
       try {
@@ -115,6 +124,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         error,
         history,
         bundledData,
+        productImages,
         setData,
         setError,
         setLoading,
