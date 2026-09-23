@@ -5,6 +5,7 @@ import {
   getRestockMinimum,
   isPrioritySize,
   productMeta,
+  cleanBrand,
 } from './productMeta';
 
 describe('detectGender', () => {
@@ -125,5 +126,25 @@ describe('productMeta', () => {
     expect(productMeta('Струна Solinco', 'Теннисные струны')).toEqual({
       gender: 'unisex',
     });
+  });
+});
+
+describe('cleanBrand', () => {
+  it('код поставщика заменяется брендом из названия', () => {
+    expect(cleanBrand('Сумка 7/6 Tournament Bag - Red', 'TS1', '37078')).toBe('7/6');
+    expect(cleanBrand('Кроссовки мужские 7/6 Marble 2.0', 'TS76-BKWH', '37078')).toBe('7/6');
+    expect(cleanBrand('Овергрип Solinco Wonder', 'SL1', '12345')).toBe('Solinco');
+  });
+
+  it('«Не определен» → бренд из названия или по артикулу Nike', () => {
+    expect(cleanBrand('Толстовка мужская Diadora Hoodie Core', 'D1', 'Не определен')).toBe('Diadora');
+    expect(cleanBrand('Майка женская Nata Sleeveless', 'N1', 'Не определен')).toBe('Nata');
+    expect(cleanBrand('Шорты мужские Court Heritage 6in Shorts', 'FZ6951-110', 'Не определен')).toBe('Nike');
+    expect(cleanBrand('Футболка унисекс LOVE', 'X1', 'Не определен')).toBe('Не определен');
+  });
+
+  it('валидный бренд не трогает', () => {
+    expect(cleanBrand('Ракетка Head Speed', 'H1', 'Head')).toBe('Head');
+    expect(cleanBrand('Что угодно', 'B1', 'Babolat')).toBe('Babolat');
   });
 });

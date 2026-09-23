@@ -95,18 +95,65 @@ describe('parseBundledRows', () => {
     expect(parsed.products[0].id).not.toBe(parsed.products[1].id);
   });
 
-  it('товар без строк в sizes.csv остаётся в каталоге (распродан)', () => {
+  it('товар без строк в sizes.csv остаётся в каталоге (распродан — нули из колонок)', () => {
     const parsed = parseBundledRows(
-      [catalogRow(), catalogRow({ Артикул: 'SOLD', Название: 'Распродано', Ссылка: 'https://s/sold/', Всего: '0' })],
+      [catalogRow(), catalogRow({ Артикул: 'SOLD', Название: 'Распродано', Ссылка: 'https://s/sold/', Всего: '0', [SPB_SPORT]: '0', [EKB_SKLAD]: '0' })],
       [sizeRow()]
     );
     expect(parsed.products).toHaveLength(2);
     const soldOut = parsed.products.find((p) => p.article === 'SOLD')!;
-    expect(parsed.inventory.some((i) => i.productId === soldOut.id)).toBe(false);
-    expect(parsed.warnings?.join(' ')).toMatch(/распроданы/i);
+    // Колонки каталога имеют явные «0» → магазин возит товар, но остаток нулевой
+    const rows = parsed.inventory.filter((i) => i.productId === soldOut.id);
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((r) => r.quantity === 0)).toBe(true);
     // метрики считают его распроданным
     const metrics = getMetrics(parsed);
     expect(metrics.soldOutProducts).toBe(1);
+  });
+
+  it('явный «0» в колонке каталога = возит (получатель перемещений), пустая ячейка = не возит', () => {
+    const parsed = parseBundledRows(
+      [catalogRow({ [SPB_SPORT]: '0', [EKB_SKLAD]: '' })],
+      [] // остатков нет нигде
+    );
+    const spb = parsed.stores.find((s) => s.name === SPB_SPORT)!;
+    const ekb = parsed.stores.find((s) => s.name === EKB_SKLAD)!;
+    const spbRows = parsed.inventory.filter((i) => i.storeId === spb.id);
+    const ekbRows = parsed.inventory.filter((i) => i.storeId === ekb.id);
+    expect(spbRows.length).toBeGreaterThan(0);
+    expect(spbRows.every((r) => r.quantity === 0 && !r.notCarried)).toBe(true);
+    expect(ekbRows).toHaveLength(0); // не возит — строк нет
+  });
+
+  it('наследует бренд/категорию по артикулу и чистит «37078»', () => {
+    const parsed = parseBundledRows(
+      [
+        catalogRow({ Артикул: 'TS76', Название: 'Кроссовки женские 7/6 Marble', 'Бренд': '37078', Ссылка: 'https://s/a/' }),
+        catalogRow({ Артикул: 'TS76', Название: 'Кроссовки мужские 7/6 Marble', 'Бренд': 'Не определен', Ссылка: 'https://s/b/' }),
+      ],
+      []
+    );
+    const female = parsed.products.find((p) => p.name.includes('женские'))!;
+    const male = parsed.products.find((p) => p.name.includes('мужские'))!;
+    // «37078» → бренд из названия; «Не определен» → наследование по артикулу
+    expect(female.brand).toBe('7/6');
+    expect(male.brand).toBe('7/6');
+    expect(female.gender).toBe('female');
+    expect(male.gender).toBe('male');
+  });
+
+  it('товар из sizes.csv вне каталога наследует бренд/категорию собрата по артикулу', () => {
+    const parsed = parseBundledRows(
+      [catalogRow({ Артикул: 'G123', Название: 'Майка детская Bidi Badu - Blue', 'Бренд': 'Bidi Badu', Категория: 'Одежда' })],
+      [sizeRow({ Артикул: 'G123', Название: 'Майка женская Bidi Badu - Blue', 'Бренд': 'Не определен', Категория: 'Одежда', Цена: '3490 ₽', Ссылка: 'https://other/' })]
+    );
+    expect(parsed.products).toHaveLength(2);
+    const extra = parsed.products.find((p) => p.name.includes('женская'))!;
+    // «Не определен» + «Bidi Badu» в названии → бренд восстановлен
+    expect(extra.brand).toBe('Bidi Badu');
+    expect(extra.category).toBe('Одежда');
+    expect(extra.price).toBe(3490);
+    expect(extra.gender).toBe('female');
   });
 
   it('нормализует размеры из sizes.csv: 375 → 37,5, «Без размера» → «—»', () => {

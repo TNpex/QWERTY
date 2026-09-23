@@ -6,7 +6,12 @@ import {
   getRestockRecommendations,
   type Metrics,
 } from '../utils/analyticsCore';
-import { analyzeSales, type SalesReport } from '../utils/historyCore';
+import {
+  analyzeSales,
+  analyzeSizeSales,
+  type SalesReport,
+  type SizeSalesReport,
+} from '../utils/historyCore';
 import type { ParsedData, TransferRecommendation, RestockRecommendation } from '../types';
 
 /**
@@ -37,21 +42,37 @@ export function useCategories(): string[] {
   }, [data]);
 }
 
+/** Список подтипов одежды (Носки, Футболки и поло, ...) — для фильтров */
+export function useSubtypes(): string[] {
+  const { data } = useData();
+  return useMemo(() => {
+    if (!data) return [];
+    const set = new Set<string>();
+    for (const product of data.products) {
+      if (product.subtype) set.add(product.subtype);
+    }
+    return [...set].sort((a, b) => a.localeCompare(b, 'ru'));
+  }, [data]);
+}
+
 /**
- * Данные с применёнными глобальными фильтрами (бренд / категория / пол).
+ * Данные с применёнными глобальными фильтрами (бренд / категория / пол / подтип).
  * Используют все вкладки: KPI, графики, таблицы, рекомендации.
  */
 export function useFilteredData(): ParsedData | null {
   const { data, filters } = useData();
   return useMemo(() => {
     if (!data) return null;
-    const { brand, category, gender } = filters;
-    if (brand === 'all' && category === 'all' && gender === 'all') return data;
+    const { brand, category, gender, subtype } = filters;
+    if (brand === 'all' && category === 'all' && gender === 'all' && subtype === 'all') {
+      return data;
+    }
     const products = data.products.filter(
       (p) =>
         (brand === 'all' || p.brand === brand) &&
         (category === 'all' || p.category === category) &&
-        (gender === 'all' || (p.gender ?? 'unisex') === gender)
+        (gender === 'all' || (p.gender ?? 'unisex') === gender) &&
+        (subtype === 'all' || (p.subtype ?? '') === subtype)
     );
     const productIds = new Set(products.map((p) => p.id));
     const inventory = data.inventory.filter((i) => productIds.has(i.productId));
@@ -71,11 +92,30 @@ export function useTransferRecommendations(): TransferRecommendation[] {
 
 export function useRestockRecommendations(): RestockRecommendation[] {
   const data = useFilteredData();
-  return useMemo(() => (data ? getRestockRecommendations(data) : []), [data]);
+  const { hotProducts } = useData();
+  return useMemo(
+    () => (data ? getRestockRecommendations(data, hotProducts) : []),
+    [data, hotProducts]
+  );
 }
 
-/** Отчёт о продажах/движению по истории снимков; null, если снимков меньше двух */
+/** Отчёт о продажах/движении по истории снимков; null, если снимков меньше двух */
 export function useSalesReport(): SalesReport | null {
   const { history } = useData();
   return useMemo(() => analyzeSales(history), [history]);
+}
+
+/** Продажи по размерам (популярность размерного ряда); null при одном снимке */
+export function useSizeSalesReport(): SizeSalesReport | null {
+  const { sizeSnapshots } = useData();
+  return useMemo(() => analyzeSizeSales(sizeSnapshots), [sizeSnapshots]);
+}
+
+/** Set артикулов ходовых товаров (для бейджей в таблицах) */
+export function useHotArticles(): Set<string> {
+  const { hotProducts } = useData();
+  return useMemo(
+    () => new Set(hotProducts.map((h) => h.article.trim().toLowerCase())),
+    [hotProducts]
+  );
 }

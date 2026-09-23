@@ -1,18 +1,19 @@
 import { useMemo } from 'react';
 import { Filter, X } from 'lucide-react';
 import { useData } from '../context/DataContext';
-import { useBrands, useCategories } from '../hooks/useAnalytics';
+import { useBrands, useCategories, useSubtypes } from '../hooks/useAnalytics';
 import { GENDER_LABELS, type Gender } from '../utils/productMeta';
 
 /**
- * Глобальная панель фильтров (бренд / категория / пол) — работает на всех
- * вкладках: KPI, графики, таблицы, перемещения, дозакупка и продажи
- * пересчитываются по выбранной комбинации.
+ * Глобальная панель фильтров (бренд / категория / пол / подтип одежды) —
+ * работает на всех вкладках: KPI, графики, таблицы, перемещения, дозакупка
+ * и продажи пересчитываются по выбранной комбинации.
  */
 export function FilterBar() {
   const { data, filters, setFilters, resetFilters } = useData();
   const brands = useBrands();
   const categories = useCategories();
+  const subtypes = useSubtypes();
 
   const productsShown = useMemo(() => {
     if (!data) return 0;
@@ -20,13 +21,18 @@ export function FilterBar() {
       (p) =>
         (filters.brand === 'all' || p.brand === filters.brand) &&
         (filters.category === 'all' || p.category === filters.category) &&
-        (filters.gender === 'all' || (p.gender ?? 'unisex') === filters.gender)
+        (filters.gender === 'all' || (p.gender ?? 'unisex') === filters.gender) &&
+        (filters.subtype === 'all' || (p.subtype ?? '') === filters.subtype)
     ).length;
   }, [data, filters]);
 
   if (!data) return null;
 
-  const active = filters.brand !== 'all' || filters.category !== 'all' || filters.gender !== 'all';
+  const active =
+    filters.brand !== 'all' ||
+    filters.category !== 'all' ||
+    filters.gender !== 'all' ||
+    filters.subtype !== 'all';
 
   const selectClass =
     'px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white cursor-pointer focus:ring-2 focus:ring-blue-500 max-w-[220px]';
@@ -50,6 +56,21 @@ export function FilterBar() {
           </option>
         ))}
       </select>
+      {subtypes.length > 0 && (
+        <select
+          value={filters.subtype}
+          onChange={(e) => setFilters({ subtype: e.target.value })}
+          className={selectClass}
+          title="Тип одежды (носки, футболки, шорты, платья и т.д.)"
+        >
+          <option value="all">Все типы одежды</option>
+          {subtypes.map((subtype) => (
+            <option key={subtype} value={subtype}>
+              {subtype}
+            </option>
+          ))}
+        </select>
+      )}
       <select
         value={filters.gender}
         onChange={(e) => setFilters({ gender: e.target.value })}

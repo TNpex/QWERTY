@@ -163,3 +163,41 @@ export function productMeta(
   const isClothingLike = CLOTHING_LIKE_CATEGORIES.some((c) => category.toLowerCase().includes(c));
   return { gender, ...(isClothingLike ? { subtype: detectClothingSubtype(name) } : {}) };
 }
+
+// ============ Очистка брендов ============
+
+/** Маркеры «бренд не задан» в данных парсера */
+const BAD_BRAND_VALUES = ['', 'не определен', 'не определён', 'неизвестно', 'unknown', 'нет'];
+
+/** Известные бренды сети — для извлечения из названия (порядок: длинные первыми) */
+const BRAND_TOKENS = [
+  'Black Crown', 'Bidi Badu', 'Tecnifibre', 'Drop Shot', 'Seven Six', 'Bullpadel',
+  'Saletennis', 'Luxilon', 'Diadora', 'Wilson', 'Babolat', 'Solinco', 'Mizuno',
+  'Adidas', 'Nike', 'Head', 'Joma', 'Asics', 'Yonex', 'Dunlop', 'Varlion',
+  'Nox', 'Siux', 'Nata', '7/6',
+];
+
+function isBadBrand(brand: string): boolean {
+  const b = brand.trim().toLowerCase();
+  return BAD_BRAND_VALUES.includes(b) || /^\d+$/.test(b); // «37078» — код поставщика, не бренд
+}
+
+/**
+ * Восстанавливает бренд: код поставщика («37078») и «Не определен» заменяются
+ * брендом из названия (у всех 455 товаров «37078» в названии есть «7/6»),
+ * затем — по фирменному формату артикула Nike (FZ6951-110).
+ */
+export function cleanBrand(name: string, article: string, rawBrand: string): string {
+  const brand = String(rawBrand ?? '').trim();
+  if (!isBadBrand(brand)) return brand;
+
+  const lower = ` ${name.toLowerCase()} `;
+  for (const token of BRAND_TOKENS) {
+    if (lower.includes(token.toLowerCase())) return token;
+  }
+  // Фирменный артикул Nike: 2 буквы + 4-6 цифр (+ «-XXX»), напр. FZ6951-110, HQ6027-501
+  if (/^[A-Z]{2}\d{4,6}(-\d{3})?$/i.test(article.trim())) return 'Nike';
+
+  return brand || 'Не определен';
+}
+

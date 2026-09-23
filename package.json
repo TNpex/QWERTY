@@ -15,7 +15,8 @@
     "snapshot": "node scripts/add-snapshot.mjs",
     "images": "node scripts/sync-images.mjs",
     "compress-images": "node scripts/compress-images.mjs",
-    "scrape-images": "node scripts/scrape-images.mjs"
+    "scrape-images": "node scripts/scrape-images.mjs",
+    "apply-edits": "node scripts/apply-brand-edits.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.294.0",

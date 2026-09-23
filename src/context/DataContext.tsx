@@ -9,9 +9,15 @@ import {
 } from 'react';
 import type { ParsedData } from '../types';
 import { saveParsedData, loadParsedData, clearSavedData } from '../utils/storage';
-import { loadBundledDataset } from '../utils/bundledData';
-import type { HistorySnapshot, ParserChange } from '../utils/historyCore';
+import { loadBundledDataset, type HotProductConfig } from '../utils/bundledData';
+import type { HistorySnapshot, ParserChange, SizeSnapshot } from '../utils/historyCore';
 import { loadProductImages, type ProductImageMap } from '../utils/images';
+import {
+  loadBrandOverrides,
+  saveBrandOverrides,
+  applyBrandOverrides,
+  type BrandOverrides,
+} from '../utils/overrides';
 
 /** Глобальные фильтры — действуют на всех вкладках */
 export interface DataFilters {
@@ -21,9 +27,11 @@ export interface DataFilters {
   category: string;
   /** 'all' | 'female' | 'male' | 'kids' | 'unisex' */
   gender: string;
+  /** 'all' или подтип одежды (Носки, Футболки и поло, Шорты, ...) */
+  subtype: string;
 }
 
-export const ALL_FILTERS: DataFilters = { brand: 'all', category: 'all', gender: 'all' };
+export const ALL_FILTERS: DataFilters = { brand: 'all', category: 'all', gender: 'all', subtype: 'all' };
 
 interface DataContextType {
   data: ParsedData | null;
@@ -39,6 +47,14 @@ interface DataContextType {
   bundledData: ParsedData | null;
   /** Карта «путь товара → URL картинки» (public/data/product-images.json) */
   productImages: ProductImageMap;
+  /** Снимки остатков по размерам (для продаж размерного ряда) */
+  sizeSnapshots: SizeSnapshot[];
+  /** Ходовые товары (public/data/hot-products.json) */
+  hotProducts: HotProductConfig[];
+  /** Ручные правки брендов (артикул → бренд), localStorage */
+  brandOverrides: BrandOverrides;
+  /** Задать бренд вручную (по артикулу; правка запомнится и попадёт в экспорт) */
+  setBrandOverride: (article: string, brand: string) => void;
   /** Глобальные фильтры (бренд / категория / пол) — все вкладки */
   filters: DataFilters;
   setFilters: (patch: Partial<DataFilters>) => void;
@@ -66,6 +82,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [history, setHistory] = useState<HistorySnapshot[]>([]);
   const [parserChanges, setParserChanges] = useState<ParserChange[]>([]);
   const [productImages, setProductImages] = useState<ProductImageMap>({});
+  const [sizeSnapshots, setSizeSnapshots] = useState<SizeSnapshot[]>([]);
+  const [hotProducts, setHotProducts] = useState<HotProductConfig[]>([]);
+  const [brandOverrides, setBrandOverrides] = useState<BrandOverrides>({});
   const [filters, setFiltersState] = useState<DataFilters>(ALL_FILTERS);
   const [hydrated, setHydrated] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -83,11 +102,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
       let bundled: ParsedData | null = null;
       let snapshots: HistorySnapshot[] = [];
       let changes: ParserChange[] = [];
+      let sizes: SizeSnapshot[] = [];
+      let hot: HotProductConfig[] = [];
       try {
         const dataset = await loadBundledDataset();
         bundled = dataset.data;
         snapshots = dataset.history;
         changes = dataset.changes;
+        sizes = dataset.sizeSnapshots;
+        hot = dataset.hotProducts;
       } catch {
         // Встроенных данных нет (например, сборка без public/data) — не критично
       }
@@ -96,16 +119,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       if (cancelled) return;
 
+      // Ручные правки брендов применяются и к встроенным данным, и к загруженным
+      const overrides = loadBrandOverrides();
+
       // Выбираем более свежие данные: загруженный файл против встроенного снимка
       let chosen = bundled;
       if (saved && (!bundled || effectiveDate(saved) > effectiveDate(bundled))) {
         chosen = saved;
       }
 
-      setBundledData(bundled);
+      setBundledData(bundled ? applyBrandOverrides(bundled, overrides) : null);
       setHistory(snapshots);
       setParserChanges(changes);
-      if (chosen) setDataState(chosen);
+      setSizeSnapshots(sizes);
+      setHotProducts(hot);
+      setBrandOverrides(overrides);
+      if (chosen) setDataState(applyBrandOverrides(chosen, overrides));
       setHydrated(true);
     })();
     return () => {
@@ -116,6 +145,31 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const setFilters = useCallback((patch: Partial<DataFilters>) => {
     setFiltersState((current) => ({ ...current, ...patch }));
   }, []);
+
+  // Ручная правка бренда: применяется ко всем товарам с этим артикулом
+  // (в т.ч. встроенным), запоминается в localStorage и переживает перезагрузку.
+  const setBrandOverride = useCallback(
+    (article: string, brand: string) => {
+      const key = article.trim();
+      if (!key) return;
+      setBrandOverrides((current) => {
+        const next = { ...current };
+        if (brand.trim()) next[key] = brand.trim();
+        else delete next[key];
+        saveBrandOverrides(next);
+        const patch: BrandOverrides = {};
+        patch[key] = brand.trim();
+        setDataState((d) => (d ? applyBrandOverrides(d, brand.trim() ? patch : {}) : d));
+        setBundledData((d) => (d ? applyBrandOverrides(d, brand.trim() ? patch : {}) : d));
+        if (!brand.trim()) {
+          // Сброс правки — восстановление исходного бренда требует перезагрузки;
+          // оставляем как есть до следующего reload
+        }
+        return next;
+      });
+    },
+    []
+  );
 
   const resetFilters = useCallback(() => setFiltersState(ALL_FILTERS), []);
 
@@ -154,6 +208,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       parserChanges,
       bundledData,
       productImages,
+      sizeSnapshots,
+      hotProducts,
+      brandOverrides,
+      setBrandOverride,
       filters,
       setFilters,
       resetFilters,
@@ -165,7 +223,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }),
     [
       data, hydrated, loading, error, history, parserChanges, bundledData,
-      productImages, filters, setFilters, resetFilters, setData, clearData, restoreBundled,
+      productImages, sizeSnapshots, hotProducts, brandOverrides, setBrandOverride,
+      filters, setFilters, resetFilters, setData, clearData, restoreBundled,
     ]
   );
 

@@ -3,6 +3,7 @@ import { DataProvider, useData } from './context/DataContext';
 import { useMetrics } from './hooks/useAnalytics';
 import { oosLevel } from './utils/analyticsCore';
 import { isWarehouse } from './utils/storeGroups';
+import { downloadBrandOverrides } from './utils/overrides';
 import { FileUpload } from './components/FileUpload';
 import { Dashboard } from './components/Dashboard';
 import { InventoryTable } from './components/InventoryTable';
@@ -85,9 +86,10 @@ function StoreSummary() {
 }
 
 function AppContent() {
-  const { data, hydrated, clearData, bundledData, restoreBundled } = useData();
+  const { data, hydrated, clearData, bundledData, restoreBundled, brandOverrides } = useData();
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const overrideCount = Object.keys(brandOverrides).length;
 
   // Восстановление сохранённых данных из IndexedDB
   if (!hydrated) {
@@ -234,6 +236,16 @@ function AppContent() {
         </div>
 
         <div className="absolute bottom-0 left-0 right-0 p-6 border-t border-gray-100">
+          {overrideCount > 0 && (
+            <button
+              onClick={() => downloadBrandOverrides(brandOverrides)}
+              className="w-full mb-3 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors"
+              title="Скачать brand-edits.json и записать правки в CSV: npm run apply-edits -- brand-edits.json"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              Правки брендов: {overrideCount} — скачать JSON
+            </button>
+          )}
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4">
             <div className="text-xs font-medium text-blue-800 mb-1">
               {isBundled ? 'Встроенные данные' : 'Загруженный файл'}

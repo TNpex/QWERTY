@@ -1,4 +1,6 @@
 import { findColumn, detectColumns, parsePrice, parseQuantity } from './xlsxParser';
+import { normalizeSize } from './sizes';
+import { detectGender, type Gender } from './productMeta';
 
 /**
  * Анализ истории снимков остатков (датированные файлы парсинга).
@@ -408,5 +410,156 @@ export function analyzeSales(snapshots: HistorySnapshot[]): SalesReport | null {
     byStore: [...storeAgg.values()].sort((a, b) => b.sold - a.sold),
     newProducts,
     removedProducts,
+  };
+}
+
+// ============ Снимки размеров и продажи по размерам ============
+
+export interface SizeSnapshotProduct {
+  article: string;
+  name: string;
+  brand: string;
+  category: string;
+  link: string;
+  /** размер → суммарный остаток по всей сети */
+  sizes: Map<string, number>;
+}
+
+export interface SizeSnapshot {
+  date: string;
+  products: Map<string, SizeSnapshotProduct>;
+}
+
+/** Парсит снимок sizes.csv (длинный формат) → остатки по размерам на дату */
+export function parseSizeSnapshotRows(
+  rows: Record<string, unknown>[],
+  date: string
+): SizeSnapshot {
+  if (rows.length === 0) throw new Error(`Снимок размеров ${date}: файл пустой`);
+  const headers = Object.keys(rows[0]);
+  const sizeCol = findColumn(headers, ['размер', 'size', 'р-р']);
+  const qtyCol = findColumn(headers, ['количество', 'кол-во', 'quantity', 'остаток']);
+  const articleCol = findColumn(headers, ['артикул', 'article', 'sku']);
+  const nameCol = findColumn(headers, ['название', 'товар', 'наименование']);
+  const brandCol = findColumn(headers, ['бренд', 'brand']);
+  const categoryCol = findColumn(headers, ['категория', 'category']);
+  const linkCol = findColumn(headers, ['ссылка', 'link', 'url']);
+  if (!qtyCol || !nameCol) throw new Error('Снимок размеров: нет колонок «Количество»/«Название»');
+
+  const products = new Map<string, SizeSnapshotProduct>();
+  for (const row of rows) {
+    const name = String(row[nameCol] ?? '').trim();
+    if (!name) continue;
+    const article = articleCol ? String(row[articleCol] ?? '').trim() : '';
+    const link = linkCol ? normalizeLink(String(row[linkCol] ?? '')) : '';
+    const key = article || link || name;
+    const quantity = parseQuantity(row[qtyCol]);
+    if (quantity === null) continue;
+    const size = sizeCol ? normalizeSize(row[sizeCol]) : '—';
+
+    let entry = products.get(key);
+    if (!entry) {
+      entry = {
+        article,
+        name,
+        brand: brandCol ? String(row[brandCol] ?? '').trim() : '',
+        category: categoryCol ? String(row[categoryCol] ?? '').trim() : '',
+        link,
+        sizes: new Map(),
+      };
+      products.set(key, entry);
+    }
+    entry.sizes.set(size, (entry.sizes.get(size) ?? 0) + quantity);
+  }
+  return { date, products };
+}
+
+export interface SizeSaleEntry {
+  key: string;
+  article: string;
+  name: string;
+  brand: string;
+  category: string;
+  link: string;
+  gender: Gender;
+  size: string;
+  sold: number;
+}
+
+export interface SizeSalesReport {
+  fromDate: string;
+  toDate: string;
+  entries: SizeSaleEntry[];
+  /** Продажи по размерам в разрезе пола (женский/мужской размерный ряд) */
+  byGender: { gender: Gender; rows: { size: string; sold: number }[] }[];
+}
+
+/**
+ * Продажи по размерам: сравнивает соседние снимки sizes и агрегирует
+ * уменьшения остатков по (товар, размер). Используется для анализа
+ * популярности размерного ряда у мужчин и женщин.
+ */
+export function analyzeSizeSales(snapshots: SizeSnapshot[]): SizeSalesReport | null {
+  if (snapshots.length < 2) return null;
+  const sorted = [...snapshots].sort((a, b) => a.date.localeCompare(b.date));
+
+  const soldByKey = new Map<string, SizeSaleEntry>();
+  const genderSize = new Map<string, Map<string, number>>();
+
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1];
+    const curr = sorted[i];
+    for (const [key, prevProduct] of prev.products) {
+      const currProduct = curr.products.get(key);
+      for (const [size, prevQty] of prevProduct.sizes) {
+        const currQty = currProduct?.sizes.get(size) ?? 0;
+        const sold = prevQty - currQty;
+        if (sold <= 0) continue;
+
+        const entryKey = `${key}|${size}`;
+        const existing = soldByKey.get(entryKey);
+        if (existing) {
+          existing.sold += sold;
+        } else {
+          const gender = detectGender(prevProduct.name, prevProduct.category);
+          soldByKey.set(entryKey, {
+            key,
+            article: prevProduct.article,
+            name: prevProduct.name,
+            brand: prevProduct.brand,
+            category: prevProduct.category,
+            link: prevProduct.link,
+            gender,
+            size,
+            sold,
+          });
+          let sizes = genderSize.get(gender);
+          if (!sizes) {
+            sizes = new Map();
+            genderSize.set(gender, sizes);
+          }
+        }
+        const sizes = genderSize.get(
+          soldByKey.get(entryKey)!.gender
+        )!;
+        sizes.set(size, (sizes.get(size) ?? 0) + sold);
+      }
+    }
+  }
+
+  const byGender = [...genderSize.entries()]
+    .map(([gender, sizes]) => ({
+      gender: gender as Gender,
+      rows: [...sizes.entries()]
+        .map(([size, sold]) => ({ size, sold }))
+        .sort((a, b) => b.sold - a.sold),
+    }))
+    .filter((g) => g.rows.length > 0);
+
+  return {
+    fromDate: sorted[0].date,
+    toDate: sorted[sorted.length - 1].date,
+    entries: [...soldByKey.values()].sort((a, b) => b.sold - a.sold),
+    byGender,
   };
 }

@@ -120,3 +120,47 @@ describe('analyzeSales: поступления', () => {
     expect(report.restockedProducts[0].link).toBe('p1');
   });
 });
+
+// ============ Продажи по размерам ============
+
+import { parseSizeSnapshotRows, analyzeSizeSales, type SizeSnapshot } from './historyCore';
+
+function sizeSnap(date: string, rows: Record<string, unknown>[]): SizeSnapshot {
+  return parseSizeSnapshotRows(rows, date);
+}
+
+describe('analyzeSizeSales', () => {
+  const day1 = sizeSnap('2026-09-23', [
+    { Размер: 'S', Магазин: 'Уфа', Количество: '5', Артикул: 'A1', Название: 'Юбка женская Test', Категория: 'Одежда', Бренд: '7/6' },
+    { Размер: 'M', Магазин: 'Уфа', Количество: '3', Артикул: 'A1', Название: 'Юбка женская Test', Категория: 'Одежда', Бренд: '7/6' },
+    { Размер: '42', Магазин: 'Уфа', Количество: '2', Артикул: 'B1', Название: 'Кроссовки мужские Test', Категория: 'Обувь', Бренд: 'Nike' },
+    { Размер: '375', Магазин: 'Уфа', Количество: '4', Артикул: 'C1', Название: 'Кроссовки женские Test', Категория: 'Обувь', Бренд: 'Asics' },
+  ]);
+  const day2 = sizeSnap('2026-09-24', [
+    { Размер: 'S', Магазин: 'Уфа', Количество: '3', Артикул: 'A1', Название: 'Юбка женская Test', Категория: 'Одежда', Бренд: '7/6' },
+    { Размер: 'M', Магазин: 'Уфа', Количество: '3', Артикул: 'A1', Название: 'Юбка женская Test', Категория: 'Одежда', Бренд: '7/6' },
+    { Размер: '42', Магазин: 'Уфа', Количество: '1', Артикул: 'B1', Название: 'Кроссовки мужские Test', Категория: 'Обувь', Бренд: 'Nike' },
+    { Размер: '375', Магазин: 'Уфа', Количество: '4', Артикул: 'C1', Название: 'Кроссовки женские Test', Категория: 'Обувь', Бренд: 'Asics' },
+  ]);
+
+  it('меньше двух снимков → null', () => {
+    expect(analyzeSizeSales([day1])).toBeNull();
+  });
+
+  it('находит продажи по размерам с полом и нормализацией', () => {
+    const report = analyzeSizeSales([day1, day2])!;
+    // Юбка S: 5→3 (−2, женский), Кроссовки мужские 42: 2→1 (−1, мужской), женские 37,5: без изменений
+    expect(report.entries.find((e) => e.article === 'A1' && e.size === 'S')?.sold).toBe(2);
+    expect(report.entries.find((e) => e.article === 'A1' && e.size === 'S')?.gender).toBe('female');
+    expect(report.entries.find((e) => e.article === 'B1')?.sold).toBe(1);
+    expect(report.entries.find((e) => e.article === 'B1')?.gender).toBe('male');
+    expect(report.entries.some((e) => e.article === 'C1')).toBe(false);
+    // агрегат по полу
+    const female = report.byGender.find((g) => g.gender === 'female');
+    expect(female?.rows.find((r) => r.size === 'S')?.sold).toBe(2);
+  });
+
+  it('нормализует «375» → «37,5» в снимках размеров', () => {
+    expect([...day1.products.get('C1')!.sizes.keys()]).toContain('37,5');
+  });
+});
