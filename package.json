@@ -14,6 +14,7 @@
     "test:watch": "vitest",
     "snapshot": "node scripts/add-snapshot.mjs",
     "images": "node scripts/sync-images.mjs",
+    "compress-images": "node scripts/compress-images.mjs",
     "scrape-images": "node scripts/scrape-images.mjs"
   },
   "dependencies": {
@@ -31,6 +32,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "eslint": "^9.17.0",
     "eslint-plugin-react-hooks": "^5.1.0",
+    "sharp": "^0.35.4",
     "tailwindcss": "^4.1.7",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.18.0",

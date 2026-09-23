@@ -7,16 +7,42 @@ import {
   type Metrics,
 } from '../utils/analyticsCore';
 import { analyzeSales, type SalesReport } from '../utils/historyCore';
-import type { TransferRecommendation, RestockRecommendation } from '../types';
+import type { ParsedData, TransferRecommendation, RestockRecommendation } from '../types';
 
 /**
- * Тонкие мемоизированные обёртки над чистыми функциями из analyticsCore.
- * Расчёт выполняется один раз на загрузку данных; компоненты могут вызывать
- * эти хуки многократно без повторных вычислений.
+ * Мемоизированные хуки аналитики. Расчёт выполняется один раз на изменение
+ * данных/фильтра; компоненты могут вызывать хуки многократно без повторных
+ * вычислений.
  */
 
-export function useMetrics(): Metrics | null {
+/** Список всех брендов в данных (для фильтров) */
+export function useBrands(): string[] {
   const { data } = useData();
+  return useMemo(() => {
+    if (!data) return [];
+    return [...new Set(data.products.map((p) => p.brand))].sort((a, b) =>
+      a.localeCompare(b, 'ru')
+    );
+  }, [data]);
+}
+
+/**
+ * Данные с применённым глобальным фильтром по бренду (вкладки «Обзор» и
+ * «Аналитика»). Магазины не меняются; товары и остатки отсекаются по бренду.
+ */
+export function useBrandFilteredData(): ParsedData | null {
+  const { data, brandFilter } = useData();
+  return useMemo(() => {
+    if (!data || brandFilter === 'all') return data;
+    const products = data.products.filter((p) => p.brand === brandFilter);
+    const productIds = new Set(products.map((p) => p.id));
+    const inventory = data.inventory.filter((i) => productIds.has(i.productId));
+    return { ...data, products, inventory };
+  }, [data, brandFilter]);
+}
+
+export function useMetrics(): Metrics | null {
+  const data = useBrandFilteredData();
   return useMemo(() => (data ? getMetrics(data) : null), [data]);
 }
 

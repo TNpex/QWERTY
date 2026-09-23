@@ -33,7 +33,7 @@ export function Dashboard() {
           icon={<Package className="w-5 h-5" />}
           label="Всего товаров"
           value={metrics.totalProducts.toString()}
-          sublabel={`${metrics.carriedSKUs} SKU в ассортименте`}
+          sublabel={`${metrics.carriedSKUs} размерных позиций`}
           color="blue"
         />
         <KPICard
@@ -47,7 +47,7 @@ export function Dashboard() {
           icon={<AlertTriangle className="w-5 h-5" />}
           label="Нет в наличии"
           value={`${metrics.outOfStockPercent}%`}
-          sublabel={`${metrics.outOfStockSizes} SKU-позиций`}
+          sublabel={`${metrics.outOfStockSizes} позиций (товар × размер × магазин)`}
           color="red"
           alert={metrics.outOfStockPercent > 20}
         />

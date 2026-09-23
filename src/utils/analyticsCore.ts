@@ -294,6 +294,7 @@ export function getTransferRecommendations(data: ParsedData): TransferRecommenda
           productId: product.id,
           productName: product.name,
           ...(product.link ? { productLink: product.link } : {}),
+          brand: product.brand,
           fromStore: fromStore.name,
           fromStoreId: fromId,
           toStore: toStore.name,

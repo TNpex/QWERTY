@@ -24,6 +24,9 @@ interface DataContextType {
   bundledData: ParsedData | null;
   /** Карта «путь товара → URL картинки» (public/data/product-images.json) */
   productImages: ProductImageMap;
+  /** Глобальный фильтр по бренду (вкладки «Обзор» и «Аналитика»), 'all' — без фильтра */
+  brandFilter: string;
+  setBrandFilter: (brand: string) => void;
   setData: (data: ParsedData) => void;
   setError: (error: string | null) => void;
   setLoading: (loading: boolean) => void;
@@ -46,6 +49,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [bundledData, setBundledData] = useState<ParsedData | null>(null);
   const [history, setHistory] = useState<HistorySnapshot[]>([]);
   const [productImages, setProductImages] = useState<ProductImageMap>({});
+  const [brandFilter, setBrandFilter] = useState<string>('all');
   const [hydrated, setHydrated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -125,6 +129,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         history,
         bundledData,
         productImages,
+        brandFilter,
+        setBrandFilter,
         setData,
         setError,
         setLoading,

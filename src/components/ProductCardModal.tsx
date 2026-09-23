@@ -1,23 +1,23 @@
 import { useEffect, useMemo, useState } from 'react';
 import { X, ExternalLink, Package, Store as StoreIcon, Flame } from 'lucide-react';
 import { useData } from '../context/DataContext';
-import { toProductPath, localPhotoUrl } from '../utils/images';
+import { toProductPath, localPhotoCandidates } from '../utils/images';
 import { compareSizes } from '../utils/sizes';
-import { isWarehouse, getStoreCity } from '../utils/storeGroups';
+import { isWarehouse, getStoreCity, shortStoreLabel } from '../utils/storeGroups';
 import type { InventoryItem, Product } from '../types';
 
 /**
  * Фото товара с каскадом источников:
- * 1. локальный файл из public/data/product_images/ (колонка «Фото» парсера —
- *    основной источник, работает быстро и без зависимости от внешнего сайта);
- * 2. URL из product-images.json (собран scrape-images.mjs) — резерв;
- * 3. заглушка.
+ * 1. локальный WebP из public/data/product_images/ (сжатая версия);
+ * 2. локальный оригинал (.png из папки парсера);
+ * 3. URL из product-images.json (собран scrape-images.mjs) — резерв;
+ * 4. заглушка.
  */
 function ProductImage({ product, alt }: { product: Product; alt: string }) {
   const { productImages } = useData();
   const sources = useMemo(() => {
     const list: string[] = [];
-    if (product.photo) list.push(localPhotoUrl(product.photo));
+    if (product.photo) list.push(...localPhotoCandidates(product.photo));
     if (product.link) {
       const remote = productImages[toProductPath(product.link)];
       if (remote) list.push(remote);
@@ -223,12 +223,13 @@ export function ProductCardModal({
                     {view.carryingStores.map((store) => (
                       <th
                         key={store.id}
-                        className={`text-center py-2 px-2 font-medium whitespace-nowrap ${
+                        className={`text-center py-2 px-1 font-medium whitespace-nowrap ${
                           isWarehouse(store.name) ? 'bg-blue-50 text-blue-700' : 'text-gray-500'
                         }`}
                         title={store.name}
                       >
-                        {isWarehouse(store.name) ? '📦' : ''} {store.name}
+                        {isWarehouse(store.name) ? '📦 ' : ''}
+                        {shortStoreLabel(store.name)}
                       </th>
                     ))}
                     <th className="text-center py-2 px-2 font-medium text-gray-500">Итого</th>

@@ -75,3 +75,50 @@ export const ROUTE_LABELS: Record<TransferRoute, string> = {
   intercity: 'Между городами',
   'spb-expensive': 'Из СПб — дорого',
 };
+
+// ============ Короткие подписи магазинов для таблиц ============
+
+const CITY_PREFIX: Record<string, string> = {
+  'санкт-петербург': 'СПБ',
+  'спб': 'СПБ',
+  'питер': 'СПБ',
+  'екатеринбург': 'ЕКБ',
+  'екб': 'ЕКБ',
+  'тюмень': 'ТЮМ',
+  'уфа': 'УФА',
+  'ижевск': 'ИЖ',
+  'москва': 'МСК',
+  'казань': 'КЗН',
+};
+
+/**
+ * Короткая подпись магазина для колонок таблиц:
+ * «Санкт-Петербург (Ярослава Гашека)» → «СПБ-Я»,
+ * «Екатеринбург (Парина)» → «ЕКБ-П»,
+ * «Тюмень (Народная)» → «ТЮМ-Н», «Уфа» → «УФА»,
+ * «Екатеринбург (Основной склад)» → «СКЛАД» (в UI выделяется синим).
+ */
+export function shortStoreLabel(name: string): string {
+  if (isWarehouse(name)) return 'СКЛАД';
+  const lower = name.toLowerCase();
+
+  let prefix = '';
+  for (const [key, value] of Object.entries(CITY_PREFIX)) {
+    if (lower.includes(key)) {
+      prefix = value;
+      break;
+    }
+  }
+  if (!prefix) {
+    // Неизвестный город — первые 3 буквы названия
+    prefix = name.split(/[\s(]/)[0].slice(0, 3).toUpperCase();
+  }
+
+  const paren = name.match(/\(([^)]+)\)/);
+  if (paren) {
+    const tail = paren[1].trim();
+    const letter = tail.charAt(0).toUpperCase();
+    return letter ? `${prefix}-${letter}` : prefix;
+  }
+  return prefix;
+}

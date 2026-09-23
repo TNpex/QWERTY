@@ -21,6 +21,21 @@ export function localPhotoUrl(fileName: string): string {
   return `${base}${encodeURIComponent(fileName)}`;
 }
 
+/**
+ * Кандидаты локального фото в порядке приоритета:
+ * сначала сжатая .webp-версия (создаётся scripts/compress-images.mjs),
+ * затем исходный файл (.png/.jpg). Колонка «Фото» в CSV при этом не меняется.
+ */
+export function localPhotoCandidates(fileName: string): string[] {
+  const candidates: string[] = [];
+  const webpName = fileName.replace(/\.(png|jpe?g|gif|avif)$/i, '.webp');
+  if (webpName !== fileName) {
+    candidates.push(localPhotoUrl(webpName));
+  }
+  candidates.push(localPhotoUrl(fileName));
+  return candidates;
+}
+
 /** Приводит путь из колонки «Фото» (data\product_images\x.png) к имени файла */
 export function photoFileName(raw: unknown): string | undefined {
   const text = String(raw ?? '').trim();

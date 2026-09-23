@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { Search, Filter, ChevronDown, ChevronUp, PackageSearch, Flame, ExternalLink } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { compareSizes } from '../utils/sizes';
-import { isWarehouse } from '../utils/storeGroups';
+import { isWarehouse, shortStoreLabel } from '../utils/storeGroups';
 import { ProductCardModal } from './ProductCardModal';
 import type { InventoryItem } from '../types';
 
@@ -29,6 +29,7 @@ export function InventoryTable() {
   const { data } = useData();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedBrand, setSelectedBrand] = useState<string>('all');
   const [selectedStore, setSelectedStore] = useState<string>('all');
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
   const [onlySoldOut, setOnlySoldOut] = useState(false);
@@ -42,6 +43,14 @@ export function InventoryTable() {
   // ВАЖНО: все хуки вызываются ДО условного return (правила хуков React)
   const categories = useMemo(
     () => ['all', ...new Set(products.map((p) => p.category))],
+    [products]
+  );
+
+  const brands = useMemo(
+    () =>
+      ['all', ...new Set(products.map((p) => p.brand))].sort((a, b) =>
+        a === 'all' ? -1 : b === 'all' ? 1 : a.localeCompare(b, 'ru')
+      ),
     [products]
   );
 
@@ -88,11 +97,12 @@ export function InventoryTable() {
         p.brand.toLowerCase().includes(term) ||
         (p.article ?? '').toLowerCase().includes(term);
       const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
+      const matchesBrand = selectedBrand === 'all' || p.brand === selectedBrand;
       const matchesSoldOut =
         !onlySoldOut || (indexes.productTotals.get(p.id) ?? 0) === 0;
-      return matchesSearch && matchesCategory && matchesSoldOut;
+      return matchesSearch && matchesCategory && matchesBrand && matchesSoldOut;
     });
-  }, [products, searchTerm, selectedCategory, onlySoldOut, indexes]);
+  }, [products, searchTerm, selectedCategory, selectedBrand, onlySoldOut, indexes]);
 
   const soldOutCount = useMemo(
     () => products.filter((p) => (indexes.productTotals.get(p.id) ?? 0) === 0).length,
@@ -128,7 +138,7 @@ export function InventoryTable() {
             className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
           />
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-3 flex-wrap">
           <div className="relative">
             <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
             <select
@@ -147,6 +157,20 @@ export function InventoryTable() {
             </select>
           </div>
           <select
+            value={selectedBrand}
+            onChange={(e) => {
+              setSelectedBrand(e.target.value);
+              resetPage();
+            }}
+            className="px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm appearance-none bg-white cursor-pointer"
+          >
+            {brands.map((brand) => (
+              <option key={brand} value={brand}>
+                {brand === 'all' ? 'Все бренды' : brand}
+              </option>
+            ))}
+          </select>
+          <select
             value={selectedStore}
             onChange={(e) => setSelectedStore(e.target.value)}
             className="px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm appearance-none bg-white cursor-pointer"
@@ -154,6 +178,7 @@ export function InventoryTable() {
             <option value="all">Все магазины</option>
             {stores.map((store) => (
               <option key={store.id} value={store.id}>
+                {isWarehouse(store.name) ? '📦 ' : ''}
                 {store.name}
               </option>
             ))}
@@ -270,26 +295,34 @@ export function InventoryTable() {
                 </div>
                 <div className="flex gap-2 justify-center flex-wrap">
                   {displayStores.map((store) => {
+                    const warehouse = isWarehouse(store.name);
                     const agg = indexes.storeTotals.get(`${product.id}|${store.id}`);
-                    if (!agg) {
-                      // Магазин не возит товар
-                      return (
-                        <div key={store.id} className="text-center" title={`${store.name}: не возит`}>
+                    return (
+                      <div key={store.id} className="text-center" title={`${store.name}${agg ? `: ${agg.total} шт.` : ': не возит'}`}>
+                        {/* Короткая подпись магазина — видна при любой прокрутке */}
+                        <div
+                          className={`text-[9px] leading-none mb-0.5 font-bold tracking-tight ${
+                            warehouse ? 'text-blue-600' : 'text-gray-400'
+                          }`}
+                        >
+                          {warehouse ? '📦' : ''}
+                          {shortStoreLabel(store.name)}
+                        </div>
+                        {agg ? (
+                          <span
+                            className={`inline-flex items-center justify-center min-w-[2rem] h-7 px-2 rounded text-xs font-medium ${storeCellClass(agg.total)}${
+                              warehouse ? ' ring-1 ring-blue-400' : ''
+                            }`}
+                          >
+                            {agg.total}
+                          </span>
+                        ) : (
                           <span
                             className={`inline-flex items-center justify-center min-w-[2rem] h-7 px-2 rounded text-xs font-medium ${NOT_CARRIED_CLASS}`}
                           >
                             —
                           </span>
-                        </div>
-                      );
-                    }
-                    return (
-                      <div key={store.id} className="text-center" title={store.name}>
-                        <span
-                          className={`inline-flex items-center justify-center min-w-[2rem] h-7 px-2 rounded text-xs font-medium ${storeCellClass(agg.total)}`}
-                        >
-                          {agg.total}
-                        </span>
+                        )}
                       </div>
                     );
                   })}
@@ -307,15 +340,15 @@ export function InventoryTable() {
                           {displayStores.map((store) => (
                             <th
                               key={store.id}
-                              className={`text-center py-2 px-2 font-medium whitespace-nowrap ${
+                              className={`text-center py-2 px-1 font-medium whitespace-nowrap ${
                                 isWarehouse(store.name)
                                   ? 'text-blue-700 bg-blue-50 rounded'
                                   : 'text-gray-500'
                               }`}
-                              title={isWarehouse(store.name) ? `${store.name} — склад` : store.name}
+                              title={store.name}
                             >
                               {isWarehouse(store.name) ? '📦 ' : ''}
-                              {store.name}
+                              {shortStoreLabel(store.name)}
                             </th>
                           ))}
                           <th className="text-center py-2 px-2 text-gray-500 font-medium">Итого</th>
@@ -422,12 +455,17 @@ export function InventoryTable() {
           Магазин не возит товар
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-5 h-5 rounded bg-blue-50 border border-blue-200 flex items-center justify-center text-[10px]">
+          <span className="w-5 h-5 rounded bg-blue-50 border border-blue-300 flex items-center justify-center text-[10px]">
             📦
           </span>
           Склад (синий) — всегда последний в списке
         </span>
       </div>
+      <p className="mt-2 text-[10px] text-gray-400">
+        Подписи колонок: СПБ-Я = Санкт-Петербург (Ярослава Гашека), СПБ-С = Спортивная, ЕКБ-П =
+        Парина, ЕКБ-С = Соболева, ЕКБ-Б = Бисертская, ЕКБ-Е = Елизаветинское шоссе, ТЮМ-Н = Тюмень
+        (Народная). Наведите курсор на подпись или цифру — покажется полное название и остаток.
+      </p>
 
       {selectedProduct && (
         <ProductCardModal productId={selectedProduct} onClose={() => setSelectedProduct(null)} />
