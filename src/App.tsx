@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { DataProvider, useData } from './context/DataContext';
 import { useMetrics } from './hooks/useAnalytics';
 import { oosLevel } from './utils/analyticsCore';
+import { isWarehouse } from './utils/storeGroups';
 import { FileUpload } from './components/FileUpload';
 import { Dashboard } from './components/Dashboard';
 import { InventoryTable } from './components/InventoryTable';
@@ -47,19 +48,27 @@ function StoreSummary() {
       <h3 className="text-lg font-semibold text-gray-800 mb-4">Сводка по магазинам</h3>
       <div className="space-y-3">
         {metrics.storeMetrics.map((store) => {
-          const level = OOS_LEVEL_STYLES[oosLevel(store.outOfStockPercent)];
+          const warehouse = isWarehouse(store.name);
+          const styles = warehouse
+            ? { dot: 'bg-blue-500', text: 'text-blue-600' }
+            : OOS_LEVEL_STYLES[oosLevel(store.outOfStockPercent)];
           return (
             <div
               key={store.id}
-              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+              className={`flex items-center justify-between p-3 rounded-lg ${
+                warehouse ? 'bg-blue-50 border border-blue-100' : 'bg-gray-50'
+              }`}
             >
               <div className="flex items-center gap-3">
-                <div className={`w-3 h-3 rounded-full ${level.dot}`} />
-                <span className="font-medium text-sm text-gray-700">{store.name}</span>
+                <div className={`w-3 h-3 rounded-full ${styles.dot}`} />
+                <span className={`font-medium text-sm ${warehouse ? 'text-blue-800' : 'text-gray-700'}`}>
+                  {warehouse ? '📦 ' : ''}
+                  {store.name}
+                </span>
               </div>
               <div className="flex items-center gap-4">
                 <span className="text-xs text-gray-500">Остаток: {store.totalItems} шт.</span>
-                <span className={`text-xs font-medium ${level.text}`}>
+                <span className={`text-xs font-medium ${styles.text}`}>
                   {store.outOfStockPercent}% нет
                 </span>
               </div>

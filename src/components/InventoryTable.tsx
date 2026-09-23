@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react';
 import { Search, Filter, ChevronDown, ChevronUp, PackageSearch, Flame, ExternalLink } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { compareSizes } from '../utils/sizes';
+import { isWarehouse } from '../utils/storeGroups';
+import { ProductCardModal } from './ProductCardModal';
 import type { InventoryItem } from '../types';
 
 // Единые пороги цветов (совпадают с легендой внизу таблицы)
@@ -31,6 +33,7 @@ export function InventoryTable() {
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
   const [onlySoldOut, setOnlySoldOut] = useState(false);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
 
   const stores = useMemo(() => data?.stores ?? [], [data]);
   const products = useMemo(() => data?.products ?? [], [data]);
@@ -217,19 +220,27 @@ export function InventoryTable() {
                     <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
                   )}
                   <div className="min-w-0">
-                    <div className="text-sm truncate" title={product.name}>
-                      {product.link ? (
+                    <div className="text-sm truncate" title="Открыть карточку товара">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedProduct(product.id);
+                        }}
+                        className="font-medium text-gray-800 hover:text-blue-600 hover:underline text-left"
+                      >
+                        {product.name}
+                      </button>
+                      {product.link && (
                         <a
                           href={product.link}
                           target="_blank"
                           rel="noreferrer"
                           onClick={(e) => e.stopPropagation()}
-                          className="font-medium text-gray-800 hover:text-blue-600 hover:underline"
+                          className="ml-1.5 inline-block text-gray-400 hover:text-blue-500"
+                          title="Открыть на saletennis.com"
                         >
-                          {product.name} <ExternalLink className="w-3 h-3 inline text-gray-400" />
+                          <ExternalLink className="w-3 h-3 inline" />
                         </a>
-                      ) : (
-                        <span className="font-medium text-gray-800">{product.name}</span>
                       )}
                       {isSoldOut && (
                         <span className="ml-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-bold uppercase tracking-wide align-middle">
@@ -296,8 +307,14 @@ export function InventoryTable() {
                           {displayStores.map((store) => (
                             <th
                               key={store.id}
-                              className="text-center py-2 px-2 text-gray-500 font-medium"
+                              className={`text-center py-2 px-2 font-medium whitespace-nowrap ${
+                                isWarehouse(store.name)
+                                  ? 'text-blue-700 bg-blue-50 rounded'
+                                  : 'text-gray-500'
+                              }`}
+                              title={isWarehouse(store.name) ? `${store.name} — склад` : store.name}
                             >
+                              {isWarehouse(store.name) ? '📦 ' : ''}
                               {store.name}
                             </th>
                           ))}
@@ -404,7 +421,17 @@ export function InventoryTable() {
           </span>
           Магазин не возит товар
         </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-5 h-5 rounded bg-blue-50 border border-blue-200 flex items-center justify-center text-[10px]">
+            📦
+          </span>
+          Склад (синий) — всегда последний в списке
+        </span>
       </div>
+
+      {selectedProduct && (
+        <ProductCardModal productId={selectedProduct} onClose={() => setSelectedProduct(null)} />
+      )}
     </div>
   );
 }

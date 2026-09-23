@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseBundledRows, hashString } from './bundledData';
 import { getMetrics } from './analyticsCore';
+import { photoFileName } from './images';
 
 const SPB_SPORT = 'Санкт-Петербург (Спортивная)';
 const EKB_SKLAD = 'Екатеринбург (Основной склад)';
@@ -125,6 +126,26 @@ describe('parseBundledRows', () => {
   it('asOf пробрасывается в ParsedData', () => {
     const parsed = parseBundledRows([catalogRow()], [sizeRow()], { asOf: '2026-09-23' });
     expect(parsed.asOf).toBe('2026-09-23');
+  });
+
+  it('извлекает имя фото из колонки «Фото» (windows-путь → basename)', () => {
+    const parsed = parseBundledRows([catalogRow()], [sizeRow()]);
+    expect(parsed.products[0].photo).toBe('x.png');
+  });
+});
+
+describe('photoFileName', () => {
+  it('нормализует windows-пути из CSV', () => {
+    expect(photoFileName('data\\product_images\\943ea3091107.png')).toBe('943ea3091107.png');
+    expect(photoFileName('data/product_images/abc.JPG')).toBe('abc.JPG');
+    expect(photoFileName('  img.webp  ')).toBe('img.webp');
+  });
+
+  it('мусор и пустые значения → undefined', () => {
+    expect(photoFileName('')).toBeUndefined();
+    expect(photoFileName(null)).toBeUndefined();
+    expect(photoFileName('нет фото')).toBeUndefined();
+    expect(photoFileName('data\\product_images\\')).toBeUndefined();
   });
 });
 
