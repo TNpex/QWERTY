@@ -1,4 +1,4 @@
-import { Package, AlertTriangle, TrendingUp, DollarSign, Store, BarChart3 } from 'lucide-react';
+import { Package, AlertTriangle, TrendingUp, DollarSign, Store, BarChart3, Flame } from 'lucide-react';
 import { useMetrics, useTransferRecommendations, useRestockRecommendations } from '../hooks/useAnalytics';
 import { oosLevel } from '../utils/analyticsCore';
 
@@ -27,7 +27,7 @@ export function Dashboard() {
   return (
     <div className="space-y-6">
       {/* KPI Cards — считаются по ПОЛНЫМ спискам рекомендаций (без обрезки) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
         <KPICard
           icon={<Package className="w-5 h-5" />}
           label="Всего товаров"
@@ -75,6 +75,14 @@ export function Dashboard() {
           sublabel="критичных позиций"
           color="rose"
           alert={criticalRestocks > 3}
+        />
+        <KPICard
+          icon={<Flame className="w-5 h-5" />}
+          label="Распродано"
+          value={metrics.soldOutProducts.toString()}
+          sublabel="товаров с нулевым остатком"
+          color="orange"
+          alert={metrics.soldOutProducts > 0}
         />
       </div>
 
@@ -134,6 +142,7 @@ function KPICard({ icon, label, value, sublabel, color, alert }: KPICardProps) {
     purple: { bg: 'bg-purple-50', text: 'text-purple-700', icon: 'text-purple-500' },
     amber: { bg: 'bg-amber-50', text: 'text-amber-700', icon: 'text-amber-500' },
     rose: { bg: 'bg-rose-50', text: 'text-rose-700', icon: 'text-rose-500' },
+    orange: { bg: 'bg-orange-50', text: 'text-orange-700', icon: 'text-orange-500' },
   };
 
   const colors = colorClasses[color] || colorClasses.blue;

@@ -25,9 +25,12 @@ import {
   Upload,
   Loader2,
   AlertTriangle,
+  Flame,
+  Database,
 } from 'lucide-react';
+import { SalesHistory } from './components/SalesHistory';
 
-type Tab = 'dashboard' | 'inventory' | 'transfers' | 'restock' | 'analytics';
+type Tab = 'dashboard' | 'inventory' | 'transfers' | 'restock' | 'sales' | 'analytics';
 
 const OOS_LEVEL_STYLES = {
   ok: { dot: 'bg-emerald-500', text: 'text-emerald-600' },
@@ -72,7 +75,7 @@ function StoreSummary() {
 }
 
 function AppContent() {
-  const { data, hydrated, clearData } = useData();
+  const { data, hydrated, clearData, bundledData, restoreBundled } = useData();
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -94,14 +97,18 @@ function AppContent() {
   const tabs = [
     { id: 'dashboard' as Tab, label: '📊 Обзор', icon: LayoutDashboard },
     { id: 'inventory' as Tab, label: '🎾 Инвентарь', icon: Package },
+    { id: 'sales' as Tab, label: '🔥 Продажи', icon: Flame },
     { id: 'transfers' as Tab, label: '🔄 Перемещения', icon: ArrowLeftRight },
     { id: 'restock' as Tab, label: '🛒 Дозакупка', icon: ShoppingCart },
     { id: 'analytics' as Tab, label: '📈 Аналитика', icon: BarChart3 },
   ];
 
-  const uploadedAtText = data.uploadedAt
-    ? new Date(data.uploadedAt).toLocaleString('ru-RU')
-    : '—';
+  const isBundled = data.source !== 'upload';
+  const uploadedAtText = isBundled && data.asOf
+    ? `снимок от ${new Date(data.asOf).toLocaleDateString('ru-RU')}`
+    : data.uploadedAt
+      ? new Date(data.uploadedAt).toLocaleString('ru-RU')
+      : '—';
 
   const renderContent = () => {
     switch (activeTab) {
@@ -117,6 +124,8 @@ function AppContent() {
         );
       case 'inventory':
         return <InventoryTable />;
+      case 'sales':
+        return <SalesHistory />;
       case 'transfers':
         return <TransferRecommendations />;
       case 'restock':
@@ -194,7 +203,7 @@ function AppContent() {
           </nav>
 
           {/* Reload Data Button */}
-          <div className="mt-6 pt-6 border-t border-gray-100">
+          <div className="mt-6 pt-6 border-t border-gray-100 space-y-1">
             <button
               onClick={clearData}
               className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-800 transition-all"
@@ -202,12 +211,23 @@ function AppContent() {
               <Upload className="w-4 h-4" />
               Загрузить другой файл
             </button>
+            {!isBundled && bundledData && (
+              <button
+                onClick={restoreBundled}
+                className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-800 transition-all"
+              >
+                <Database className="w-4 h-4" />
+                Вернуться к данным сайта
+              </button>
+            )}
           </div>
         </div>
 
         <div className="absolute bottom-0 left-0 right-0 p-6 border-t border-gray-100">
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4">
-            <div className="text-xs font-medium text-blue-800 mb-1">Данные загружены</div>
+            <div className="text-xs font-medium text-blue-800 mb-1">
+              {isBundled ? 'Встроенные данные' : 'Загруженный файл'}
+            </div>
             <div className="text-[10px] text-blue-600">{uploadedAtText}</div>
             <div className="mt-2 text-[10px] text-blue-500">
               {data.stores.length} магазинов • {data.products.length} товаров
@@ -236,6 +256,7 @@ function AppContent() {
                 <p className="text-xs text-gray-500">
                   {activeTab === 'dashboard' && 'Общая сводка по всем магазинам'}
                   {activeTab === 'inventory' && 'Детальная таблица наличия товаров и размеров'}
+                  {activeTab === 'sales' && 'Продажи, перемещения и распроданные товары по снимкам'}
                   {activeTab === 'transfers' && 'Рекомендации по перемещению между магазинами'}
                   {activeTab === 'restock' && 'Что нужно дозакупить у поставщика'}
                   {activeTab === 'analytics' && 'Графики и аналитические отчёты'}
