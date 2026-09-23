@@ -36,11 +36,13 @@ describe('parseSnapshotRows', () => {
     const snap = parseSnapshotRows(rows, '2026-09-23');
     expect(snap.date).toBe('2026-09-23');
     expect(snap.products.size).toBe(2);
-    const p1 = snap.products.get('link1')!;
+    // Ключ снимка — уникальный артикул (при дублях — артикул+название)
+    const p1 = snap.products.get('A1')!;
+    expect(p1.link).toBe('link1');
     expect(p1.total).toBe(5); // из колонки «Всего»
     expect(p1.byStore[UFA]).toBe(3);
     expect(p1.byStore[EKB]).toBe(2);
-    const p2 = snap.products.get('link2')!;
+    const p2 = snap.products.get('A2')!;
     expect(p2.total).toBe(1); // сумма колонок, «Всего» пустое
   });
 });

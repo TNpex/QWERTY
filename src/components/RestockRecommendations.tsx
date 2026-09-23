@@ -5,12 +5,11 @@ import {
   Info,
   Package,
   Download,
-  Truck,
   ExternalLink,
 } from 'lucide-react';
-import { useData } from '../context/DataContext';
-import { useRestockRecommendations } from '../hooks/useAnalytics';
-import { MIN_PER_STORE, MAX_RESTOCK_DISPLAY } from '../utils/analyticsCore';
+import { useFilteredData, useRestockRecommendations } from '../hooks/useAnalytics';
+import { MAX_RESTOCK_DISPLAY } from '../utils/analyticsCore';
+import { GENDER_LABELS, DEFAULT_MINIMUM } from '../utils/productMeta';
 import { ProductCardModal } from './ProductCardModal';
 import type { RestockUrgency } from '../types';
 
@@ -20,131 +19,122 @@ const URGENCY_BADGES: Record<RestockUrgency, { label: string; color: string; bor
   medium: { label: 'Запланировать', color: 'bg-yellow-100 text-yellow-700', border: 'border-l-yellow-500 bg-yellow-50/50' },
 };
 
-/** Выгрузка заявки поставщику в XLSX (учитывает активные фильтры) */
-async function exportOrderXlsx(
-  rows: {
-    article: string;
-    name: string;
-    brand: string;
-    category: string;
-    sizes: string;
-    toPurchase: number;
-    transferCover: number;
-    price: number;
-  }[],
-  brandLabel: string
-) {
+interface ExportRow {
+  article: string;
+  name: string;
+  brand: string;
+  category: string;
+  gender: string;
+  size: string;
+  current: number;
+  target: number;
+  toOrder: number;
+  price: number;
+}
+
+/** Выгрузка заявки поставщику в XLSX — построчно по размерам (с учётом фильтров) */
+async function exportOrderXlsx(rows: ExportRow[], label: string) {
   const XLSX = await import('xlsx');
   const sheetRows = rows.map((r) => ({
     'Артикул': r.article,
     'Название': r.name,
     'Бренд': r.brand,
     'Категория': r.category,
-    'Размеры к заказу': r.sizes,
-    'Заказать, шт.': r.toPurchase,
-    'Покрыть перемещением, шт.': r.transferCover,
+    'Пол': r.gender,
+    'Размер': r.size,
+    'В наличии (сеть)': r.current,
+    'Норматив (сеть)': r.target,
+    'Заказать, шт.': r.toOrder,
     'Цена, ₽': r.price,
-    'Сумма, ₽': Math.round(r.price * r.toPurchase),
+    'Сумма, ₽': Math.round(r.price * r.toOrder),
   }));
   const worksheet = XLSX.utils.json_to_sheet(sheetRows);
   worksheet['!cols'] = [
-    { wch: 14 }, { wch: 52 }, { wch: 12 }, { wch: 18 },
-    { wch: 28 }, { wch: 14 }, { wch: 24 }, { wch: 10 }, { wch: 12 },
+    { wch: 14 }, { wch: 52 }, { wch: 12 }, { wch: 18 }, { wch: 10 },
+    { wch: 9 }, { wch: 15 }, { wch: 15 }, { wch: 13 }, { wch: 10 }, { wch: 12 },
   ];
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Заявка');
-  const safeBrand = brandLabel.replace(/[^\p{L}\p{N}._-]+/gu, '_').slice(0, 40);
+  const safeLabel = label.replace(/[^\p{L}\p{N}._-]+/gu, '_').slice(0, 40);
   const date = new Date().toISOString().slice(0, 10);
-  XLSX.writeFile(workbook, `Заявка_${safeBrand}_${date}.xlsx`);
+  XLSX.writeFile(workbook, `Заявка_${safeLabel}_${date}.xlsx`);
 }
 
 export function RestockRecommendations() {
-  const { data } = useData();
+  const data = useFilteredData();
   const recommendations = useRestockRecommendations();
-  const [selectedBrand, setSelectedBrand] = useState('all');
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [onlyToPurchase, setOnlyToPurchase] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
-
-  const brands = useMemo(
-    () => ['all', ...new Set(recommendations.map((r) => r.brand))].sort((a, b) => a.localeCompare(b, 'ru')),
-    [recommendations]
-  );
-  const categories = useMemo(
-    () => ['all', ...new Set(recommendations.map((r) => r.category))].sort((a, b) => a.localeCompare(b, 'ru')),
-    [recommendations]
-  );
-
-  const filtered = useMemo(
-    () =>
-      recommendations.filter(
-        (r) =>
-          (selectedBrand === 'all' || r.brand === selectedBrand) &&
-          (selectedCategory === 'all' || r.category === selectedCategory) &&
-          (!onlyToPurchase || r.toPurchase > 0)
-      ),
-    [recommendations, selectedBrand, selectedCategory, onlyToPurchase]
-  );
 
   const productById = useMemo(
     () => new Map((data?.products ?? []).map((p) => [p.id, p])),
     [data]
   );
 
-  // KPI — по отфильтрованному набору (заявка конкретного бренда)
+  // KPI и сумма — по текущей выборке (глобальные фильтры бренд/категория/пол)
   const stats = useMemo(() => {
     let critical = 0;
     let high = 0;
     let toPurchase = 0;
-    let transferCover = 0;
+    let sizesCount = 0;
     let cost = 0;
-    for (const r of filtered) {
+    for (const r of recommendations) {
       if (r.urgency === 'critical') critical++;
       if (r.urgency === 'high') high++;
       toPurchase += r.toPurchase;
-      transferCover += r.transferCover;
+      sizesCount += r.sizes.length;
       cost += (productById.get(r.productId)?.price ?? 0) * r.toPurchase;
     }
-    return { critical, high, toPurchase, transferCover, cost };
-  }, [filtered, productById]);
+    return { critical, high, toPurchase, sizesCount, cost };
+  }, [recommendations, productById]);
 
   if (!data) return null;
 
-  const visible = filtered.slice(0, MAX_RESTOCK_DISPLAY);
+  const visible = recommendations.slice(0, MAX_RESTOCK_DISPLAY);
+
+  const filterLabel = [
+    data.products.length > 0 ? new Set(data.products.map((p) => p.brand)).size === 1
+      ? [...new Set(data.products.map((p) => p.brand))][0]
+      : null
+      : null,
+    new Set(data.products.map((p) => p.category)).size === 1
+      ? [...new Set(data.products.map((p) => p.category))][0]
+      : null,
+  ]
+    .filter(Boolean)
+    .join('_') || 'все_бренды';
 
   const handleExport = async () => {
     setExporting(true);
     try {
-      await exportOrderXlsx(
-        filtered
-          .filter((r) => r.toPurchase > 0)
-          .map((r) => ({
-            article: productById.get(r.productId)?.article ?? '',
+      const rows: ExportRow[] = [];
+      for (const r of recommendations) {
+        const product = productById.get(r.productId);
+        for (const s of r.sizes) {
+          if (s.quantity <= 0) continue;
+          rows.push({
+            article: product?.article ?? '',
             name: r.productName,
             brand: r.brand,
             category: r.category,
-            sizes: r.sizes
-              .filter((s) => s.toPurchase > 0)
-              .map((s) => `${s.size}×${s.toPurchase}`)
-              .join(', '),
-            toPurchase: r.toPurchase,
-            transferCover: r.transferCover,
-            price: productById.get(r.productId)?.price ?? 0,
-          })),
-        selectedBrand === 'all' ? 'все_бренды' : selectedBrand
-      );
+            gender: GENDER_LABELS[r.gender] ?? '',
+            size: s.size,
+            current: s.current,
+            target: s.target,
+            toOrder: s.quantity,
+            price: product?.price ?? 0,
+          });
+        }
+      }
+      await exportOrderXlsx(rows, filterLabel);
     } finally {
       setExporting(false);
     }
   };
 
-  const brandLabel = selectedBrand === 'all' ? 'все бренды' : selectedBrand;
-  const categoryLabel = selectedCategory === 'all' ? 'все категории' : selectedCategory;
-
   return (
     <div className="space-y-4">
-      {/* Фильтры */}
+      {/* Шапка и действия */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
         <div className="flex flex-col lg:flex-row gap-3 lg:items-center">
           <div className="flex-1">
@@ -153,66 +143,36 @@ export function RestockRecommendations() {
               Дозакупка у поставщика
             </h3>
             <p className="text-sm text-gray-500 mt-0.5">
-              {brandLabel} · {categoryLabel} · позиций: {filtered.length}
+              Позиций: {recommendations.length} · к заказу: {stats.toPurchase} шт.
+              (фильтры по бренду/категории/полу — в панели сверху)
             </p>
           </div>
-          <div className="flex gap-2 flex-wrap items-center">
-            <select
-              value={selectedBrand}
-              onChange={(e) => setSelectedBrand(e.target.value)}
-              className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white cursor-pointer focus:ring-2 focus:ring-emerald-500"
-            >
-              {brands.map((b) => (
-                <option key={b} value={b}>
-                  {b === 'all' ? 'Все бренды' : `Бренд: ${b}`}
-                </option>
-              ))}
-            </select>
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white cursor-pointer focus:ring-2 focus:ring-emerald-500"
-            >
-              {categories.map((c) => (
-                <option key={c} value={c}>
-                  {c === 'all' ? 'Все категории' : `Категория: ${c}`}
-                </option>
-              ))}
-            </select>
-            <label className="inline-flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer px-2">
-              <input
-                type="checkbox"
-                checked={onlyToPurchase}
-                onChange={(e) => setOnlyToPurchase(e.target.checked)}
-                className="rounded border-gray-300"
-              />
-              Только требующие закупки
-            </label>
-            <button
-              onClick={handleExport}
-              disabled={exporting || stats.toPurchase === 0}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              title="Выгрузить заявку поставщику в XLSX (с учётом фильтров)"
-            >
-              <Download className="w-4 h-4" />
-              {exporting ? 'Формируем…' : 'Заявка в XLSX'}
-            </button>
-          </div>
+          <button
+            onClick={handleExport}
+            disabled={exporting || stats.toPurchase === 0}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Выгрузить заявку поставщику в XLSX (с учётом фильтров)"
+          >
+            <Download className="w-4 h-4" />
+            {exporting ? 'Формируем…' : 'Заявка в XLSX'}
+          </button>
         </div>
 
         <div className="mt-3 flex items-start gap-2 text-xs text-gray-500 bg-gray-50 rounded-lg p-3">
           <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-gray-400" />
           <p>
-            Норматив: {MIN_PER_STORE} шт. на возящий магазин на размер. Перед закупкой дефицит
-            проверяется на покрытие <b>перемещением</b> (со склада или из переизбытка магазинов) —
-            в заявку попадает только то, что реально нужно заказать. Срочность: <b>критично</b> —
-            товара нет совсем; <b>срочно</b> — покрытие &lt; 50% или половина размеров с нулём.
+            Нормативы остатка <b>на размер по всей сети</b> (включая склад): женская одежда —
+            XXS 3, XS 4, <b>S 11, M 11</b>, L 3, XL 0; мужская — XS 1, S 4, <b>M 12, L 13</b>, XL 8;
+            детская — XS 4, S 6, M 7, L 6, XL 4; женская обувь — 35:4 … 39:10, 40:8; мужская обувь —
+            41:8 … 43:11 … 47:1. Неизвестный пол или уникальный размер (сет, банка, ростовка и т.п.) —
+            минимум {DEFAULT_MINIMUM}. Срочность: <b>критично</b> — товара нет совсем;{' '}
+            <b>срочно</b> — покрытие нормативов &lt; 50%.
           </p>
         </div>
       </div>
 
       {/* KPI по выборке */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="bg-red-50 rounded-xl p-3 text-center">
           <div className="text-2xl font-bold text-red-700">{stats.critical}</div>
           <div className="text-xs text-red-600">Критичных</div>
@@ -223,13 +183,7 @@ export function RestockRecommendations() {
         </div>
         <div className="bg-blue-50 rounded-xl p-3 text-center">
           <div className="text-2xl font-bold text-blue-700">{stats.toPurchase}</div>
-          <div className="text-xs text-blue-600">К заказу, шт.</div>
-        </div>
-        <div className="bg-purple-50 rounded-xl p-3 text-center">
-          <div className="text-2xl font-bold text-purple-700">{stats.transferCover}</div>
-          <div className="text-xs text-purple-600">
-            <Truck className="w-3 h-3 inline" /> Покроем перемещением
-          </div>
+          <div className="text-xs text-blue-600">К заказу, шт. ({stats.sizesCount} размеров)</div>
         </div>
         <div className="bg-emerald-50 rounded-xl p-3 text-center">
           <div className="text-2xl font-bold text-emerald-700">
@@ -273,8 +227,7 @@ export function RestockRecommendations() {
                       </a>
                     )}
                     <div className="text-xs text-gray-500">
-                      {rec.brand}
-                      {rec.category ? ` · ${rec.category}` : ''}
+                      {rec.brand} · {rec.category} · {GENDER_LABELS[rec.gender]}
                       {article ? ` · ${article}` : ''}
                     </div>
                   </div>
@@ -285,23 +238,19 @@ export function RestockRecommendations() {
                   </span>
                 </div>
 
+                {/* Размеры: сколько есть / норматив / заказать */}
                 <div className="flex flex-wrap gap-1.5 mb-2">
                   {rec.sizes.map((s) => (
                     <span
                       key={s.size}
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs border ${
-                        s.toPurchase > 0
-                          ? 'bg-gray-100 border-gray-200'
-                          : 'bg-purple-50 border-purple-200'
-                      }`}
-                      title={`Нужно ${s.quantity}${s.transferCover > 0 ? `, из них ${s.transferCover} покрывается перемещением` : ''}`}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-gray-100 border border-gray-200"
+                      title={`Размер ${s.size}: есть ${s.current}, норматив ${s.target}, заказать ${s.quantity}`}
                     >
-                      <span className="font-medium">{s.size}</span>
-                      {s.toPurchase > 0 ? (
-                        <span className="text-gray-600">заказ ×{s.toPurchase}</span>
-                      ) : (
-                        <span className="text-purple-600">перем. ×{s.transferCover}</span>
-                      )}
+                      <span className="font-bold">{s.size}</span>
+                      <span className="text-gray-500">
+                        {s.current}/{s.target}
+                      </span>
+                      <span className="font-bold text-emerald-700">+{s.quantity}</span>
                     </span>
                   ))}
                 </div>
@@ -309,17 +258,12 @@ export function RestockRecommendations() {
                 <div className="flex items-center gap-4 text-xs text-gray-600 flex-wrap">
                   <span className="flex items-center gap-1">
                     <Package className="w-3 h-3" />
-                    Сейчас: <span className="font-semibold">{rec.currentStock} шт.</span>
+                    Сейчас в сети: <span className="font-semibold">{rec.currentStock} шт.</span>
                   </span>
                   <span>
-                    Покрытие: <span className="font-semibold">{rec.coveragePercent}%</span>
+                    Покрытие норматива:{' '}
+                    <span className="font-semibold">{rec.coveragePercent}%</span>
                   </span>
-                  {rec.transferCover > 0 && (
-                    <span className="flex items-center gap-1 text-purple-600">
-                      <Truck className="w-3 h-3" />
-                      Перемещением: <b>{rec.transferCover}</b>
-                    </span>
-                  )}
                   <span className="flex items-center gap-1">
                     <AlertCircle className="w-3 h-3" />
                     Заказать: <span className="font-bold text-gray-800">{rec.toPurchase} шт.</span>
@@ -330,17 +274,17 @@ export function RestockRecommendations() {
           })}
         </div>
 
-        {filtered.length > visible.length && (
+        {recommendations.length > visible.length && (
           <p className="mt-4 text-xs text-gray-500 text-center">
-            Показаны первые {visible.length} из {filtered.length} позиций — уточните бренд или
-            категорию (выгрузка в XLSX включает весь отфильтрованный список)
+            Показаны первые {visible.length} из {recommendations.length} позиций — уточните фильтры
+            сверху (выгрузка в XLSX включает весь список)
           </p>
         )}
 
-        {filtered.length === 0 && (
+        {recommendations.length === 0 && (
           <div className="text-center py-8 text-gray-500">
             <ShoppingCart className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-            <p>По выбранным фильтрам дозакупка не требуется</p>
+            <p>По выбранной выборке дозакупка не требуется</p>
           </div>
         )}
       </div>

@@ -23,7 +23,11 @@ export function Dashboard() {
   if (!metrics) return null;
 
   const criticalRestocks = restocks.filter((r) => r.urgency === 'critical').length;
-  const highTransfers = transfers.filter((t) => t.priority === 'high').length;
+  // Перемещения считаем по уникальным дефицитам (варианты «магазин ИЛИ склад» — одно движение)
+  const transferGroups = new Set(transfers.map((t) => t.optionGroup)).size;
+  const highTransfers = new Set(
+    transfers.filter((t) => t.priority === 'high').map((t) => t.optionGroup)
+  ).size;
 
   return (
     <div className="space-y-6">
@@ -31,7 +35,7 @@ export function Dashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
         <KPICard
           icon={<Package className="w-5 h-5" />}
-          label="Всего товаров"
+          label="Всего артикулов"
           value={metrics.totalProducts.toString()}
           sublabel={`${metrics.carriedSKUs} размерных позиций`}
           color="blue"
@@ -65,7 +69,7 @@ export function Dashboard() {
         <KPICard
           icon={<TrendingUp className="w-5 h-5" />}
           label="Перемещения"
-          value={transfers.length.toString()}
+          value={transferGroups.toString()}
           sublabel={`${highTransfers} срочных`}
           color="amber"
         />

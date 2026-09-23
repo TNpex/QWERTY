@@ -1,5 +1,7 @@
 // Типы данных для BI-аналитики
 
+import type { Gender } from './utils/productMeta';
+
 export interface Store {
   id: string;
   name: string;
@@ -16,6 +18,10 @@ export interface Product {
   link?: string;
   /** Имя файла фотографии из колонки «Фото» (лежит в public/data/product_images/) */
   photo?: string;
+  /** Пол/возраст, определённый по названию: женский, мужской, детский, унисекс */
+  gender?: Gender;
+  /** Подтип одежды (Носки, Футболки и поло, Шорты, ...) — для фильтра перемещений */
+  subtype?: string;
 }
 
 export interface InventoryItem {
@@ -44,6 +50,9 @@ export interface TransferRecommendation {
   productName: string;
   productLink?: string;
   brand: string;
+  category: string;
+  /** Подтип одежды (Носки, Футболки и поло, Шорты, ...) — для фильтра перемещений */
+  subtype?: string;
   fromStore: string;
   fromStoreId: string;
   toStore: string;
@@ -58,6 +67,11 @@ export interface TransferRecommendation {
   fromQty: number;
   /** Текущий остаток этого размера у получателя */
   toQty: number;
+  /**
+   * Ключ группы вариантов: один дефицит может закрываться из нескольких
+   * источников (магазин ИЛИ склад) — UI показывает их как альтернативы.
+   */
+  optionGroup: string;
 }
 
 export type RestockUrgency = 'critical' | 'high' | 'medium';
@@ -68,29 +82,32 @@ export interface RestockRecommendation {
   productLink?: string;
   brand: string;
   category: string;
+  subtype?: string;
+  gender: Gender;
   sizes: {
+    /** Размер (или «сет»/«банка»/«—» для безразмерных) */
     size: string;
-    /** Сколько не хватает до норматива */
+    /** Сколько заказать до норматива */
     quantity: number;
-    /** Сколько из недостающего покрывается перемещением (склад/избытки) */
-    transferCover: number;
-    /** Сколько нужно заказать у поставщика */
-    toPurchase: number;
+    /** Норматив сети на этот размер (из таблиц минимумов) */
+    target: number;
+    /** Текущий остаток по всей сети */
+    current: number;
   }[];
-  /** Сколько единиц не хватает до норматива (MIN_PER_STORE на каждый возящий магазин) */
+  /** Суммарно заказать по всем размерам */
   totalNeeded: number;
-  /** Сколько из недостающего можно покрыть перемещением (склад / избытки магазинов) */
+  /** @deprecated норматив теперь общесетевой — покрытие перемещением не требуется */
   transferCover: number;
-  /** Сколько реально нужно заказать у поставщика (totalNeeded − transferCover) */
+  /** = totalNeeded (норматив считается по всей сети, включая склад) */
   toPurchase: number;
-  /** Текущий суммарный остаток по магазинам, которые возят товар, шт. */
+  /** Текущий суммарный остаток по всей сети */
   currentStock: number;
-  /** Покрытие норматива запасом, 0..100 (%) */
+  /** Покрытие суммы нормативов текущим остатком, 0..100 (%) */
   coveragePercent: number;
   /**
-   * Детерминированная срочность (без случайных чисел):
-   * - critical: товар полностью отсутствует во всех возящих магазинах;
-   * - high: покрытие норматива < 50% либо более половины размеров с нулём;
+   * Детерминированная срочность:
+   * - critical: товара нет ни в одном магазине сети;
+   * - high: покрытие нормативов < 50% или более половины размеров с нулём;
    * - medium: остальное.
    */
   urgency: RestockUrgency;

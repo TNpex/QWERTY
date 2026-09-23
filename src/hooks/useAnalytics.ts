@@ -11,7 +11,7 @@ import type { ParsedData, TransferRecommendation, RestockRecommendation } from '
 
 /**
  * Мемоизированные хуки аналитики. Расчёт выполняется один раз на изменение
- * данных/фильтра; компоненты могут вызывать хуки многократно без повторных
+ * данных/фильтров; компоненты могут вызывать хуки многократно без повторных
  * вычислений.
  */
 
@@ -26,37 +26,55 @@ export function useBrands(): string[] {
   }, [data]);
 }
 
-/**
- * Данные с применённым глобальным фильтром по бренду (вкладки «Обзор» и
- * «Аналитика»). Магазины не меняются; товары и остатки отсекаются по бренду.
- */
-export function useBrandFilteredData(): ParsedData | null {
-  const { data, brandFilter } = useData();
+/** Список всех категорий в данных (для фильтров) */
+export function useCategories(): string[] {
+  const { data } = useData();
   return useMemo(() => {
-    if (!data || brandFilter === 'all') return data;
-    const products = data.products.filter((p) => p.brand === brandFilter);
+    if (!data) return [];
+    return [...new Set(data.products.map((p) => p.category))].sort((a, b) =>
+      a.localeCompare(b, 'ru')
+    );
+  }, [data]);
+}
+
+/**
+ * Данные с применёнными глобальными фильтрами (бренд / категория / пол).
+ * Используют все вкладки: KPI, графики, таблицы, рекомендации.
+ */
+export function useFilteredData(): ParsedData | null {
+  const { data, filters } = useData();
+  return useMemo(() => {
+    if (!data) return null;
+    const { brand, category, gender } = filters;
+    if (brand === 'all' && category === 'all' && gender === 'all') return data;
+    const products = data.products.filter(
+      (p) =>
+        (brand === 'all' || p.brand === brand) &&
+        (category === 'all' || p.category === category) &&
+        (gender === 'all' || (p.gender ?? 'unisex') === gender)
+    );
     const productIds = new Set(products.map((p) => p.id));
     const inventory = data.inventory.filter((i) => productIds.has(i.productId));
     return { ...data, products, inventory };
-  }, [data, brandFilter]);
+  }, [data, filters]);
 }
 
 export function useMetrics(): Metrics | null {
-  const data = useBrandFilteredData();
+  const data = useFilteredData();
   return useMemo(() => (data ? getMetrics(data) : null), [data]);
 }
 
 export function useTransferRecommendations(): TransferRecommendation[] {
-  const { data } = useData();
+  const data = useFilteredData();
   return useMemo(() => (data ? getTransferRecommendations(data) : []), [data]);
 }
 
 export function useRestockRecommendations(): RestockRecommendation[] {
-  const { data } = useData();
+  const data = useFilteredData();
   return useMemo(() => (data ? getRestockRecommendations(data) : []), [data]);
 }
 
-/** Отчёт о продажах/движении по истории снимков; null, если снимков меньше двух */
+/** Отчёт о продажах/движению по истории снимков; null, если снимков меньше двух */
 export function useSalesReport(): SalesReport | null {
   const { history } = useData();
   return useMemo(() => analyzeSales(history), [history]);

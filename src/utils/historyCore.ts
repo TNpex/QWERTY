@@ -33,8 +33,22 @@ export interface HistorySnapshot {
 const LINK_ALIASES = ['ссылка', 'link', 'url'];
 const TOTAL_ALIASES = ['всего', 'total', 'итого'];
 
+/** Ссылка товара как стабильный ключ: trim + без хвостового слэша
+ * (формат ссылок менялся между парсингами: «…-16444/» → «…-16444») */
+export function normalizeLink(link: string): string {
+  return link.trim().replace(/\/+$/, '');
+}
+
+/**
+ * Ключ товара для сравнения снимков:
+ * 1. Артикул — стабилен между парсингами (сайт меняет slug ссылок и правит
+ *    названия; журнал парсера changes.csv тоже сравнивает по артикулу).
+ *    Строки-дубли одного артикула внутри снимка объединяются (суммируются) —
+ *    так же поступает сам парсер.
+ * 2. Нормализованная ссылка / название — фолбэк для товаров без артикула.
+ */
 function productIdentityKey(link: string, article: string, name: string): string {
-  return link || `${article}|${name}`;
+  return article || normalizeLink(link) || name;
 }
 
 /** Парсит строки снимка (широкий формат products.csv) в HistorySnapshot */
@@ -66,7 +80,7 @@ export function parseSnapshotRows(
   for (const row of rows) {
     const name = String(row[mapping.nameCol] ?? '').trim();
     if (!name) continue;
-    const link = linkCol ? String(row[linkCol] ?? '').trim() : '';
+    const link = linkCol ? normalizeLink(String(row[linkCol] ?? '')) : '';
     const article = mapping.articleCol ? String(row[mapping.articleCol] ?? '').trim() : '';
     const brand = mapping.brandCol ? String(row[mapping.brandCol] ?? '').trim() : 'Неизвестно';
     const category = mapping.categoryCol ? String(row[mapping.categoryCol] ?? '').trim() : 'Другое';
@@ -101,6 +115,80 @@ export function parseSnapshotRows(
   }
 
   return { date, stores: [...storesSet], products };
+}
+
+// ============ Журнал изменений от парсера (changes.csv) ============
+
+export interface ParserChange {
+  /** ISO-дата/время изменения */
+  date: string;
+  article: string;
+  name: string;
+  category: string;
+  /** Тип изменения из парсера: «Изменение количества», «Новый товар», «Товар закончился», «Товар удалён с сайта» */
+  changeType: string;
+  oldValue: string;
+  newValue: string;
+  /** Разница (число); для продаж — отрицательная */
+  diff: number;
+}
+
+/**
+ * Excel-серийная дата (46288.7028…) → ISO-строка.
+ * Эпоха Excel: 30.12.1899; 25569 дней до 01.01.1970.
+ */
+export function excelSerialToDate(serial: number): string {
+  if (!isFinite(serial)) return '';
+  const ms = Math.round((serial - 25569) * 86_400_000);
+  const date = new Date(ms);
+  return isNaN(date.getTime()) ? '' : date.toISOString();
+}
+
+/** Парсит changes.csv (журнал изменений между парсингами) */
+export function parseChangesCsv(rows: Record<string, unknown>[]): ParserChange[] {
+  const findCol = (names: string[]): string | null => {
+    if (rows.length === 0) return null;
+    const headers = Object.keys(rows[0]);
+    for (const name of names) {
+      const hit = headers.find((h) => h.toLowerCase().includes(name));
+      if (hit) return hit;
+    }
+    return null;
+  };
+  const dateCol = findCol(['дата']);
+  const articleCol = findCol(['артикул']);
+  const nameCol = findCol(['название']);
+  const categoryCol = findCol(['категория']);
+  const typeCol = findCol(['тип изменения', 'тип']);
+  const oldCol = findCol(['старое']);
+  const newCol = findCol(['новое']);
+  const diffCol = findCol(['разница']);
+  if (!nameCol || !typeCol) return [];
+
+  const changes: ParserChange[] = [];
+  for (const row of rows) {
+    const rawDate = dateCol ? row[dateCol] : '';
+    let date = '';
+    const serial = Number(String(rawDate).replace(',', '.'));
+    if (isFinite(serial) && serial > 20000 && serial < 80000) {
+      date = excelSerialToDate(serial);
+    } else if (rawDate) {
+      const parsed = Date.parse(String(rawDate));
+      if (isFinite(parsed)) date = new Date(parsed).toISOString();
+    }
+    const diff = diffCol ? Number(String(row[diffCol] ?? '').replace(',', '.')) || 0 : 0;
+    changes.push({
+      date,
+      article: articleCol ? String(row[articleCol] ?? '').trim() : '',
+      name: String(row[nameCol] ?? '').trim(),
+      category: categoryCol ? String(row[categoryCol] ?? '').trim() : '',
+      changeType: String(row[typeCol] ?? '').trim(),
+      oldValue: oldCol ? String(row[oldCol] ?? '').trim() : '',
+      newValue: newCol ? String(row[newCol] ?? '').trim() : '',
+      diff,
+    });
+  }
+  return changes.sort((a, b) => b.date.localeCompare(a.date));
 }
 
 // ============ Сравнение снимков ============

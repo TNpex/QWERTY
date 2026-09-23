@@ -12,7 +12,7 @@ import {
   Pie,
   Cell,
 } from 'recharts';
-import { useBrandFilteredData, useMetrics } from '../hooks/useAnalytics';
+import { useFilteredData, useMetrics } from '../hooks/useAnalytics';
 import { compareSizes } from '../utils/sizes';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
@@ -95,7 +95,7 @@ export function CategoryChart() {
  * размерные сетки обуви и одежды осмысленно смотреть отдельно.
  */
 export function SizeDistributionChart() {
-  const data = useBrandFilteredData();
+  const data = useFilteredData();
   const [selectedCategory, setSelectedCategory] = useState('all');
 
   const categories = useMemo(() => {
@@ -220,7 +220,7 @@ export function StockoutPieChart() {
 }
 
 export function StoreComparisonChart() {
-  const data = useBrandFilteredData();
+  const data = useFilteredData();
 
   const pieData = useMemo(() => {
     if (!data) return [];

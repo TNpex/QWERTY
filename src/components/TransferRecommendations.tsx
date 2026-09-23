@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
   ArrowRight,
-  AlertTriangle,
   Package,
   Info,
   Warehouse,
@@ -10,13 +9,15 @@ import {
   ChevronUp,
   ExternalLink,
   MapPin,
+  Shirt,
 } from 'lucide-react';
-import { useData } from '../context/DataContext';
-import { useTransferRecommendations } from '../hooks/useAnalytics';
+import { useFilteredData, useTransferRecommendations } from '../hooks/useAnalytics';
 import {
   MAX_TRANSFER_DISPLAY,
-  STORE_EXCESS_TRIGGER,
-  DONOR_KEEP,
+  SPB_EXCESS_TRIGGER,
+  CITY_EXCESS_TRIGGER,
+  SPB_DONOR_KEEP,
+  CITY_DONOR_KEEP,
   getOverstockPositions,
 } from '../utils/analyticsCore';
 import { isWarehouse, shortStoreLabel, ROUTE_LABELS, type TransferRoute } from '../utils/storeGroups';
@@ -49,31 +50,34 @@ const ROUTE_ICONS: Record<TransferRoute, typeof Warehouse> = {
   'spb-expensive': Banknote,
 };
 
-interface ProductGroup {
-  productId: string;
-  productName: string;
-  productLink?: string;
-  brand: string;
-  recs: TransferRecommendation[];
+/** Группа вариантов одного дефицита: товар + размер + получатель; источники — альтернативы */
+interface OptionGroupView {
+  key: string;
+  size: string;
+  toStore: string;
+  toQty: number;
+  variants: TransferRecommendation[];
 }
 
 export function TransferRecommendations() {
-  const { data } = useData();
+  const data = useFilteredData();
   const recommendations = useTransferRecommendations();
   const [toStoreId, setToStoreId] = useState('all');
   const [fromStoreId, setFromStoreId] = useState('all');
-  const [selectedBrand, setSelectedBrand] = useState('all');
+  const [selectedSubtype, setSelectedSubtype] = useState('all');
   const [showSpbExpensive, setShowSpbExpensive] = useState(false);
   const [showOverstock, setShowOverstock] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
 
-  const brands = useMemo(
-    () =>
-      ['all', ...new Set(recommendations.map((r) => r.brand))].sort((a, b) =>
-        a === 'all' ? -1 : b === 'all' ? 1 : a.localeCompare(b, 'ru')
-      ),
-    [recommendations]
-  );
+  // Подтипы одежды (носки, футболки, шорты, платья…) — из товаров текущей выборки
+  const subtypes = useMemo(() => {
+    if (!data) return [];
+    const set = new Set<string>();
+    for (const product of data.products) {
+      if (product.subtype) set.add(product.subtype);
+    }
+    return [...set].sort((a, b) => a.localeCompare(b, 'ru'));
+  }, [data]);
 
   // Остатки по товарам для наглядных чипов: productId → (storeId → qty)
   const productStoreTotals = useMemo(() => {
@@ -101,27 +105,35 @@ export function TransferRecommendations() {
         (r) =>
           (toStoreId === 'all' || r.toStoreId === toStoreId) &&
           (fromStoreId === 'all' || r.fromStoreId === fromStoreId) &&
-          (selectedBrand === 'all' || r.brand === selectedBrand) &&
+          (selectedSubtype === 'all' || r.subtype === selectedSubtype) &&
           (showSpbExpensive || r.route !== 'spb-expensive')
       ),
-    [recommendations, toStoreId, fromStoreId, selectedBrand, showSpbExpensive]
+    [recommendations, toStoreId, fromStoreId, selectedSubtype, showSpbExpensive]
   );
 
-  const groups = useMemo(() => {
-    const byProduct = new Map<string, ProductGroup>();
+  // Группировка: товар → группы вариантов (размер+получатель) → источники-альтернативы
+  const productGroups = useMemo(() => {
+    const byProduct = new Map<
+      string,
+      { productId: string; productName: string; productLink?: string; groups: Map<string, OptionGroupView> }
+    >();
     for (const rec of filtered) {
-      let group = byProduct.get(rec.productId);
-      if (!group) {
-        group = {
+      let product = byProduct.get(rec.productId);
+      if (!product) {
+        product = {
           productId: rec.productId,
           productName: rec.productName,
           productLink: rec.productLink,
-          brand: '',
-          recs: [],
+          groups: new Map(),
         };
-        byProduct.set(rec.productId, group);
+        byProduct.set(rec.productId, product);
       }
-      group.recs.push(rec);
+      let group = product.groups.get(rec.optionGroup);
+      if (!group) {
+        group = { key: rec.optionGroup, size: rec.size, toStore: rec.toStore, toQty: rec.toQty, variants: [] };
+        product.groups.set(rec.optionGroup, group);
+      }
+      group.variants.push(rec);
     }
     return [...byProduct.values()].slice(0, MAX_TRANSFER_DISPLAY);
   }, [filtered]);
@@ -129,7 +141,7 @@ export function TransferRecommendations() {
   if (!data) return null;
 
   const selectedToStore = data.stores.find((s) => s.id === toStoreId);
-  const totalVisibleUnits = filtered.reduce((sum, r) => sum + r.quantity, 0);
+  const uniqueMoves = new Set(filtered.map((r) => r.optionGroup)).size;
 
   return (
     <div className="space-y-4">
@@ -144,22 +156,26 @@ export function TransferRecommendations() {
                 : 'Рекомендации по перемещению'}
             </h3>
             <p className="text-sm text-gray-500 mt-0.5">
-              {filtered.length} перемещений · {totalVisibleUnits} шт.
+              {uniqueMoves} дефицитов · {filtered.length} вариантов перемещения
               {toStoreId !== 'all' && ' — чем заполнить выбранный магазин'}
             </p>
           </div>
           <div className="flex gap-2 flex-wrap">
-            <select
-              value={selectedBrand}
-              onChange={(e) => setSelectedBrand(e.target.value)}
-              className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white cursor-pointer focus:ring-2 focus:ring-blue-500"
-            >
-              {brands.map((brand) => (
-                <option key={brand} value={brand}>
-                  {brand === 'all' ? 'Все бренды' : brand}
-                </option>
-              ))}
-            </select>
+            {subtypes.length > 0 && (
+              <select
+                value={selectedSubtype}
+                onChange={(e) => setSelectedSubtype(e.target.value)}
+                className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white cursor-pointer focus:ring-2 focus:ring-blue-500"
+                title="Подтип одежды"
+              >
+                <option value="all">👕 Вся одежда</option>
+                {subtypes.map((subtype) => (
+                  <option key={subtype} value={subtype}>
+                    {subtype}
+                  </option>
+                ))}
+              </select>
+            )}
             <select
               value={toStoreId}
               onChange={(e) => setToStoreId(e.target.value)}
@@ -213,36 +229,39 @@ export function TransferRecommendations() {
         <div className="mt-3 flex items-start gap-2 text-xs text-gray-500 bg-gray-50 rounded-lg p-3">
           <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-gray-400" />
           <p>
-            Логика: товар со <b>склада</b> направляется в магазины, где его нет; размер с{' '}
-            <b>переизбытком ≥ {STORE_EXCESS_TRIGGER} шт.</b> в магазине — частично (оставляя{' '}
-            {DONOR_KEEP}) едет туда, где его нет или мало. Маршруты: 📦 со склада · 🟢 внутри
-            города · ⚪ между городами · 💸 из СПб (дорого).
+            Правила: в магазинах <b>Екатеринбурга, Тюмени, Уфы, Ижевска</b> избытком считается{' '}
+            <b>&gt; {CITY_EXCESS_TRIGGER - 1} шт.</b> одного размера (донор оставляет{' '}
+            {CITY_DONOR_KEEP}), в <b>Санкт-Петербурге</b> — <b>&gt; {SPB_EXCESS_TRIGGER - 1} шт.</b>{' '}
+            (оставляет {SPB_DONOR_KEEP}); перемещаем туда, где позиции <b>0 или 1</b>.{' '}
+            <b>Склад — без правил</b>: если размер есть на складе, показываем вариант перевозки
+            одновременно с магазинным (это <b>альтернативы</b>, выбирайте одну). 🔝 Приоритет —
+            приоритетные размеры (женские S/M, мужские M/L, обувь 41–44) при нуле у получателя.
           </p>
         </div>
       </div>
 
       {/* Карточки товаров */}
       <div className="space-y-3">
-        {groups.map((group) => {
-          const storeTotals = productStoreTotals.get(group.productId);
-          const brand = data.products.find((p) => p.id === group.productId)?.brand ?? '';
+        {productGroups.map((product) => {
+          const storeTotals = productStoreTotals.get(product.productId);
+          const brand = data.products.find((p) => p.id === product.productId)?.brand ?? '';
           return (
             <div
-              key={group.productId}
+              key={product.productId}
               className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md transition-all"
             >
               <div className="flex items-start justify-between gap-3 mb-3">
                 <div className="min-w-0">
                   <button
-                    onClick={() => setSelectedProduct(group.productId)}
+                    onClick={() => setSelectedProduct(product.productId)}
                     className="font-medium text-sm text-gray-800 hover:text-blue-600 hover:underline text-left"
                     title="Открыть карточку товара"
                   >
-                    {group.productName}
+                    {product.productName}
                   </button>
-                  {group.productLink && (
+                  {product.productLink && (
                     <a
-                      href={group.productLink}
+                      href={product.productLink}
                       target="_blank"
                       rel="noreferrer"
                       className="ml-1.5 text-gray-400 hover:text-blue-500"
@@ -254,8 +273,7 @@ export function TransferRecommendations() {
                   <div className="text-xs text-gray-500 mt-0.5">{brand}</div>
                 </div>
                 <span className="text-xs font-bold text-gray-700 bg-gray-100 px-2.5 py-1 rounded-full flex-shrink-0">
-                  {group.recs.length} перем. ·{' '}
-                  {group.recs.reduce((s, r) => s + r.quantity, 0)} шт.
+                  {product.groups.size} дефиц.
                 </span>
               </div>
 
@@ -276,7 +294,7 @@ export function TransferRecommendations() {
                               ? 'bg-blue-50 border-blue-200 text-blue-700'
                               : qty === 0
                                 ? 'bg-red-50 border-red-200 text-red-600'
-                                : qty >= STORE_EXCESS_TRIGGER
+                                : qty >= CITY_EXCESS_TRIGGER
                                   ? 'bg-amber-50 border-amber-200 text-amber-700'
                                   : 'bg-gray-50 border-gray-200 text-gray-600'
                           }`}
@@ -288,55 +306,66 @@ export function TransferRecommendations() {
                 </div>
               )}
 
-              {/* Перемещения по размерам */}
-              <div className="space-y-1.5">
-                {group.recs.map((rec) => {
-                  const RouteIcon = ROUTE_ICONS[rec.route];
-                  return (
-                    <div
-                      key={`${rec.fromStoreId}|${rec.toStoreId}|${rec.size}`}
-                      className="flex items-center gap-2 flex-wrap text-xs bg-gray-50 rounded-lg px-3 py-2"
-                    >
-                      <span className="font-bold text-gray-800 bg-white border border-gray-200 rounded px-2 py-0.5">
-                        {rec.size}
+              {/* Группы вариантов: один дефицит — несколько альтернативных источников */}
+              <div className="space-y-2">
+                {[...product.groups.values()].map((group) => (
+                  <div key={group.key} className="bg-gray-50 rounded-lg px-3 py-2">
+                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                      <span className="font-bold text-xs text-gray-800 bg-white border border-gray-200 rounded px-2 py-0.5">
+                        {group.size}
                       </span>
-                      <span className="text-gray-600">
-                        {shortStoreLabel(rec.fromStore)}{' '}
-                        <span className="text-gray-400">({rec.fromQty} шт.)</span>
+                      <span className="text-xs text-gray-500">
+                        нужно в <b className="text-gray-700">{shortStoreLabel(group.toStore)}</b>{' '}
+                        (сейчас {group.toQty})
                       </span>
-                      <ArrowRight className="w-3.5 h-3.5 text-gray-400" />
-                      <span className="text-gray-600">
-                        {shortStoreLabel(rec.toStore)}{' '}
-                        <span className="text-red-400">({rec.toQty} шт.)</span>
-                      </span>
-                      <span className="font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2 py-0.5">
-                        везти {rec.quantity}
-                      </span>
-                      <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${ROUTE_STYLES[rec.route]}`}
-                      >
-                        <RouteIcon className="w-3 h-3" />
-                        {ROUTE_LABELS[rec.route]}
-                      </span>
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${PRIORITY_STYLES[rec.priority]}`}
-                      >
-                        {PRIORITY_LABELS[rec.priority]}
-                      </span>
+                      {group.variants.length > 1 && (
+                        <span className="text-[10px] font-semibold text-purple-600 bg-purple-50 border border-purple-200 rounded-full px-2 py-0.5">
+                          {group.variants.length} варианта — выберите один
+                        </span>
+                      )}
                     </div>
-                  );
-                })}
+                    <div className="space-y-1">
+                      {group.variants.map((rec) => {
+                        const RouteIcon = ROUTE_ICONS[rec.route];
+                        return (
+                          <div
+                            key={`${rec.fromStoreId}|${rec.size}|${rec.toStoreId}`}
+                            className="flex items-center gap-2 flex-wrap text-xs bg-white rounded-lg px-3 py-1.5 border border-gray-100"
+                          >
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${ROUTE_STYLES[rec.route]}`}
+                            >
+                              <RouteIcon className="w-3 h-3" />
+                              {ROUTE_LABELS[rec.route]}
+                            </span>
+                            <span className={isWarehouse(rec.fromStore) ? 'text-blue-700 font-medium' : 'text-gray-600'}>
+                              {shortStoreLabel(rec.fromStore)}{' '}
+                              <span className="text-gray-400">({rec.fromQty} шт.)</span>
+                            </span>
+                            <ArrowRight className="w-3.5 h-3.5 text-gray-400" />
+                            <span className="text-gray-600">
+                              {shortStoreLabel(rec.toStore)}{' '}
+                              <span className="text-red-400">({rec.toQty} шт.)</span>
+                            </span>
+                            <span className="font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2 py-0.5">
+                              везти {rec.quantity}
+                            </span>
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${PRIORITY_STYLES[rec.priority]}`}
+                            >
+                              {PRIORITY_LABELS[rec.priority]}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           );
         })}
       </div>
-
-      {filtered.length > groups.reduce((s, g) => s + g.recs.length, 0) && (
-        <p className="text-xs text-gray-500 text-center">
-          Показаны первые {groups.length} товаров из большого списка — уточните фильтр магазином
-        </p>
-      )}
 
       {filtered.length === 0 && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 text-center text-gray-500">
@@ -357,8 +386,9 @@ export function TransferRecommendations() {
           className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
         >
           <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-            <AlertTriangle className="w-4 h-4 text-amber-500" />
-            Переизбыток: позиции ≥ {STORE_EXCESS_TRIGGER} шт. одного размера ({overstock.length})
+            <Shirt className="w-4 h-4 text-amber-500" />
+            Переизбыток в магазинах: &gt;{CITY_EXCESS_TRIGGER - 1} шт. размера (в СПб &gt;
+            {SPB_EXCESS_TRIGGER - 1}) — {overstock.length} позиций
           </div>
           {showOverstock ? (
             <ChevronUp className="w-4 h-4 text-gray-400" />
@@ -383,13 +413,12 @@ export function TransferRecommendations() {
                       {pos.productName}
                     </button>
                     <div className="text-[10px] text-gray-500">
-                      {isWarehouse(pos.storeName) ? '📦 ' : ''}
                       {shortStoreLabel(pos.storeName)} · размер {pos.size}
                     </div>
                   </div>
                   <div className="text-right flex-shrink-0">
                     <div className="text-sm font-bold text-amber-700">{pos.quantity} шт.</div>
-                    <div className="text-[10px] text-amber-600">избыток {pos.excess}</div>
+                    <div className="text-[10px] text-amber-600">можно отдать {pos.excess}</div>
                   </div>
                 </div>
               ))}
@@ -397,6 +426,11 @@ export function TransferRecommendations() {
             {overstock.length > 200 && (
               <p className="text-xs text-gray-400 text-center mt-3">
                 Показаны первые 200 из {overstock.length}
+              </p>
+            )}
+            {overstock.length === 0 && (
+              <p className="text-xs text-gray-400 text-center py-4">
+                Переизбытка в магазинах нет
               </p>
             )}
           </div>
