@@ -6,6 +6,7 @@ import {
   getRestockRecommendations,
   type Metrics,
 } from '../utils/analyticsCore';
+import { analyzeSales, type SalesReport } from '../utils/historyCore';
 import type { TransferRecommendation, RestockRecommendation } from '../types';
 
 /**
@@ -27,4 +28,10 @@ export function useTransferRecommendations(): TransferRecommendation[] {
 export function useRestockRecommendations(): RestockRecommendation[] {
   const { data } = useData();
   return useMemo(() => (data ? getRestockRecommendations(data) : []), [data]);
+}
+
+/** Отчёт о продажах/движении по истории снимков; null, если снимков меньше двух */
+export function useSalesReport(): SalesReport | null {
+  const { history } = useData();
+  return useMemo(() => analyzeSales(history), [history]);
 }

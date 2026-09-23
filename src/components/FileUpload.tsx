@@ -4,7 +4,7 @@ import { parseXLSX } from '../utils/xlsxParser';
 import { useData } from '../context/DataContext';
 
 export function FileUpload() {
-  const { setData, setError, loading, setLoading } = useData();
+  const { setData, setError, loading, setLoading, bundledData, restoreBundled } = useData();
   const [dragActive, setDragActive] = useState(false);
   const [status, setStatus] = useState<'idle' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState('');
@@ -233,6 +233,17 @@ export function FileUpload() {
           * — обязательные колонки. Названия колонок распознаются гибко: «товар / название /
           наименование», «количество / кол-во / остаток» и т.д.
         </p>
+
+        {bundledData && (
+          <div className="mt-6 text-center">
+            <button
+              onClick={restoreBundled}
+              className="px-5 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:border-blue-400 hover:text-blue-600 transition-colors"
+            >
+              ← Вернуться к встроенным данным сайта
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

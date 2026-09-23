@@ -1,7 +1,7 @@
 import { ShoppingCart, AlertCircle, Info, Package } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useRestockRecommendations } from '../hooks/useAnalytics';
-import { MIN_PER_STORE } from '../utils/analyticsCore';
+import { MIN_PER_STORE, MAX_RESTOCK_DISPLAY } from '../utils/analyticsCore';
 import type { RestockUrgency } from '../types';
 
 export function RestockRecommendations() {
@@ -35,6 +35,7 @@ export function RestockRecommendations() {
   const criticalCount = recommendations.filter((r) => r.urgency === 'critical').length;
   const highCount = recommendations.filter((r) => r.urgency === 'high').length;
   const totalUnits = recommendations.reduce((sum, r) => sum + r.totalNeeded, 0);
+  const visible = recommendations.slice(0, MAX_RESTOCK_DISPLAY);
 
   const productById = new Map(data.products.map((p) => [p.id, p]));
   const estimatedCost = recommendations.reduce((sum, r) => {
@@ -90,7 +91,7 @@ export function RestockRecommendations() {
       </div>
 
       <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
-        {recommendations.map((rec) => {
+        {visible.map((rec) => {
           const badge = getUrgencyBadge(rec.urgency);
           return (
             <div
@@ -138,6 +139,13 @@ export function RestockRecommendations() {
           );
         })}
       </div>
+
+      {recommendations.length > visible.length && (
+        <p className="mt-4 text-xs text-gray-500 text-center">
+          Показаны первые {visible.length} из {recommendations.length} позиций (отсортированы по
+          срочности)
+        </p>
+      )}
 
       {recommendations.length === 0 && (
         <div className="text-center py-8 text-gray-500">
