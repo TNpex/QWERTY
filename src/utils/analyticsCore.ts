@@ -15,35 +15,50 @@ import {
   sortStoresForDisplay,
   type TransferRoute,
 } from './storeGroups';
+import { detectGender, getRestockMinimum, isPrioritySize } from './productMeta';
 
 // ============ Константы аналитики (единый источник для UI и расчётов) ============
 
-/** Норматив запаса: единиц на каждый ВОЗЯЩИЙ магазин на каждый размер */
-export const MIN_PER_STORE = 2;
+/** До какого остатка заполняем магазин-получатель при перемещении */
+export const FILL_TO = 2;
+/** Избыток в СПб-магазине: начиная с этого количества (т.е. «больше 3») */
+export const SPB_EXCESS_TRIGGER = 4;
+/** Избыток в магазине Екб/Тюмени/Уфы/Ижевска: «больше 2» */
+export const CITY_EXCESS_TRIGGER = 3;
+/** Сколько оставляет себе донор в СПб */
+export const SPB_DONOR_KEEP = 3;
+/** Сколько оставляет себе донор в других городах */
+export const CITY_DONOR_KEEP = 2;
 /** Максимум единиц в одном перемещении между магазинами */
 export const TRANSFER_CAP = 3;
-/** Избыток в магазине: начиная с этого количества размер считается «переизбытком» */
-export const STORE_EXCESS_TRIGGER = 4;
-/** Сколько единиц донор-магазин оставляет себе при перемещении избытка */
-export const DONOR_KEEP = 3;
-/** Получатель с таким остатком (или нулём) считается «мало» */
-export const RECIPIENT_LOW = 1;
+/** Ходовые размеры обуви (повышенный приоритет) */
+export const POPULAR_SHOE_SIZES = ['41', '42', '42,5', '43', '43,5', '44'];
+
 /** Сколько рекомендаций показывать в списке UI (KPI считаются по полному списку!) */
 export const MAX_TRANSFER_DISPLAY = 50;
 export const MAX_RESTOCK_DISPLAY = 100;
 export const MAX_SALES_DISPLAY = 50;
-/** Порог «внимание» для доли OOS, % */
+/** Пороги «внимание»/«критично» для доли позиций без наличия, % */
 export const OOS_WARN_PERCENT = 15;
-/** Порог «критично» для доли OOS, % */
 export const OOS_BAD_PERCENT = 30;
-/** Ходовые размеры (влияют на приоритет перемещения) */
-export const POPULAR_SIZES = ['41', '42', '43', '44', 'M', 'L', 'XL'];
 
 const SHOE_CATEGORY_MARKERS = ['обувь', 'кроссовк', 'кед', 'ботинк', 'туфл'];
 
 export function isShoeCategory(category: string): boolean {
   const lower = category.toLowerCase();
   return SHOE_CATEGORY_MARKERS.some((marker) => lower.includes(marker));
+}
+
+const SPB_CITY = 'Санкт-Петербург';
+
+/** Порог избытка для магазина: СПб — ≥4 («больше 3»), прочие — ≥3 («больше 2») */
+export function excessTrigger(storeName: string): number {
+  return getStoreCity(storeName) === SPB_CITY ? SPB_EXCESS_TRIGGER : CITY_EXCESS_TRIGGER;
+}
+
+/** Неснижаемый остаток донора: СПб — 3, прочие — 2 */
+export function donorKeep(storeName: string): number {
+  return getStoreCity(storeName) === SPB_CITY ? SPB_DONOR_KEEP : CITY_DONOR_KEEP;
 }
 
 export type OosLevel = 'ok' | 'warn' | 'bad';
@@ -85,9 +100,9 @@ export interface StoreMetric {
   name: string;
   /** Единиц товара в наличии */
   totalItems: number;
-  /** SKU-позиций, которые магазин возит */
+  /** Позиций (товар × размер × магазин), которые магазин возит */
   carriedSKUs: number;
-  /** Возимых SKU-позиций с нулевым остатком */
+  /** Возимых позиций с нулевым остатком */
   outOfStock: number;
   outOfStockPercent: number;
 }
@@ -103,16 +118,16 @@ export interface CategoryMetric {
 export interface Metrics {
   totalProducts: number;
   totalSKUs: number;
-  /** SKU-позиции, которые реально возятся магазинами (без notCarried) */
+  /** Позиции, которые реально возятся магазинами (без notCarried) */
   carriedSKUs: number;
   notCarriedSKUs: number;
   totalStock: number;
-  /** Возимые SKU с нулевым остатком */
+  /** Возимые позиции с нулевым остатком */
   outOfStockSizes: number;
   /** % от carriedSKUs — корректная доля «нет в наличии» */
   outOfStockPercent: number;
   totalValue: number;
-  /** Товары с нулевым суммарным остатком по всей сети (включая товары без строк остатков) */
+  /** Товары с нулевым суммарным остатком по всей сети */
   soldOutProducts: number;
   storeMetrics: StoreMetric[];
   categoryMetrics: CategoryMetric[];
@@ -133,7 +148,6 @@ export function getMetrics(data: ParsedData): Metrics {
   for (const store of stores) perStore.set(store.id, { stock: 0, carried: 0, oos: 0 });
 
   const perCategory = new Map<string, { stock: number; carried: number; oos: number }>();
-
   const totalByProduct = new Map<string, number>();
 
   for (const item of inventory) {
@@ -182,15 +196,15 @@ export function getMetrics(data: ParsedData): Metrics {
     };
   });
 
-  const categoryMetrics: CategoryMetric[] = [...perCategory.entries()].map(
-    ([category, agg]) => ({
+  const categoryMetrics: CategoryMetric[] = [...perCategory.entries()]
+    .map(([category, agg]) => ({
       category,
       totalItems: agg.stock,
       carriedSKUs: agg.carried,
       outOfStock: agg.oos,
       outOfStockPercent: percent(agg.oos, agg.carried),
-    })
-  );
+    }))
+    .sort((a, b) => b.totalItems - a.totalItems);
 
   // Распродано: товар с нулевым суммарным остатком (либо вообще без строк остатков)
   let soldOutProducts = 0;
@@ -244,18 +258,21 @@ const ROUTE_ORDER: Record<TransferRoute, number> = {
 };
 
 /**
- * Логика перемещений (бизнес-правила сети):
+ * Логика перемещений (правила владельца сети):
  *
- * 1. СКЛАД → МАГАЗИНЫ: если размер лежит на складе, а в магазине его нет (0) —
- *    везём со склада до норматива MIN_PER_STORE. Это основной поток.
- * 2. ИЗБЫТОК → ДЕФИЦИТ: если в магазине ≥ STORE_EXCESS_TRIGGER единиц одного
- *    размера (переизбыток), часть (не трогая DONOR_KEEP) перемещается в магазины,
- *    где этого размера нет (0) или мало (≤ RECIPIENT_LOW).
- * 3. ЛОГИСТИКА: маршрут классифицируется — «со склада», «внутри города» (дёшево),
- *    «между городами» (платно) и «из СПб в другой город» (дорого — UI скрывает
- *    такие рекомендации по умолчанию и предлагает дозаказать у поставщика).
- * 4. Остатки учитываются жадно: одна единица не «обещается» дважды, движения
- *    фазы 1 применяются к рабочим количествам до фазы 2.
+ * 1. ИЗБЫТОК В МАГАЗИНЕ → ДЕФИЦИТ:
+ *    - Екатеринбург / Тюмень / Уфа / Ижевск: позиция одного размера «больше 2» (≥3) —
+ *      избыток; перемещаем в любой магазин, где её 0 или 1 (донор оставляет 2);
+ *    - Санкт-Петербург: «больше 3» (≥4); донор оставляет 3;
+ *    - получатель заполняется до 2 единиц.
+ * 2. СКЛАД — БЕЗ ПРАВИЛ: если размер есть на складе, а в магазине 0–1,
+ *    показываем вариант перемещения со склада (склад может уйти в ноль).
+ * 3. ВАРИАТИВНОСТЬ: для одного дефицита показываются ОБА варианта —
+ *    «из магазина с избытком» И «со склада» (optionGroup), приоритет не отдаётся складу.
+ * 4. ЛОГИСТИКА: из СПб в другие города — дорого (route 'spb-expensive',
+ *    UI скрывает по умолчанию и предлагает дозаказать у поставщика).
+ * 5. ПРИОРИТЕТ: высокий — дефицит (0) приоритетного размера: у женщин S/M,
+ *    у мужчин M/L, плюс ходовые размеры обуви 41–44.
  */
 export function getTransferRecommendations(data: ParsedData): TransferRecommendation[] {
   const storeById = new Map(data.stores.map((s) => [s.id, s]));
@@ -263,38 +280,57 @@ export function getTransferRecommendations(data: ParsedData): TransferRecommenda
   const recommendations: TransferRecommendation[] = [];
 
   const warehouse = data.stores.find((s) => isWarehouse(s.name));
-  // Порядок перебора: сначала города по группам (склад — последний, но он донор фазы 1)
-  const storesOrdered = sortStoresForDisplay(data.stores);
+  const storesOrdered = sortStoresForDisplay(data.stores).filter((s) => s.id !== warehouse?.id);
+  const cityRank = new Map(data.stores.map((s, i) => [s.id, i]));
 
   for (const product of data.products) {
     const items = itemsByProduct.get(product.id);
     if (!items || items.length === 0) continue;
 
+    const gender = product.gender ?? detectGender(product.name, product.category);
     const shoe = isShoeCategory(product.category);
     const bySize = groupBySize(items);
 
     for (const [size, stock] of bySize) {
       if (stock.total === 0) continue;
 
-      const popular = POPULAR_SIZES.includes(size.toUpperCase());
-      // Рабочие количества — мутируются по мере «обещания» единиц
-      const working = new Map(stock.byStore);
+      const prioritySize =
+        isPrioritySize(gender, size) ||
+        (shoe && POPULAR_SHOE_SIZES.includes(size.replace('.', ',')));
 
-      const pushRec = (
+      // ---- Получатели: магазины, где размера 0 или 1 ----
+      const recipients = storesOrdered
+        .filter((s) => {
+          const qty = stock.byStore.get(s.id);
+          return qty !== undefined && qty <= 1;
+        })
+        .sort((a, b) => (cityRank.get(a.id) ?? 0) - (cityRank.get(b.id) ?? 0));
+      if (recipients.length === 0) continue;
+
+      const makeRec = (
         fromId: string,
         toId: string,
         quantity: number,
-        priority: TransferPriority,
         reasonSuffix: string
-      ) => {
+      ): TransferRecommendation | null => {
         const fromStore = storeById.get(fromId);
         const toStore = storeById.get(toId);
-        if (!fromStore || !toStore || quantity <= 0) return;
-        recommendations.push({
+        if (!fromStore || !toStore || quantity <= 0) return null;
+        const route = getTransferRoute(fromStore.name, toStore.name);
+        const toQty = stock.byStore.get(toId) ?? 0;
+        const priority: TransferPriority =
+          route === 'spb-expensive' || route === 'intercity'
+            ? 'low'
+            : toQty === 0 && prioritySize
+              ? 'high'
+              : 'medium';
+        return {
           productId: product.id,
           productName: product.name,
           ...(product.link ? { productLink: product.link } : {}),
           brand: product.brand,
+          category: product.category,
+          ...(product.subtype ? { subtype: product.subtype } : {}),
           fromStore: fromStore.name,
           fromStoreId: fromId,
           toStore: toStore.name,
@@ -303,90 +339,84 @@ export function getTransferRecommendations(data: ParsedData): TransferRecommenda
           quantity,
           reason: `Размер ${size}: ${reasonSuffix}`,
           priority,
-          route: getTransferRoute(fromStore.name, toStore.name),
+          route,
           fromQty: stock.byStore.get(fromId) ?? 0,
-          toQty: stock.byStore.get(toId) ?? 0,
-        });
+          toQty,
+          optionGroup: `${product.id}|${size}|${toId}`,
+        };
       };
 
-      // ---- Фаза 1: склад → магазины, где размера НЕТ ----
-      if (warehouse && (working.get(warehouse.id) ?? 0) > 0) {
-        const warehouseCity = getStoreCity(warehouse.name);
-        const recipients = storesOrdered
-          .filter((s) => s.id !== warehouse.id && working.has(s.id) && (working.get(s.id) ?? 0) === 0)
-          .sort((a, b) => {
-            const aSame = getStoreCity(a.name) === warehouseCity ? 0 : 1;
-            const bSame = getStoreCity(b.name) === warehouseCity ? 0 : 1;
-            return aSame - bSame;
-          });
-
-        for (const recipient of recipients) {
-          const available = working.get(warehouse.id) ?? 0;
-          if (available <= 0) break;
-          const move = Math.min(available, MIN_PER_STORE);
-          pushRec(
-            warehouse.id,
-            recipient.id,
-            move,
-            popular && shoe ? 'high' : 'medium',
-            `есть на складе, отсутствует в «${recipient.name}»`
-          );
-          working.set(warehouse.id, available - move);
-          working.set(recipient.id, move);
+      // ---- Вариант А: со склада (без правил) ----
+      if (warehouse) {
+        let warehouseAvailable = stock.byStore.get(warehouse.id) ?? 0;
+        if (warehouseAvailable > 0) {
+          for (const recipient of recipients) {
+            if (warehouseAvailable <= 0) break;
+            const need = FILL_TO - (stock.byStore.get(recipient.id) ?? 0);
+            const move = Math.min(warehouseAvailable, need);
+            const rec = makeRec(
+              warehouse.id,
+              recipient.id,
+              move,
+              `${move} шт. есть на складе, в «${recipient.name}» — ${stock.byStore.get(recipient.id) ?? 0} шт.`
+            );
+            if (rec) {
+              recommendations.push(rec);
+              warehouseAvailable -= move;
+            }
+          }
         }
       }
 
-      // ---- Фаза 2: избытки магазинов (≥ STORE_EXCESS_TRIGGER) → где нет/мало ----
+      // ---- Вариант Б: из магазинов с избытком ----
       const donors = storesOrdered
-        .filter((s) => s.id !== warehouse?.id && (working.get(s.id) ?? 0) >= STORE_EXCESS_TRIGGER)
-        .map((s) => ({ store: s, donatable: (working.get(s.id) ?? 0) - DONOR_KEEP }))
-        .filter((d) => d.donatable > 0)
+        .map((s) => {
+          const qty = stock.byStore.get(s.id) ?? 0;
+          const trigger = excessTrigger(s.name);
+          return qty >= trigger ? { store: s, qty, donatable: qty - donorKeep(s.name) } : null;
+        })
+        .filter((d): d is { store: typeof storesOrdered[number]; qty: number; donatable: number } =>
+          Boolean(d && d.donatable > 0)
+        )
         .sort((a, b) => b.donatable - a.donatable);
+
+      // Рабочие количества получателей — в рамках «магазинного» варианта
+      const recipientWorking = new Map<string, number>();
+      for (const r of recipients) recipientWorking.set(r.id, stock.byStore.get(r.id) ?? 0);
 
       for (const donor of donors) {
         let available = donor.donatable;
         if (available <= 0) continue;
-
         const donorCity = getStoreCity(donor.store.name);
-        const recipients = storesOrdered
-          .filter((s) => {
-            if (s.id === donor.store.id || s.id === warehouse?.id) return false;
-            const qty = working.get(s.id);
-            return qty !== undefined && qty <= RECIPIENT_LOW;
-          })
-          .sort((a, b) => {
-            const aSame = getStoreCity(a.name) === donorCity ? 0 : 1;
-            const bSame = getStoreCity(b.name) === donorCity ? 0 : 1;
-            return aSame - bSame;
-          });
 
-        for (const recipient of recipients) {
+        // Сначала свой город, затем остальные (СПб→другой город получит флаг «дорого»)
+        const orderedRecipients = [...recipients].sort((a, b) => {
+          const aSame = getStoreCity(a.name) === donorCity ? 0 : 1;
+          const bSame = getStoreCity(b.name) === donorCity ? 0 : 1;
+          return aSame - bSame;
+        });
+
+        for (const recipient of orderedRecipients) {
           if (available <= 0) break;
-          const recipientQty = working.get(recipient.id) ?? 0;
-          const need = MIN_PER_STORE - recipientQty;
+          if (recipient.id === donor.store.id) continue;
+          const currentQty = recipientWorking.get(recipient.id) ?? 0;
+          const need = FILL_TO - currentQty;
+          if (need <= 0) continue;
           const move = Math.min(available, need, TRANSFER_CAP);
           if (move <= 0) continue;
 
-          const route = getTransferRoute(donor.store.name, recipient.name);
-          const priority: TransferPriority =
-            route === 'spb-expensive' || route === 'intercity'
-              ? 'low'
-              : recipientQty === 0 && popular
-                ? 'high'
-                : 'medium';
-
-          pushRec(
+          const rec = makeRec(
             donor.store.id,
             recipient.id,
             move,
-            priority,
-            `переизбыток в «${donor.store.name}» (${stock.byStore.get(donor.store.id) ?? 0} шт.), ` +
-              (recipientQty === 0 ? 'отсутствует' : 'мало') +
-              ` в «${recipient.name}»`
+            `переизбыток в «${donor.store.name}» (${donor.qty} шт.), ` +
+              (currentQty === 0 ? 'отсутствует' : 'мало') + ` в «${recipient.name}»`
           );
-          available -= move;
-          working.set(donor.store.id, (working.get(donor.store.id) ?? 0) - move);
-          working.set(recipient.id, recipientQty + move);
+          if (rec) {
+            recommendations.push(rec);
+            available -= move;
+            recipientWorking.set(recipient.id, currentQty + move);
+          }
         }
       }
     }
@@ -412,18 +442,24 @@ export interface OverstockPosition {
   storeName: string;
   size: string;
   quantity: number;
-  /** Сколько единиц сверх неснижаемого остатка (quantity − DONOR_KEEP) */
+  /** Сколько единиц сверх неснижаемого остатка */
   excess: number;
 }
 
-/** Позиции с переизбытком: ≥ STORE_EXCESS_TRIGGER единиц одного размера в магазине */
+/**
+ * Позиции с переизбытком в МАГАЗИНАХ (склад не участвует — он перемещается
+ * без правил): СПб — ≥ 4 шт одного размера, прочие города — ≥ 3 шт.
+ */
 export function getOverstockPositions(data: ParsedData): OverstockPosition[] {
   const storeById = new Map(data.stores.map((s) => [s.id, s]));
   const productById = new Map(data.products.map((p) => [p.id, p]));
   const positions: OverstockPosition[] = [];
 
   for (const item of data.inventory) {
-    if (item.notCarried || item.quantity < STORE_EXCESS_TRIGGER) continue;
+    if (item.notCarried) continue;
+    const store = storeById.get(item.storeId);
+    if (!store || isWarehouse(store.name)) continue;
+    if (item.quantity < excessTrigger(store.name)) continue;
     const product = productById.get(item.productId);
     if (!product) continue;
     positions.push({
@@ -432,10 +468,10 @@ export function getOverstockPositions(data: ParsedData): OverstockPosition[] {
       ...(product.link ? { productLink: product.link } : {}),
       brand: product.brand,
       storeId: item.storeId,
-      storeName: storeById.get(item.storeId)?.name ?? '',
+      storeName: store.name,
       size: item.size,
       quantity: item.quantity,
-      excess: item.quantity - DONOR_KEEP,
+      excess: item.quantity - donorKeep(store.name),
     });
   }
 
@@ -449,67 +485,50 @@ export function getOverstockPositions(data: ParsedData): OverstockPosition[] {
 const URGENCY_ORDER: Record<RestockUrgency, number> = { critical: 0, high: 1, medium: 2 };
 
 /**
- * Детерминированные рекомендации по дозакупке (без Math.random):
- * - норматив: MIN_PER_STORE единиц на каждый возящий магазин на размер;
- * - НОВОЕ: перед заказом проверяем, можно ли покрыть дефицит ПЕРЕМЕЩЕНИЕМ —
- *   со склада (товар лежит там) или из переизбытка других магазинов
- *   (≥ STORE_EXCESS_TRIGGER, отдадут без DONOR_KEEP). Что покрыть нельзя —
- *   в колонку «заказать» (toPurchase);
- * - critical: суммарный остаток товара равен нулю;
- * - high: покрытие норматива < 50% ИЛИ более половины размеров с нулём по сети;
- * - medium: остальное.
+ * Дозакупка по нормативам владельца (минимум на размер ПО ВСЕЙ СЕТИ):
+ * - женская одежда: XXS 3, XS 4, S 11, M 11, L 3, XL 0;
+ * - мужская одежда: XS 1, S 4, M 12, L 13, XL 8;
+ * - детская одежда: XS 4, S 6, M 7, L 6, XL 4;
+ * - женская обувь: 35:4, 36:5, 37:5, 38:8, 39:10, 40:8;
+ * - мужская обувь: 41:8, 42:11, 42,5:11, 43:11, 43,5:11, 44:10, 44,5:8, 45:6, 46:3, 47:1;
+ * - неизвестный пол или уникальный размер (сет/банка/ростовка и т.п.) — минимум 4.
+ *
+ * Текущий остаток считается по всей сети (включая склад), поэтому покрытие
+ * перемещением не требуется: нехватка относительно норматива — это чистый заказ.
  */
 export function getRestockRecommendations(data: ParsedData): RestockRecommendation[] {
   const { itemsByProduct } = buildIndex(data);
   const recommendations: RestockRecommendation[] = [];
 
-  const warehouse = data.stores.find((s) => isWarehouse(s.name));
-
   for (const product of data.products) {
     const items = itemsByProduct.get(product.id);
     if (!items || items.length === 0) continue;
 
-    const carryingStores = new Set(items.map((i) => i.storeId));
-    const normPerSize = MIN_PER_STORE * carryingStores.size;
-
+    const gender = product.gender ?? detectGender(product.name, product.category);
     const bySize = groupBySize(items);
+
     const neededSizes: RestockRecommendation['sizes'] = [];
     let totalNeeded = 0;
-    let totalCover = 0;
     let currentStock = 0;
+    let targetTotal = 0;
     let sizesFullyOut = 0;
 
     for (const [size, stock] of bySize) {
+      const target = getRestockMinimum(gender, product.category, size);
       currentStock += stock.total;
+      targetTotal += target;
       if (stock.total === 0) sizesFullyOut++;
-
-      const needed = Math.max(0, normPerSize - stock.total);
+      const needed = Math.max(0, target - stock.total);
       if (needed > 0) {
-        // Чем можно покрыть дефицит перемещением:
-        // 1) запас этого размера на складе;
-        // 2) избытки размера в магазинах (≥ STORE_EXCESS_TRIGGER, отдают без DONOR_KEEP).
-        const warehouseQty =
-          warehouse && carryingStores.has(warehouse.id) ? stock.byStore.get(warehouse.id) ?? 0 : 0;
-        let donorExcess = 0;
-        for (const [storeId, qty] of stock.byStore) {
-          if (storeId === warehouse?.id) continue;
-          if (qty >= STORE_EXCESS_TRIGGER) donorExcess += qty - DONOR_KEEP;
-        }
-        const transferCover = Math.min(needed, warehouseQty + donorExcess);
-        const toPurchase = needed - transferCover;
-
-        neededSizes.push({ size, quantity: needed, transferCover, toPurchase });
+        neededSizes.push({ size, quantity: needed, target, current: stock.total });
         totalNeeded += needed;
-        totalCover += transferCover;
       }
     }
 
     if (neededSizes.length === 0) continue;
     neededSizes.sort((a, b) => compareSizes(a.size, b.size));
 
-    const normTotal = normPerSize * bySize.size;
-    const coveragePercent = normTotal > 0 ? Math.round((currentStock / normTotal) * 100) : 100;
-
+    const coveragePercent = targetTotal > 0 ? Math.round((currentStock / targetTotal) * 100) : 100;
     const urgency: RestockUrgency =
       currentStock === 0
         ? 'critical'
@@ -523,10 +542,12 @@ export function getRestockRecommendations(data: ParsedData): RestockRecommendati
       ...(product.link ? { productLink: product.link } : {}),
       brand: product.brand,
       category: product.category,
+      ...(product.subtype ? { subtype: product.subtype } : {}),
+      gender,
       sizes: neededSizes,
       totalNeeded,
-      transferCover: totalCover,
-      toPurchase: totalNeeded - totalCover,
+      transferCover: 0,
+      toPurchase: totalNeeded,
       currentStock,
       coveragePercent,
       urgency,
@@ -537,7 +558,6 @@ export function getRestockRecommendations(data: ParsedData): RestockRecommendati
     (a, b) =>
       URGENCY_ORDER[a.urgency] - URGENCY_ORDER[b.urgency] ||
       b.toPurchase - a.toPurchase ||
-      b.totalNeeded - a.totalNeeded ||
       a.productName.localeCompare(b.productName, 'ru')
   );
 }

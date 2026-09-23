@@ -4,13 +4,26 @@ import {
   useState,
   useCallback,
   useEffect,
+  useMemo,
   type ReactNode,
 } from 'react';
 import type { ParsedData } from '../types';
 import { saveParsedData, loadParsedData, clearSavedData } from '../utils/storage';
 import { loadBundledDataset } from '../utils/bundledData';
-import type { HistorySnapshot } from '../utils/historyCore';
+import type { HistorySnapshot, ParserChange } from '../utils/historyCore';
 import { loadProductImages, type ProductImageMap } from '../utils/images';
+
+/** Глобальные фильтры — действуют на всех вкладках */
+export interface DataFilters {
+  /** 'all' или точное название бренда */
+  brand: string;
+  /** 'all' или точное название категории */
+  category: string;
+  /** 'all' | 'female' | 'male' | 'kids' | 'unisex' */
+  gender: string;
+}
+
+export const ALL_FILTERS: DataFilters = { brand: 'all', category: 'all', gender: 'all' };
 
 interface DataContextType {
   data: ParsedData | null;
@@ -20,13 +33,16 @@ interface DataContextType {
   error: string | null;
   /** История снимков остатков (датированные парсинги) */
   history: HistorySnapshot[];
+  /** Журнал изменений от парсера (changes.csv) */
+  parserChanges: ParserChange[];
   /** Встроенный набор данных (public/data), если он доступен */
   bundledData: ParsedData | null;
   /** Карта «путь товара → URL картинки» (public/data/product-images.json) */
   productImages: ProductImageMap;
-  /** Глобальный фильтр по бренду (вкладки «Обзор» и «Аналитика»), 'all' — без фильтра */
-  brandFilter: string;
-  setBrandFilter: (brand: string) => void;
+  /** Глобальные фильтры (бренд / категория / пол) — все вкладки */
+  filters: DataFilters;
+  setFilters: (patch: Partial<DataFilters>) => void;
+  resetFilters: () => void;
   setData: (data: ParsedData) => void;
   setError: (error: string | null) => void;
   setLoading: (loading: boolean) => void;
@@ -48,28 +64,30 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [data, setDataState] = useState<ParsedData | null>(null);
   const [bundledData, setBundledData] = useState<ParsedData | null>(null);
   const [history, setHistory] = useState<HistorySnapshot[]>([]);
+  const [parserChanges, setParserChanges] = useState<ParserChange[]>([]);
   const [productImages, setProductImages] = useState<ProductImageMap>({});
-  const [brandFilter, setBrandFilter] = useState<string>('all');
+  const [filters, setFiltersState] = useState<DataFilters>(ALL_FILTERS);
   const [hydrated, setHydrated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Стартовая загрузка: встроенные данные из public/data + история снимков + картинки,
+  // Стартовая загрузка: встроенные данные + история + журнал изменений + картинки,
   // затем — сохранённый в IndexedDB файл пользователя (если он свежее).
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      // Картинки товаров грузим параллельно, их отсутствие не блокирует данные
       loadProductImages().then((map) => {
         if (!cancelled) setProductImages(map);
       });
 
       let bundled: ParsedData | null = null;
       let snapshots: HistorySnapshot[] = [];
+      let changes: ParserChange[] = [];
       try {
         const dataset = await loadBundledDataset();
         bundled = dataset.data;
         snapshots = dataset.history;
+        changes = dataset.changes;
       } catch {
         // Встроенных данных нет (например, сборка без public/data) — не критично
       }
@@ -86,6 +104,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       setBundledData(bundled);
       setHistory(snapshots);
+      setParserChanges(changes);
       if (chosen) setDataState(chosen);
       setHydrated(true);
     })();
@@ -93,6 +112,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, []);
+
+  const setFilters = useCallback((patch: Partial<DataFilters>) => {
+    setFiltersState((current) => ({ ...current, ...patch }));
+  }, []);
+
+  const resetFilters = useCallback(() => setFiltersState(ALL_FILTERS), []);
 
   const setData = useCallback((newData: ParsedData) => {
     const withSource: ParsedData = { ...newData, source: newData.source ?? 'upload' };
@@ -119,28 +144,32 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }, [bundledData]);
 
-  return (
-    <DataContext.Provider
-      value={{
-        data,
-        hydrated,
-        loading,
-        error,
-        history,
-        bundledData,
-        productImages,
-        brandFilter,
-        setBrandFilter,
-        setData,
-        setError,
-        setLoading,
-        clearData,
-        restoreBundled,
-      }}
-    >
-      {children}
-    </DataContext.Provider>
+  const value = useMemo(
+    () => ({
+      data,
+      hydrated,
+      loading,
+      error,
+      history,
+      parserChanges,
+      bundledData,
+      productImages,
+      filters,
+      setFilters,
+      resetFilters,
+      setData,
+      setError,
+      setLoading,
+      clearData,
+      restoreBundled,
+    }),
+    [
+      data, hydrated, loading, error, history, parserChanges, bundledData,
+      productImages, filters, setFilters, resetFilters, setData, clearData, restoreBundled,
+    ]
   );
+
+  return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }
 
 export function useData(): DataContextType {

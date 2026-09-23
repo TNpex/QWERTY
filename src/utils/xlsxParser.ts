@@ -3,6 +3,7 @@ import { parseCSVText } from './csv';
 import { compareSizes, normalizeSize } from './sizes';
 import { sortStoresForDisplay } from './storeGroups';
 import { photoFileName } from './images';
+import { productMeta } from './productMeta';
 
 const PHOTO_ALIASES = ['фото', 'photo', 'изображение', 'картинка', 'image'];
 
@@ -349,8 +350,9 @@ export function parseSizesAndStores(
     if (columnName) addResolved(columnName, size, quantity);
   };
 
-  const dashPattern = /^(.+?)\s*-\s*(\d+)\s*(шт\.?|пар\.?|ед\.?)?$/i;
-  const qtyOnlyPattern = /^(\d+)\s*(шт\.?|пар\.?|ед\.?)?$/i;
+  const dashPattern = /^(.+?)\s*-\s*(\d+)\s*([а-яёa-z.]{0,12})?$/i;
+  // Единицы: шт, пар, ед, сет, бобина, банка, кор, упак, комплект и т.д.
+  const qtyOnlyPattern = /^(\d+)\s*([а-яёa-z.]{0,12})?$/i;
 
   for (const part of parts) {
     if (!part) continue;
@@ -437,6 +439,7 @@ function parseLongFormat(
     const pKey = productKey(name, brand, article);
     let product = productsMap.get(pKey);
     if (!product) {
+      const meta = productMeta(name, category);
       product = {
         id: `p_${productsMap.size + 1}`,
         name,
@@ -445,6 +448,8 @@ function parseLongFormat(
         price,
         article,
         ...(photo ? { photo } : {}),
+        gender: meta.gender,
+        ...(meta.subtype ? { subtype: meta.subtype } : {}),
       };
       productsMap.set(pKey, product);
     }
@@ -532,6 +537,7 @@ function parseWideFormat(
     const pKey = productKey(name, brand, article);
     let product = productsMap.get(pKey);
     if (!product) {
+      const meta = productMeta(name, category);
       product = {
         id: `p_${productsMap.size + 1}`,
         name,
@@ -540,6 +546,8 @@ function parseWideFormat(
         price,
         article,
         ...(photo ? { photo } : {}),
+        gender: meta.gender,
+        ...(meta.subtype ? { subtype: meta.subtype } : {}),
       };
       productsMap.set(pKey, product);
     }

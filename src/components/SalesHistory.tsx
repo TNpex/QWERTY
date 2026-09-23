@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Flame,
   TrendingDown,
@@ -9,6 +9,7 @@ import {
   CalendarDays,
   ExternalLink,
   Info,
+  ClipboardList,
 } from 'lucide-react';
 import {
   BarChart,
@@ -20,9 +21,106 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { useData } from '../context/DataContext';
-import { useMetrics, useSalesReport } from '../hooks/useAnalytics';
+import { useMetrics, useSalesReport, useFilteredData } from '../hooks/useAnalytics';
 import { MAX_SALES_DISPLAY } from '../utils/analyticsCore';
-import type { ProductMovement } from '../utils/historyCore';
+import { detectGender } from '../utils/productMeta';
+import type { ProductMovement, ParserChange } from '../utils/historyCore';
+
+const CHANGE_TYPES = [
+  'all',
+  'Товар закончился',
+  'Изменение количества',
+  'Новый товар',
+  'Товар удалён с сайта',
+] as const;
+
+const CHANGE_BADGE: Record<string, string> = {
+  'Товар закончился': 'bg-red-100 text-red-700',
+  'Изменение количества': 'bg-amber-100 text-amber-700',
+  'Новый товар': 'bg-emerald-100 text-emerald-700',
+  'Товар удалён с сайта': 'bg-gray-200 text-gray-600',
+};
+
+function formatChangeDate(iso: string): string {
+  const date = new Date(iso);
+  if (isNaN(date.getTime())) return '—';
+  return date.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+/** Журнал изменений, который ведёт сам парсер (changes.csv) */
+function ParserChangeJournal({ changes }: { changes: ParserChange[] }) {
+  const { filters } = useData();
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+
+  const filtered = useMemo(
+    () =>
+      changes.filter(
+        (change) =>
+          (typeFilter === 'all' || change.changeType === typeFilter) &&
+          (filters.category === 'all' || change.category === filters.category) &&
+          (filters.gender === 'all' || detectGender(change.name, change.category) === filters.gender)
+      ),
+    [changes, typeFilter, filters]
+  );
+
+  if (changes.length === 0) return null;
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+      <h3 className="text-lg font-semibold text-gray-800 mb-1 flex items-center gap-2">
+        <ClipboardList className="w-5 h-5 text-indigo-500" />
+        Журнал изменений парсера
+        <span className="text-sm font-normal text-gray-400">({filtered.length})</span>
+      </h3>
+      <p className="text-xs text-gray-500 mb-3">
+        Фиксируется автоматически при каждом парсинге: продажи, окончания товаров, поступления и новинки.
+      </p>
+      <div className="flex gap-1.5 flex-wrap mb-3">
+        {CHANGE_TYPES.map((type) => (
+          <button
+            key={type}
+            onClick={() => setTypeFilter(type)}
+            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+              typeFilter === type
+                ? 'bg-indigo-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            {type === 'all' ? 'Все' : type}
+          </button>
+        ))}
+      </div>
+      <div className="space-y-1.5 max-h-[420px] overflow-y-auto pr-1">
+        {filtered.slice(0, 200).map((change, i) => (
+          <div key={`${change.article}|${change.name}|${i}`} className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2 text-xs">
+            <span className="text-gray-400 flex-shrink-0 w-24">{formatChangeDate(change.date)}</span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${CHANGE_BADGE[change.changeType] ?? 'bg-gray-100 text-gray-600'}`}>
+              {change.changeType}
+            </span>
+            <span className="flex-1 min-w-0 truncate text-gray-700" title={change.name}>
+              {change.name}
+              {change.article ? <span className="text-gray-400"> · {change.article}</span> : null}
+            </span>
+            {change.changeType === 'Изменение количества' && (
+              <span className="flex-shrink-0 text-gray-500">
+                {change.oldValue} → {change.newValue}{' '}
+                <b className={change.diff < 0 ? 'text-red-600' : 'text-emerald-600'}>
+                  ({change.diff > 0 ? '+' : ''}{change.diff})
+                </b>
+              </span>
+            )}
+          </div>
+        ))}
+        {filtered.length === 0 && (
+          <p className="text-xs text-gray-400 text-center py-4">Нет изменений по выбранным фильтрам</p>
+        )}
+        {filtered.length > 200 && (
+          <p className="text-[10px] text-gray-400 text-center">Показаны первые 200</p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function formatDate(iso: string): string {
   const date = new Date(iso);
@@ -60,22 +158,32 @@ function MovementRow({ mv, days }: { mv: ProductMovement; days: number }) {
 }
 
 export function SalesHistory() {
-  const { data, history } = useData();
+  const { data, history, parserChanges, filters } = useData();
+  const filteredData = useFilteredData();
   const report = useSalesReport();
   const metrics = useMetrics();
 
+  // Глобальные фильтры (бренд/категория/пол) применяются и к движению товаров
+  const matchesFilters = (m: { category: string; brand: string; name: string }) =>
+    (filters.brand === 'all' || m.brand === filters.brand) &&
+    (filters.category === 'all' || m.category === filters.category) &&
+    (filters.gender === 'all' || detectGender(m.name, m.category) === filters.gender);
+
   // Распроданные товары текущего снимка (с нулевым суммарным остатком)
   const currentSoldOut = useMemo(() => {
-    if (!data) return [];
+    if (!filteredData) return [];
     const totals = new Map<string, number>();
-    for (const item of data.inventory) {
+    for (const item of filteredData.inventory) {
       if (item.notCarried) continue;
       totals.set(item.productId, (totals.get(item.productId) ?? 0) + item.quantity);
     }
-    return data.products.filter((p) => (totals.get(p.id) ?? 0) === 0);
-  }, [data]);
+    return filteredData.products.filter((p) => (totals.get(p.id) ?? 0) === 0);
+  }, [filteredData]);
 
   if (!data) return null;
+
+  const topSold = report ? report.topSold.filter(matchesFilters) : [];
+  const soldOutFiltered = report ? report.soldOutProducts.filter(matchesFilters) : [];
 
   const storeChartData = report
     ? report.byStore.map((s) => ({
@@ -151,6 +259,12 @@ export function SalesHistory() {
             </div>
           </div>
 
+          <p className="text-[11px] text-gray-400 -mt-2">
+            Продажа = уменьшение суммарного остатка между снимками; сравниваем по артикулам.
+            Ранние снимки могут содержать ошибки старого парсинга (переименования, дубли
+            артикулов) — сверяйте цифры с журналом изменений парсера ниже, он точнее.
+          </p>
+
           {/* Продажи по магазинам */}
           {storeChartData.some((d) => d['Продано'] > 0 || d['Поступило'] > 0) && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
@@ -179,16 +293,16 @@ export function SalesHistory() {
                 Лидеры продаж
               </h3>
               <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
-                {report.topSold.slice(0, MAX_SALES_DISPLAY).map((mv) => (
+                {topSold.slice(0, MAX_SALES_DISPLAY).map((mv) => (
                   <MovementRow key={mv.link || `${mv.article}|${mv.name}`} mv={mv} days={report.days} />
                 ))}
-                {report.topSold.length === 0 && (
+                {topSold.length === 0 && (
                   <p className="text-sm text-gray-400 py-6 text-center">За период продаж не зафиксировано</p>
                 )}
               </div>
-              {report.topSold.length > MAX_SALES_DISPLAY && (
+              {topSold.length > MAX_SALES_DISPLAY && (
                 <p className="mt-3 text-xs text-gray-500 text-center">
-                  Показаны первые {MAX_SALES_DISPLAY} из {report.topSold.length}
+                  Показаны первые {MAX_SALES_DISPLAY} из {topSold.length}
                 </p>
               )}
             </div>
@@ -200,7 +314,7 @@ export function SalesHistory() {
                 Распродано за период
               </h3>
               <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
-                {report.soldOutProducts.slice(0, MAX_SALES_DISPLAY).map((mv) => (
+                {soldOutFiltered.slice(0, MAX_SALES_DISPLAY).map((mv) => (
                   <div
                     key={mv.link || `${mv.article}|${mv.name}`}
                     className="p-3 bg-red-50 border border-red-100 rounded-lg"
@@ -218,7 +332,7 @@ export function SalesHistory() {
                     </div>
                   </div>
                 ))}
-                {report.soldOutProducts.length === 0 && (
+                {soldOutFiltered.length === 0 && (
                   <p className="text-sm text-gray-400 py-6 text-center">
                     За период ничего не распродано до нуля
                   </p>
@@ -301,6 +415,8 @@ npm run snapshot -- путь/к/2026-09-24.csv
               </div>
             )}
           </div>
+
+          <ParserChangeJournal changes={parserChanges} />
         </>
       )}
     </div>

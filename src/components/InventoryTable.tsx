@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
-import { Search, Filter, ChevronDown, ChevronUp, PackageSearch, Flame, ExternalLink } from 'lucide-react';
-import { useData } from '../context/DataContext';
+import { Search, ChevronDown, ChevronUp, PackageSearch, Flame, ExternalLink } from 'lucide-react';
+import { useFilteredData } from '../hooks/useAnalytics';
 import { compareSizes } from '../utils/sizes';
 import { isWarehouse, shortStoreLabel } from '../utils/storeGroups';
 import { ProductCardModal } from './ProductCardModal';
@@ -26,10 +26,9 @@ function storeCellClass(qty: number): string {
 const NOT_CARRIED_CLASS = 'bg-gray-50 text-gray-400';
 
 export function InventoryTable() {
-  const { data } = useData();
+  // Данные уже отфильтрованы глобальной панелью (бренд / категория / пол)
+  const data = useFilteredData();
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [selectedBrand, setSelectedBrand] = useState<string>('all');
   const [selectedStore, setSelectedStore] = useState<string>('all');
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
   const [onlySoldOut, setOnlySoldOut] = useState(false);
@@ -41,19 +40,6 @@ export function InventoryTable() {
   const inventory = useMemo(() => data?.inventory ?? [], [data]);
 
   // ВАЖНО: все хуки вызываются ДО условного return (правила хуков React)
-  const categories = useMemo(
-    () => ['all', ...new Set(products.map((p) => p.category))],
-    [products]
-  );
-
-  const brands = useMemo(
-    () =>
-      ['all', ...new Set(products.map((p) => p.brand))].sort((a, b) =>
-        a === 'all' ? -1 : b === 'all' ? 1 : a.localeCompare(b, 'ru')
-      ),
-    [products]
-  );
-
   const displayStores = useMemo(
     () => (selectedStore === 'all' ? stores : stores.filter((s) => s.id === selectedStore)),
     [stores, selectedStore]
@@ -96,13 +82,11 @@ export function InventoryTable() {
         p.name.toLowerCase().includes(term) ||
         p.brand.toLowerCase().includes(term) ||
         (p.article ?? '').toLowerCase().includes(term);
-      const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
-      const matchesBrand = selectedBrand === 'all' || p.brand === selectedBrand;
       const matchesSoldOut =
         !onlySoldOut || (indexes.productTotals.get(p.id) ?? 0) === 0;
-      return matchesSearch && matchesCategory && matchesBrand && matchesSoldOut;
+      return matchesSearch && matchesSoldOut;
     });
-  }, [products, searchTerm, selectedCategory, selectedBrand, onlySoldOut, indexes]);
+  }, [products, searchTerm, onlySoldOut, indexes]);
 
   const soldOutCount = useMemo(
     () => products.filter((p) => (indexes.productTotals.get(p.id) ?? 0) === 0).length,
@@ -139,37 +123,6 @@ export function InventoryTable() {
           />
         </div>
         <div className="flex gap-3 flex-wrap">
-          <div className="relative">
-            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <select
-              value={selectedCategory}
-              onChange={(e) => {
-                setSelectedCategory(e.target.value);
-                resetPage();
-              }}
-              className="pl-10 pr-8 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm appearance-none bg-white cursor-pointer"
-            >
-              {categories.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat === 'all' ? 'Все категории' : cat}
-                </option>
-              ))}
-            </select>
-          </div>
-          <select
-            value={selectedBrand}
-            onChange={(e) => {
-              setSelectedBrand(e.target.value);
-              resetPage();
-            }}
-            className="px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm appearance-none bg-white cursor-pointer"
-          >
-            {brands.map((brand) => (
-              <option key={brand} value={brand}>
-                {brand === 'all' ? 'Все бренды' : brand}
-              </option>
-            ))}
-          </select>
           <select
             value={selectedStore}
             onChange={(e) => setSelectedStore(e.target.value)}

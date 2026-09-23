@@ -52,13 +52,19 @@ describe('parseBundledRows', () => {
   it('товар получает стабильный id из ссылки и сохраняет link/price', () => {
     expect(products.products).toHaveLength(1);
     const p = products.products[0];
-    expect(p.id).toBe(`p_${hashString('https://saletennis.com/product/1/')}`);
-    expect(p.link).toBe('https://saletennis.com/product/1/');
+    // Ссылка нормализуется (хвостовой слэш отбрасывается) — id стабилен между парсингами
+    expect(p.id).toBe(`p_${hashString('https://saletennis.com/product/1')}`);
+    expect(p.link).toBe('https://saletennis.com/product/1');
     expect(p.price).toBe(8990);
     expect(p.article).toBe('HQ1');
-    // идемпотентность: повторный парсинг даёт те же id
+    // идемпотентность: повторный парсинг даёт те же id; вариант со слэшем — тоже
     const again = parseBundledRows([catalogRow()], [sizeRow()]);
     expect(again.products[0].id).toBe(p.id);
+    const withSlash = parseBundledRows(
+      [catalogRow({ Ссылка: 'https://saletennis.com/product/1/' })],
+      [sizeRow({ Ссылка: 'https://saletennis.com/product/1/' })]
+    );
+    expect(withSlash.products[0].id).toBe(p.id);
   });
 
   it('материализует отсутствующие размеры как нули в возящих магазинах', () => {

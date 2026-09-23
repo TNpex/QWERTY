@@ -2,9 +2,10 @@ import type { ParsedData, Store, Product, InventoryItem } from '../types';
 import { parseCSVText } from './csv';
 import { normalizeSize } from './sizes';
 import { detectColumns, findColumn, parsePrice, parseQuantity, buildStoreResolver } from './xlsxParser';
-import { parseSnapshotRows, type HistorySnapshot } from './historyCore';
+import { parseSnapshotRows, type HistorySnapshot, parseChangesCsv, type ParserChange, normalizeLink } from './historyCore';
 import { sortStoresForDisplay } from './storeGroups';
 import { photoFileName } from './images';
+import { productMeta } from './productMeta';
 
 /**
  * Загрузка встроенного набора данных из public/data/:
@@ -33,6 +34,8 @@ export function hashString(text: string): string {
 export interface BundledDataset {
   data: ParsedData;
   history: HistorySnapshot[];
+  /** Журнал изменений от парсера (changes.csv), если файл есть */
+  changes: ParserChange[];
 }
 
 /**
@@ -94,7 +97,7 @@ export function parseBundledRows(
   for (const row of productsRows) {
     const name = String(row[mapping.nameCol] ?? '').trim();
     if (!name) continue;
-    const link = linkCol ? String(row[linkCol] ?? '').trim() : '';
+    const link = linkCol ? normalizeLink(String(row[linkCol] ?? '')) : '';
     const article = mapping.articleCol ? String(row[mapping.articleCol] ?? '').trim() : '';
     const brand = mapping.brandCol ? String(row[mapping.brandCol] ?? '').trim() || 'Неизвестно' : 'Неизвестно';
     const category = mapping.categoryCol ? String(row[mapping.categoryCol] ?? '').trim() || 'Другое' : 'Другое';
@@ -105,6 +108,7 @@ export function parseBundledRows(
     if (productById.has(id)) continue;
 
     const photo = photoCol ? photoFileName(row[photoCol]) : undefined;
+    const meta = productMeta(name, category);
     const product: Product = {
       id,
       name,
@@ -114,6 +118,8 @@ export function parseBundledRows(
       article,
       ...(link ? { link } : {}),
       ...(photo ? { photo } : {}),
+      gender: meta.gender,
+      ...(meta.subtype ? { subtype: meta.subtype } : {}),
     };
     products.push(product);
     productById.set(id, product);
@@ -124,6 +130,7 @@ export function parseBundledRows(
   // ---- Остатки из sizes.csv ----
   const aggregated = new Map<string, InventoryItem>(); // pid|sid|size → item
   let skippedSizes = 0;
+  const extraFromSizes: string[] = []; // товары, которых нет в products.csv
 
   if (sizesRows.length > 0) {
     const sizesHeaders = Object.keys(sizesRows[0]);
@@ -139,7 +146,7 @@ export function parseBundledRows(
     }
 
     for (const row of sizesRows) {
-      const link = linkColS ? String(row[linkColS] ?? '').trim() : '';
+      const link = linkColS ? normalizeLink(String(row[linkColS] ?? '')) : '';
       const article = articleColS ? String(row[articleColS] ?? '').trim() : '';
       const name = nameColS ? String(row[nameColS] ?? '').trim() : '';
 
@@ -150,6 +157,7 @@ export function parseBundledRows(
         const id = `p_${hashString(link || `${article}|${name}`)}`;
         product = productById.get(id);
         if (!product) {
+          const meta = productMeta(name || article, 'Другое');
           product = {
             id,
             name: name || article || 'Неизвестный товар',
@@ -158,10 +166,12 @@ export function parseBundledRows(
             price: 0,
             article,
             ...(link ? { link } : {}),
+            gender: meta.gender,
           };
           products.push(product);
           productById.set(id, product);
           if (link) byLink.set(link, product);
+          extraFromSizes.push(article || name);
         }
       }
 
@@ -229,13 +239,39 @@ export function parseBundledRows(
   if (skippedSizes > 0) {
     warnings.push(`sizes.csv: пропущено строк: ${skippedSizes} (не распознан магазин или количество).`);
   }
+  if (extraFromSizes.length > 0) {
+    warnings.push(
+      `В sizes.csv ${extraFromSizes.length} товаров отсутствуют в products.csv — добавлены автоматически ` +
+        `(например: ${extraFromSizes.slice(0, 5).join(', ')}). Проверьте полноту каталога в парсере.`
+    );
+  }
   const unknownStores = resolver.getUnknown();
   if (unknownStores.length > 0) {
     warnings.push(`Нераспознанные магазины в sizes.csv: ${unknownStores.slice(0, 10).join(', ')}.`);
   }
   const soldOutCount = products.filter((p) => !storesByProduct.has(p.id)).length;
   if (soldOutCount > 0) {
-    warnings.push(`Товаров без остатков (распроданы во всей сети): ${soldOutCount}.`);
+    warnings.push(`Товаров без остатков (распроданы или нет данных): ${soldOutCount}.`);
+  }
+
+  // Товары, у которых парсер не нашёл таблицу наличия на странице
+  // («Нет информации о наличии» — часто это мячи/струны с единицами «банка»/«кор»/«сет»/«бобина»)
+  const sizesTextCol = findColumn(productHeaders, ['размеры и наличие', 'наличие по размерам']);
+  if (sizesTextCol) {
+    const noInfoArticles: string[] = [];
+    for (const row of productsRows) {
+      const text = String(row[sizesTextCol] ?? '').toLowerCase();
+      if (text.includes('нет информации')) {
+        const article = mapping.articleCol ? String(row[mapping.articleCol] ?? '').trim() : '';
+        if (article) noInfoArticles.push(article);
+      }
+    }
+    if (noInfoArticles.length > 0) {
+      warnings.push(
+        `Парсер не нашёл таблицу наличия у ${noInfoArticles.length} товаров (возможно, там единицы «банка»/«кор»/«сет»/«бобина»): ` +
+          `${noInfoArticles.slice(0, 10).join(', ')}${noInfoArticles.length > 10 ? ' …' : ''}`
+      );
+    }
   }
 
   return {
@@ -265,34 +301,59 @@ interface ManifestEntry {
   date: string;
 }
 
-/** Загружает встроенные данные и историю снимков. Бросает ошибку, если данных нет. */
+/** «2026-09-23_16-52-05» → «2026-09-23T16:52:05»; «2026-09-23» → без изменений */
+export function snapshotFileToDate(fileName: string): string {
+  const base = fileName.replace(/\.(csv|xlsx|xls)$/i, '');
+  const match = base.match(/^(\d{4}-\d{2}-\d{2})(?:[_T](\d{2})[-_]?(\d{2})[-_]?(\d{2}))?/);
+  if (!match) return base;
+  return match[2] ? `${match[1]}T${match[2]}:${match[3]}:${match[4]}` : match[1];
+}
+
+async function fetchSnapshotRows(url: string): Promise<Record<string, unknown>[]> {
+  if (/\.xlsx?$/i.test(url)) {
+    const XLSX = await import('xlsx');
+    const response = await fetch(url, { cache: 'no-cache' });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const buffer = await response.arrayBuffer();
+    const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    return XLSX.utils.sheet_to_json(sheet, { defval: '' }) as Record<string, unknown>[];
+  }
+  return parseCSVText(await fetchText(url));
+}
+
+/** Загружает встроенные данные, историю снимков и журнал изменений парсера */
 export async function loadBundledDataset(): Promise<BundledDataset> {
   const base = `${import.meta.env.BASE_URL ?? '/'}data/`;
 
-  const [productsText, sizesText] = await Promise.all([
+  const [productsText, sizesText, changesText] = await Promise.all([
     fetchText(`${base}products.csv`),
     fetchText(`${base}sizes.csv`).catch(() => ''),
+    fetchText(`${base}changes.csv`).catch(() => ''),
   ]);
 
   const productsRows = parseCSVText(productsText);
   const sizesRows = sizesText ? parseCSVText(sizesText) : [];
+  const changes = changesText ? parseChangesCsv(parseCSVText(changesText)) : [];
 
-  // История снимков (опциональна)
+  // История снимков (опциональна; CSV или XLSX, имена вида ГГГГ-ММ-ДД[_ЧЧ-ММ-СС])
   let history: HistorySnapshot[] = [];
   try {
     const manifest = JSON.parse(await fetchText(`${base}history/manifest.json`)) as {
       snapshots?: ManifestEntry[];
     };
     const entries = (manifest.snapshots ?? []).filter((s) => s && s.file);
-    const texts = await Promise.all(
-      entries.map((entry) => fetchText(`${base}history/${entry.file}`).catch(() => null))
+    const rowSets = await Promise.all(
+      entries.map((entry) =>
+        fetchSnapshotRows(`${base}history/${entry.file}`).catch(() => null)
+      )
     );
-    history = texts
-      .map((text, i) => {
-        if (!text) return null;
-        const date = entries[i].date || entries[i].file.replace(/\.csv$/i, '');
+    history = rowSets
+      .map((rows, i) => {
+        if (!rows) return null;
+        const date = entries[i].date || snapshotFileToDate(entries[i].file);
         try {
-          return parseSnapshotRows(parseCSVText(text), date);
+          return parseSnapshotRows(rows, date);
         } catch {
           return null;
         }
@@ -305,5 +366,5 @@ export async function loadBundledDataset(): Promise<BundledDataset> {
 
   const asOf = history.length > 0 ? history[history.length - 1].date : undefined;
   const data = parseBundledRows(productsRows, sizesRows, { asOf });
-  return { data, history };
+  return { data, history, changes };
 }

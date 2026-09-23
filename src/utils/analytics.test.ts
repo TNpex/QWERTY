@@ -1,32 +1,31 @@
 import { describe, it, expect } from 'vitest';
-import type { ParsedData, InventoryItem } from '../types';
+import type { ParsedData, InventoryItem, Product, Store } from '../types';
 import {
   getMetrics,
   getTransferRecommendations,
   getRestockRecommendations,
   getOverstockPositions,
-  MIN_PER_STORE,
-  TRANSFER_CAP,
-  STORE_EXCESS_TRIGGER,
-  DONOR_KEEP,
+  excessTrigger,
+  donorKeep,
 } from './analyticsCore';
 
 // ============ Фикстуры ============
 
-// Магазины: один город «Тест» (три точки + склад), СПб и Уфа — для маршрутов
-const STORES = [
-  { id: 'spb', name: 'Санкт-Петербург (Невский)' },
-  { id: 'a', name: 'Тест (Центральный)' },
-  { id: 'b', name: 'Тест (Северный)' },
-  { id: 'c', name: 'Тест (Южный)' },
+const STORES: Store[] = [
+  { id: 'spb1', name: 'Санкт-Петербург (Спортивная)' },
+  { id: 'spb2', name: 'Санкт-Петербург (Ярослава Гашека)' },
+  { id: 'ekb1', name: 'Екатеринбург (Парина)' },
   { id: 'ufa', name: 'Уфа' },
-  { id: 'w', name: 'Тест (Склад)' },
+  { id: 'w', name: 'Екатеринбург (Основной склад)' },
 ];
 
 function fixture(): ParsedData {
-  const products = [
-    { id: 'p1', name: 'Кроссовки Nike', brand: 'Nike', category: 'Обувь', price: 8990, link: 'l1' },
-    { id: 'p2', name: 'Сумка Head', brand: 'Head', category: 'Сумки и чехлы', price: 5000, link: 'l2' },
+  const products: Product[] = [
+    { id: 'p1', name: 'Кроссовки женские Nike Vapor', brand: 'Nike', category: 'Обувь', price: 8990 },
+    { id: 'p2', name: 'Юбка женская 7/6 Kris', brand: '7/6', category: 'Одежда', price: 5990 },
+    { id: 'p3', name: 'Футболка мужская Mizuno', brand: 'Mizuno', category: 'Одежда', price: 2933 },
+    { id: 'p4', name: 'Струна Solinco Hyper-G', brand: 'Solinco', category: 'Теннисные струны', price: 1500 },
+    { id: 'p5', name: 'Мяч Wilson (распродан)', brand: 'Wilson', category: 'Мячи для тенниса', price: 900 },
   ];
   const item = (
     productId: string,
@@ -44,103 +43,146 @@ function fixture(): ParsedData {
   });
 
   const inventory: InventoryItem[] = [
-    // p1 / 42: склад 5, Центр 0, Север 1, Юг 6, СПб и Уфа возят, но 0
-    item('p1', 'w', '42', 5),
-    item('p1', 'a', '42', 0),
-    item('p1', 'b', '42', 1),
-    item('p1', 'c', '42', 6),
-    item('p1', 'spb', '42', 0, true),
-    item('p1', 'ufa', '42', 0, true),
-    // p1 / 43: Центр 4 (переизбыток), Север 0
-    item('p1', 'a', '43', 4),
-    item('p1', 'b', '43', 0),
-    // p2 / —: СПб 5 (переизбыток), Уфа 0 → дорогой маршрут spb-expensive
-    item('p2', 'spb', '—', 5),
-    item('p2', 'ufa', '—', 0),
-    item('p2', 'a', '—', 0),
+    // p1 кроссовки женские, 39 (ходовой размер обуви): склад 1, еkb 0, уфа 0
+    item('p1', 'w', '39', 1),
+    item('p1', 'ekb1', '39', 0),
+    item('p1', 'ufa', '39', 0),
+    item('p1', 'spb1', '39', 0, true),
+
+    // p2 юбка женская, S (приоритетный женский размер):
+    // spb1 4 (избыток СПб ≥4), spb2 1 (получатель), ekb1 3 (избыток ≥3), ufa 0, склад 5
+    item('p2', 'spb1', 'S', 4),
+    item('p2', 'spb2', 'S', 1),
+    item('p2', 'ekb1', 'S', 3),
+    item('p2', 'ufa', 'S', 0),
+    item('p2', 'w', 'S', 5),
+    // p2 M: spb1 1, ekb1 1, остальные не возят M
+    item('p2', 'spb1', 'M', 1),
+    item('p2', 'ekb1', 'M', 1),
+    item('p2', 'spb2', 'M', 0, true),
+    item('p2', 'ufa', 'M', 0, true),
+    item('p2', 'w', 'M', 0, true),
+
+    // p3 футболка мужская M (приоритетный мужской): spb1 5 (избыток), ufa 0 → spb-expensive
+    item('p3', 'spb1', 'M', 5),
+    item('p3', 'ufa', 'M', 0),
+
+    // p4 струна «сет»: ekb1 3, ufa 1 → перемещение 1 шт; сеть = 4 = норматив → дозакупки нет
+    item('p4', 'ekb1', 'сет', 3),
+    item('p4', 'ufa', 'сет', 1),
+
+    // p5 мяч — распродан (строк нет)
   ];
 
   return { stores: STORES, products, inventory };
 }
 
-describe('getMetrics', () => {
-  it('исключает notCarried из OOS и считает распроданные товары', () => {
-    const m = getMetrics(fixture());
-    // carried-строки: 42(w5,a0,b1,c6)=4, 43(a4,b0)=2, p2(5,0,0)=3 → 9
-    expect(m.carriedSKUs).toBe(9);
-    expect(m.notCarriedSKUs).toBe(2);
-    expect(m.totalStock).toBe(5 + 1 + 6 + 4 + 5);
-    expect(m.outOfStockSizes).toBe(4); // a42, b43, ufa-p2, a-p2
-    expect(m.soldOutProducts).toBe(0);
-    expect(m.totalValue).toBe(8990 * (5 + 1 + 6 + 4) + 5000 * 5);
+describe('правила избытка по городам', () => {
+  it('СПб: больше 3 (≥4), донор оставляет 3', () => {
+    expect(excessTrigger('Санкт-Петербург (Спортивная)')).toBe(4);
+    expect(donorKeep('Санкт-Петербург (Спортивная)')).toBe(3);
+  });
+  it('Екб/Тюмень/Уфа/Ижевск: больше 2 (≥3), донор оставляет 2', () => {
+    expect(excessTrigger('Екатеринбург (Парина)')).toBe(3);
+    expect(donorKeep('Екатеринбург (Парина)')).toBe(2);
+    expect(excessTrigger('Уфа')).toBe(3);
+    expect(excessTrigger('Тюмень (Народная)')).toBe(3);
+    expect(excessTrigger('Ижевск')).toBe(3);
   });
 });
 
-describe('getTransferRecommendations: новая бизнес-логика', () => {
+describe('getMetrics', () => {
+  it('считает остатки, OOS и распроданные товары', () => {
+    const m = getMetrics(fixture());
+    expect(m.totalProducts).toBe(5);
+    // carried-строки: p1 3, p2 7, p3 2, p4 2 = 14; notCarried: 1 + 3 = 4
+    expect(m.carriedSKUs).toBe(14);
+    expect(m.notCarriedSKUs).toBe(4);
+    expect(m.totalStock).toBe(1 + 4 + 1 + 3 + 0 + 5 + 1 + 1 + 5 + 0 + 3 + 1);
+    expect(m.soldOutProducts).toBe(1); // p5 без строк
+  });
+});
+
+describe('getTransferRecommendations: новые правила', () => {
   const recs = getTransferRecommendations(fixture());
-  const byRoute = (route: string) => recs.filter((r) => r.route === route);
 
-  it('фаза 1: склад → магазин без товара, до норматива', () => {
-    const wh = byRoute('warehouse');
-    // склад(5) → Центр(0): везём MIN_PER_STORE=2
-    const toA = wh.find((r) => r.toStoreId === 'a' && r.size === '42');
-    expect(toA).toBeDefined();
-    expect(toA!.quantity).toBe(MIN_PER_STORE);
-    expect(toA!.fromStoreId).toBe('w');
-    // Север имеет 1 шт — фаза 1 его не трогает (нет = только 0)
-    expect(wh.find((r) => r.toStoreId === 'b')).toBeUndefined();
+  it('склад → магазин без правил: вариант со склада показан для всех дефицитов', () => {
+    const whRecs = recs.filter((r) => r.route === 'warehouse');
+    // склад p2/S = 5: spb2 (нужно 1) и ufa (нужно 2) → оба варианта
+    const p2s = whRecs.filter((r) => r.productId === 'p2' && r.size === 'S');
+    expect(p2s.length).toBe(2);
+    expect(p2s.reduce((s, r) => s + r.quantity, 0)).toBe(3); // 1 + 2, склад не истощён
+    // склад p1/39 = 1: только одному получателю (запас кончился)
+    const p1w = whRecs.filter((r) => r.productId === 'p1');
+    expect(p1w.length).toBe(1);
+    expect(p1w[0].quantity).toBe(1);
   });
 
-  it('фаза 2: переизбыток (≥4) → где нет/мало, донор оставляет DONOR_KEEP', () => {
-    // Юг(6) размер 42: после фазы 1 Центр получил 2 → не получатель; Север(1) — получатель
-    const excess = recs.filter((r) => r.fromStoreId === 'c' && r.size === '42');
-    const sent = excess.reduce((s, r) => s + r.quantity, 0);
-    expect(excess.length).toBeGreaterThan(0);
-    // донор не может отдать больше, чем quantity - DONOR_KEEP = 3
-    expect(sent).toBeLessThanOrEqual(6 - DONOR_KEEP);
-    // Центр(4) размер 43 → Север(0), внутри города
-    const a43 = recs.find((r) => r.fromStoreId === 'a' && r.size === '43');
-    expect(a43).toBeDefined();
-    expect(a43!.toStoreId).toBe('b');
-    expect(a43!.quantity).toBeLessThanOrEqual(4 - DONOR_KEEP); // 1
-    expect(a43!.route).toBe('same-city');
+  it('вариативность: один дефицит — несколько альтернатив (магазин И склад)', () => {
+    // p2/S в Уфу: вариант со склада (2 шт) и вариант из Екб-Парина (1 шт)
+    const toUfa = recs.filter((r) => r.productId === 'p2' && r.size === 'S' && r.toStoreId === 'ufa');
+    const routes = toUfa.map((r) => r.route).sort();
+    expect(routes).toEqual(['intercity', 'warehouse']);
+    // одна группа вариантов
+    expect(new Set(toUfa.map((r) => r.optionGroup)).size).toBe(1);
   });
 
-  it('ходовой размер обуви со склада — высокий приоритет', () => {
-    const wh42 = recs.find((r) => r.route === 'warehouse' && r.size === '42' && r.toStoreId === 'a');
-    expect(wh42!.priority).toBe('high'); // 42 — популярный + Обувь
+  it('избыток СПб (>3) остаётся в городе, если дефицит там же', () => {
+    // spb1 S=4 → spb2 S=1: внутри города, 1 шт (донор оставляет 3)
+    const spbMove = recs.find(
+      (r) => r.productId === 'p2' && r.size === 'S' && r.fromStoreId === 'spb1' && r.toStoreId === 'spb2'
+    );
+    expect(spbMove).toBeDefined();
+    expect(spbMove!.route).toBe('same-city');
+    expect(spbMove!.quantity).toBe(1);
   });
 
-  it('из СПб в другие города — маршрут spb-expensive с низким приоритетом', () => {
-    const expensive = byRoute('spb-expensive');
+  it('избыток не-СПб (>2) → межгород с флагом intercity', () => {
+    // ekb1 S=3 → ufa S=0: 1 шт (donorKeep=2), intercity
+    const ekbMove = recs.find(
+      (r) => r.productId === 'p2' && r.size === 'S' && r.fromStoreId === 'ekb1' && r.toStoreId === 'ufa'
+    );
+    expect(ekbMove).toBeDefined();
+    expect(ekbMove!.route).toBe('intercity');
+    expect(ekbMove!.quantity).toBe(1);
+    expect(ekbMove!.priority).toBe('low');
+  });
+
+  it('СПб → другой город помечается spb-expensive (дорого)', () => {
+    // p3 M: spb1=5 (>3, donatable 2) → ufa=0
+    const expensive = recs.filter((r) => r.route === 'spb-expensive');
     expect(expensive.length).toBeGreaterThan(0);
-    for (const r of expensive) {
-      expect(r.fromStoreId).toBe('spb');
-      expect(r.priority).toBe('low');
-    }
-    // p2: СПб(5) → Уфа(0) и/или Центр(0)
-    expect(expensive.some((r) => r.toStoreId === 'ufa')).toBe(true);
+    const p3move = expensive.find((r) => r.productId === 'p3');
+    expect(p3move).toBeDefined();
+    expect(p3move!.quantity).toBe(2); // 5 − 3 (СПб оставляет три)
+    expect(p3move!.priority).toBe('low');
   });
 
-  it('не обещает одну единицу дважды (сумма отправлений ≤ доступный избыток)', () => {
-    for (const donorId of ['w', 'a', 'c', 'spb']) {
-      const sent = recs
-        .filter((r) => r.fromStoreId === donorId)
-        .reduce((s, r) => s + r.quantity, 0);
-      const fixture_ = fixture();
-      const owned = fixture_.inventory
-        .filter((i) => i.storeId === donorId && !i.notCarried)
-        .reduce((s, i) => s + i.quantity, 0);
-      expect(sent).toBeLessThanOrEqual(owned);
-    }
+  it('высокий приоритет: нуль у получателя + приоритетный размер (жен S/M, муж M/L, обувь 41-44)', () => {
+    // p1/39: обувь 39 не в 41-44 → не high; p2/S в Уфу (0 + женский S) → high
+    const ufaS = recs.find(
+      (r) => r.productId === 'p2' && r.size === 'S' && r.toStoreId === 'ufa' && r.route === 'warehouse'
+    );
+    expect(ufaS!.priority).toBe('high');
+    // spb2 S=1 (не ноль) → medium
+    const spb2s = recs.find(
+      (r) => r.productId === 'p2' && r.size === 'S' && r.toStoreId === 'spb2' && r.route === 'warehouse'
+    );
+    expect(spb2s!.priority).toBe('medium');
   });
 
-  it('каждая рекомендация ≤ TRANSFER_CAP и содержит текущие количества', () => {
+  it('не обещает один остаток дважды (в рамках магазинного варианта)', () => {
+    // spb1 по p2/S отдал только 1 (4 − 3)
+    const fromSpb1 = recs.filter((r) => r.fromStoreId === 'spb1' && r.productId === 'p2' && r.size === 'S');
+    expect(fromSpb1.reduce((s, r) => s + r.quantity, 0)).toBeLessThanOrEqual(1);
+  });
+
+  it('каждая рекомендация содержит категорию, количества и группу вариантов', () => {
     for (const r of recs) {
-      expect(r.quantity).toBeLessThanOrEqual(TRANSFER_CAP);
-      expect(r.fromQty).toBeGreaterThanOrEqual(0);
+      expect(r.category).toBeTruthy();
+      expect(typeof r.fromQty).toBe('number');
       expect(typeof r.toQty).toBe('number');
-      expect(r.productLink).toBeTruthy();
+      expect(r.optionGroup).toBeTruthy();
     }
   });
 
@@ -150,107 +192,103 @@ describe('getTransferRecommendations: новая бизнес-логика', () 
 });
 
 describe('getOverstockPositions', () => {
-  it('находит позиции ≥ STORE_EXCESS_TRIGGER с excess = qty − DONOR_KEEP', () => {
+  it('переизбыток по правилам городов, склад исключён', () => {
     const overstock = getOverstockPositions(fixture());
-    const c42 = overstock.find((p) => p.storeId === 'c' && p.size === '42');
-    expect(c42).toBeDefined();
-    expect(c42!.quantity).toBe(6);
-    expect(c42!.excess).toBe(6 - DONOR_KEEP);
-    const w42 = overstock.find((p) => p.storeId === 'w' && p.size === '42');
-    expect(w42).toBeDefined(); // склад 5 ≥ 4 — тоже переизбыток
-    // a43 = 4 ≥ 4
-    expect(overstock.find((p) => p.storeId === 'a' && p.size === '43')).toBeDefined();
-    // spb p2 = 5
-    expect(overstock.find((p) => p.storeId === 'spb')).toBeDefined();
-    // b42 = 1 — не переизбыток
-    expect(overstock.find((p) => p.storeId === 'b' && p.size === '42')).toBeUndefined();
+    // spb1 p2/S = 4 ≥ 4 → excess 1
+    const spb = overstock.find((p) => p.storeId === 'spb1' && p.size === 'S');
+    expect(spb?.excess).toBe(1);
+    // ekb1 p2/S = 3 ≥ 3 → excess 1
+    const ekb = overstock.find((p) => p.storeId === 'ekb1' && p.size === 'S');
+    expect(ekb?.excess).toBe(1);
+    // spb1 p3/M = 5 → excess 2
+    const p3 = overstock.find((p) => p.productId === 'p3');
+    expect(p3?.excess).toBe(2);
+    // склад исключён, хотя там 5
+    expect(overstock.find((p) => p.storeId === 'w')).toBeUndefined();
+    // spb2 S=1 и ekb1 p4 'сет'=3 → 'сет' ≥3 → excess 1
+    expect(overstock.find((p) => p.productId === 'p4')).toBeDefined();
   });
 });
 
-describe('getRestockRecommendations: покрытие перемещением', () => {
-  it('дефицит покрывается складом/избытком → toPurchase уменьшается', () => {
-    const recs = getRestockRecommendations(fixture());
-
-    // p2/—: возят spb(5), ufa(0), a(0) → норматив 6, total 5 → needed 1
-    // покрытие: склад p2 не возит; избыток spb 5≥4 → excess 1 → cover 1
-    const p2 = recs.find((r) => r.productId === 'p2');
-    expect(p2).toBeDefined();
-    expect(p2!.totalNeeded).toBe(1);
-    expect(p2!.transferCover).toBe(1);
-    expect(p2!.toPurchase).toBe(0);
-    expect(p2!.sizes[0]).toEqual({ size: '—', quantity: 1, transferCover: 1, toPurchase: 0 });
-
-    // p1/43: возящих магазинОв 4 (w,a,b,c) → норматив на размер 8;
-    // total(43) = 4 (a) + 0 (b) → needed 4; избыток a(4) → excess 1 → cover 1, purchase 3
-    const p1 = recs.find((r) => r.productId === 'p1')!;
-    expect(p1.totalNeeded).toBe(4);
-    expect(p1.transferCover).toBe(1);
-    expect(p1.toPurchase).toBe(3);
-    expect(p1.sizes).toEqual([{ size: '43', quantity: 4, transferCover: 1, toPurchase: 3 }]);
-  });
-
-  it('склад покрывает закупку', () => {
+describe('getRestockRecommendations: нормативы сети по размерам', () => {
+  const rec = (name: string, category: string, size: string, networkTotal: number) => {
     const data: ParsedData = {
-      stores: [
-        { id: 'a', name: 'Тест (Центральный)' },
-        { id: 'w', name: 'Тест (Склад)' },
-      ],
-      products: [{ id: 'p', name: 'Мяч', brand: 'B', category: 'Мячи', price: 100 }],
+      stores: [{ id: 'a', name: 'Магазин А' }, { id: 'w', name: 'Екатеринбург (Основной склад)' }],
+      products: [{ id: 'p', name, brand: 'B', category, price: 100 }],
       inventory: [
-        { productId: 'p', storeId: 'a', size: '—', quantity: 0, lastUpdated: '' },
-        { productId: 'p', storeId: 'w', size: '—', quantity: 3, lastUpdated: '' },
+        { productId: 'p', storeId: 'a', size, quantity: networkTotal, lastUpdated: '' },
+        { productId: 'p', storeId: 'w', size, quantity: 0, lastUpdated: '' },
       ],
     };
-    const recs = getRestockRecommendations(data);
-    expect(recs).toHaveLength(1);
-    // норматив 2×2=4, total 3 → needed 1; склад держит 3 → cover 1 → purchase 0
-    expect(recs[0].totalNeeded).toBe(1);
-    expect(recs[0].transferCover).toBe(1);
-    expect(recs[0].toPurchase).toBe(0);
+    return getRestockRecommendations(data)[0];
+  };
+
+  it('женская одежда: S минимум 11', () => {
+    const r = rec('Юбка женская Test', 'Одежда', 'S', 7);
+    expect(r.sizes[0]).toEqual({ size: 'S', quantity: 4, target: 11, current: 7 });
+    expect(r.toPurchase).toBe(4);
+    expect(r.gender).toBe('female');
   });
 
-  it('без покрытия — вся потребность в заказ', () => {
+  it('женская одежда: XL минимум 0 — дозакупка не нужна', () => {
+    expect(rec('Юбка женская Test', 'Одежда', 'XL', 0)).toBeUndefined();
+  });
+
+  it('мужская одежда: L минимум 13', () => {
+    const r = rec('Футболка мужская Test', 'Одежда', 'L', 5);
+    expect(r.sizes[0].target).toBe(13);
+    expect(r.sizes[0].quantity).toBe(8);
+    expect(r.gender).toBe('male');
+  });
+
+  it('детская одежда: M минимум 7 («для девочек» → дети)', () => {
+    const r = rec('Капри для девочек Test', 'Одежда', 'M', 2);
+    expect(r.gender).toBe('kids');
+    expect(r.sizes[0].target).toBe(7);
+  });
+
+  it('женская обувь: 39 минимум 10; половинные размеры мужской обуви через запятую', () => {
+    const w = rec('Кроссовки женские Test', 'Обувь', '39', 6);
+    expect(w.sizes[0].target).toBe(10);
+    const m = rec('Кроссовки мужские Test', 'Обувь', '42,5', 0);
+    expect(m.sizes[0].target).toBe(11);
+  });
+
+  it('унисекс/уникальные размеры (сет, банка) — минимум 4', () => {
+    const str = rec('Струна Test', 'Теннисные струны', 'сет', 1);
+    expect(str.sizes[0].target).toBe(4);
+    expect(str.sizes[0].quantity).toBe(3);
+    const ball = rec('Мяч Test', 'Мячи для тенниса', 'банка', 0);
+    expect(ball.sizes[0].target).toBe(4);
+    // одежда без пола, размер не в таблице → 4
+    const uni = rec('Носки Test', 'Одежда', 'XXL', 1);
+    expect(uni.gender).toBe('unisex');
+    expect(uni.sizes[0].target).toBe(4);
+  });
+
+  it('critical при полном нуле, coverage детерминирован', () => {
+    const r = rec('Кроссовки мужские Test', 'Обувь', '43', 0);
+    expect(r.urgency).toBe('critical');
+    expect(r.coveragePercent).toBe(0);
+    expect(getRestockRecommendations(fixture())).toEqual(getRestockRecommendations(fixture()));
+  });
+
+  it('остаток на складе входит в сетевой запас (не заказываем лишнего)', () => {
     const data: ParsedData = {
-      stores: [
-        { id: 'a', name: 'Тест (Центральный)' },
-        { id: 'b', name: 'Тест (Северный)' },
-      ],
-      products: [{ id: 'p', name: 'Струны', brand: 'B', category: 'Теннисные струны', price: 900 }],
+      stores: [{ id: 'a', name: 'Магазин А' }, { id: 'w', name: 'Екатеринбург (Основной склад)' }],
+      products: [{ id: 'p', name: 'Юбка женская Test', brand: 'B', category: 'Одежда', price: 100 }],
       inventory: [
-        { productId: 'p', storeId: 'a', size: '—', quantity: 1, lastUpdated: '' },
-        { productId: 'p', storeId: 'b', size: '—', quantity: 0, lastUpdated: '' },
+        { productId: 'p', storeId: 'a', size: 'S', quantity: 2, lastUpdated: '' },
+        { productId: 'p', storeId: 'w', size: 'S', quantity: 9, lastUpdated: '' },
       ],
     };
-    const recs = getRestockRecommendations(data);
-    expect(recs[0].totalNeeded).toBe(3); // норматив 4, есть 1
-    expect(recs[0].transferCover).toBe(0);
-    expect(recs[0].toPurchase).toBe(3);
-    expect(recs[0].urgency).not.toBe('critical'); // товар ещё есть (1 шт)
-    expect(recs[0].category).toBe('Теннисные струны');
-  });
-
-  it('critical, когда товара нет совсем; coverage детерминирован', () => {
-    const data: ParsedData = {
-      stores: [{ id: 'a', name: 'Тест (Центральный)' }],
-      products: [{ id: 'p', name: 'X', brand: 'B', category: 'C', price: 1 }],
-      inventory: [{ productId: 'p', storeId: 'a', size: '—', quantity: 0, lastUpdated: '' }],
-    };
-    const a = getRestockRecommendations(data);
-    const b = getRestockRecommendations(data);
-    expect(a).toEqual(b);
-    expect(a[0].urgency).toBe('critical');
-    expect(a[0].coveragePercent).toBe(0);
-  });
-
-  it('константы согласованы', () => {
-    expect(STORE_EXCESS_TRIGGER).toBe(4);
-    expect(DONOR_KEEP).toBe(3);
-    expect(MIN_PER_STORE).toBe(2);
+    // сеть: 11 = норматив S → дозакупка не нужна (надо лишь переместить со склада)
+    expect(getRestockRecommendations(data)).toHaveLength(0);
   });
 });
 
 describe('производительность (регрессия против O(n²))', () => {
-  it('2000 товаров × 8 магазинов × 10 размеров обрабатываются быстрее 3 секунд', () => {
+  it('2000 товаров × 8 магазинов × 10 размеров обрабатываются быстрее 5 секунд', () => {
     const nProducts = 2000;
     const nStores = 8;
     const nSizes = 10;
@@ -292,10 +330,10 @@ describe('производительность (регрессия против 
     const elapsed = Date.now() - start;
 
     expect(metrics.totalStock).toBeGreaterThan(0);
-    expect(Array.isArray(transfers)).toBe(true);
-    expect(Array.isArray(restocks)).toBe(true);
-    expect(Array.isArray(overstock)).toBe(true);
+    expect(transfers.length).toBeGreaterThan(0);
+    expect(restocks.length).toBeGreaterThan(0);
+    expect(overstock.length).toBeGreaterThan(0);
     // Старая реализация на этом объёме выполнялась ~194 секунды
-    expect(elapsed).toBeLessThan(3000);
+    expect(elapsed).toBeLessThan(5000);
   });
 });

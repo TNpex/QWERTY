@@ -30,7 +30,7 @@ import {
   Database,
 } from 'lucide-react';
 import { SalesHistory } from './components/SalesHistory';
-import { BrandFilterBar } from './components/BrandFilterBar';
+import { FilterBar } from './components/FilterBar';
 
 type Tab = 'dashboard' | 'inventory' | 'transfers' | 'restock' | 'sales' | 'analytics';
 
@@ -125,7 +125,6 @@ function AppContent() {
       case 'dashboard':
         return (
           <div className="space-y-6">
-            <BrandFilterBar />
             <Dashboard />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <StoreStockChart />
@@ -144,7 +143,6 @@ function AppContent() {
       case 'analytics':
         return (
           <div className="space-y-6">
-            <BrandFilterBar />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <StoreStockChart />
               <CategoryChart />
@@ -298,7 +296,10 @@ function AppContent() {
         </header>
 
         {/* Page Content */}
-        <div className="p-4 lg:p-8">{renderContent()}</div>
+        <div className="p-4 lg:p-8 space-y-4">
+          <FilterBar />
+          {renderContent()}
+        </div>
       </main>
     </div>
   );

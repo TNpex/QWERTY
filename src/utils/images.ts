@@ -4,13 +4,16 @@
  * (обход листингов категорий saletennis.com; запускать не чаще раза в день).
  */
 
-/** Приводит ссылку товара к пути (ключу карты): origin отбрасывается */
+/** Приводит ссылку товара к пути (ключу карты): origin и хвостовой слэш отбрасываются */
 export function toProductPath(link: string): string {
+  let path: string;
   try {
-    return new URL(link).pathname;
+    path = new URL(link.trim()).pathname;
   } catch {
-    return link.startsWith('/') ? link : `/${link}`;
+    const trimmed = link.trim();
+    path = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
   }
+  return path.replace(/\/+$/, '');
 }
 
 export type ProductImageMap = Record<string, string>;
@@ -54,7 +57,13 @@ export function loadProductImages(): Promise<ProductImageMap> {
         const base = `${import.meta.env.BASE_URL ?? '/'}data/product-images.json`;
         const response = await fetch(base, { cache: 'no-cache' });
         if (!response.ok) return {};
-        return (await response.json()) as ProductImageMap;
+        const raw = (await response.json()) as ProductImageMap;
+        // Ключи карты приводим к тому же формату, что и toProductPath (без хвостового /)
+        const normalized: ProductImageMap = {};
+        for (const [key, value] of Object.entries(raw)) {
+          normalized[key.replace(/\/+$/, '')] = value;
+        }
+        return normalized;
       } catch {
         return {};
       }
