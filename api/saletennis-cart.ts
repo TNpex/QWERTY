@@ -110,24 +110,24 @@ async function loginToSite(login: string, password: string): Promise<LoginResult
       headers: { ...BROWSER_HEADERS, Accept: 'text/html' },
       redirect: 'follow',
     });
-  } catch (e) {
+  } catch {
     return {
       jar: null,
       reason:
-        'Сайт saletennis.com не ответил серверу дашборда (сетевая ошибка) — вероятно, хостинг блокирует облачные IP. Используйте способ 1 (закладка).',
+        'Сайт saletennis.com не ответил серверу дашборда (сетевая ошибка) — вероятно, хостинг блокирует облачные IP. Используйте закладку.',
     };
   }
   if (!page.ok) {
     return {
       jar: null,
-      reason: `Страница входа saletennis.com недоступна (HTTP ${page.status}). Возможно, хостинг блокирует серверы Vercel — используйте способ 1 (закладка).`,
+      reason: `Страница входа saletennis.com недоступна (HTTP ${page.status}). Возможно, хостинг блокирует серверы Vercel — используйте закладку.`,
     };
   }
   mergeSetCookies(jar, page);
   const html = await page.text();
   const csrf = html.match(/name="_csrf_token"\s+value="([^"]+)"/);
   if (!csrf) {
-    return { jar: null, reason: 'Форма входа на сайте изменилась — сообщите администратору дашборда. Пока используйте способ 1 (закладка).' };
+    return { jar: null, reason: 'Форма входа на сайте изменилась — сообщите администратору дашборда. Пока используйте закладку.' };
   }
   // 2) POST /login_check — как это делает браузер
   const form = new URLSearchParams({
@@ -150,14 +150,14 @@ async function loginToSite(login: string, password: string): Promise<LoginResult
   });
   mergeSetCookies(jar, resp);
   if (!jar['PHPSESSID']) {
-    return { jar: null, reason: 'Сайт не выдал сессию после входа — попробуйте способ 1 (закладка).' };
+    return { jar: null, reason: 'Сайт не выдал сессию после входа — попробуйте закладку.' };
   }
   // 3) Проверка входа по маркеру «Выйти» на странице корзины
   if (!(await isJarLoggedIn(jar))) {
     return {
       jar: null,
       reason:
-        'Не удалось войти: неверный логин/пароль ИЛИ сайт отклоняет вход с серверов Vercel. Проверьте учётные данные; если они верны — используйте способ 1 (закладка), он работает всегда.',
+        'Не удалось войти: неверный логин/пароль ИЛИ сайт отклоняет вход с серверов Vercel. Проверьте учётные данные; если они верны — используйте закладку, она работает всегда.',
     };
   }
   return { jar };
@@ -274,7 +274,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
         ok: false,
         unauthorized: true,
         error:
-          'Сайт выдал новую сессию вместо сохранённой — браузер обновил PHPSESSID. Экспортируйте cookie заново (Cookie-Editor → Export → PHPSESSID) или используйте способ 1 (закладка).',
+          'Сайт выдал новую сессию вместо сохранённой — браузер обновил PHPSESSID. Экспортируйте cookie заново (Cookie-Editor → Export → PHPSESSID) или используйте закладку.',
       });
       return;
     }
