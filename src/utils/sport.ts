@@ -16,7 +16,7 @@ export type Sport = 'padel' | 'tennis' | 'other';
 export const SPORT_LABELS: Record<Sport, string> = {
   padel: 'Падел',
   tennis: 'Теннис',
-  other: 'Прочее',
+  other: 'Теннис/Падел',
 };
 
 export const SPORT_ICONS: Record<Sport, string> = {

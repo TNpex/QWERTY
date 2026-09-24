@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowRight,
   Package,
@@ -12,6 +12,7 @@ import {
   Shirt,
 } from 'lucide-react';
 import { useFilteredData, useTransferRecommendations } from '../hooks/useAnalytics';
+import { useData } from '../context/DataContext';
 import {
   MAX_TRANSFER_DISPLAY,
   SPB_EXCESS_TRIGGER,
@@ -59,9 +60,13 @@ interface OptionGroupView {
   variants: TransferRecommendation[];
 }
 
+type MyScope = 'incoming' | 'outgoing' | 'all';
+
 export function TransferRecommendations() {
   const data = useFilteredData();
   const recommendations = useTransferRecommendations();
+  const { storeProfile } = useData();
+  const [myScope, setMyScope] = useState<MyScope>('all');
   const [toStoreId, setToStoreId] = useState('all');
   const [fromStoreId, setFromStoreId] = useState('all');
   const [selectedSubtype, setSelectedSubtype] = useState('all');
@@ -97,18 +102,32 @@ export function TransferRecommendations() {
 
   const overstock = useMemo(() => (data ? getOverstockPositions(data) : []), [data]);
 
+  // Профиль «Мой магазин»: id выбранного магазина и область рекомендаций
+  const profileStoreId = useMemo(
+    () => data?.stores.find((st) => st.name === storeProfile)?.id ?? null,
+    [data, storeProfile]
+  );
+  useEffect(() => {
+    setMyScope(profileStoreId ? 'incoming' : 'all');
+  }, [profileStoreId]);
+
   const spbExpensiveCount = recommendations.filter((r) => r.route === 'spb-expensive').length;
 
   const filtered = useMemo(
     () =>
       recommendations.filter(
         (r) =>
+          (myScope === 'all' ||
+            !profileStoreId ||
+            (myScope === 'incoming'
+              ? r.toStoreId === profileStoreId
+              : r.fromStoreId === profileStoreId)) &&
           (toStoreId === 'all' || r.toStoreId === toStoreId) &&
           (fromStoreId === 'all' || r.fromStoreId === fromStoreId) &&
           (selectedSubtype === 'all' || r.subtype === selectedSubtype) &&
           (showSpbExpensive || r.route !== 'spb-expensive')
       ),
-    [recommendations, toStoreId, fromStoreId, selectedSubtype, showSpbExpensive]
+    [recommendations, myScope, profileStoreId, toStoreId, fromStoreId, selectedSubtype, showSpbExpensive]
   );
 
   // Группировка: товар → группы вариантов (размер+получатель) → источники-альтернативы
@@ -145,6 +164,37 @@ export function TransferRecommendations() {
 
   return (
     <div className="space-y-4">
+      {/* Профиль «Мой магазин» — видно только свои перемещения */}
+      {profileStoreId && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 flex items-center gap-3 flex-wrap">
+          <span className="text-sm font-medium text-blue-800">📍 Мой магазин: {storeProfile}</span>
+          <div className="inline-flex rounded-full border border-blue-300 overflow-hidden text-xs">
+            {(
+              [
+                ['incoming', 'Входящие (мне)'],
+                ['outgoing', 'Исходящие (от меня)'],
+                ['all', 'Вся сеть'],
+              ] as [MyScope, string][]
+            ).map(([mode, label]) => (
+              <button
+                key={mode}
+                onClick={() => setMyScope(mode)}
+                className={`px-3 py-1 font-medium transition-colors ${
+                  myScope === mode
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-blue-700 hover:bg-blue-100'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <span className="text-[10px] text-blue-500 ml-auto">
+            магазин выбирается в сайдбаре слева
+          </span>
+        </div>
+      )}
+
       {/* Панель фильтров */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
         <div className="flex flex-col lg:flex-row gap-3 lg:items-center">

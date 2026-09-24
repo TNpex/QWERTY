@@ -96,6 +96,8 @@ function AppContent() {
     brandOverrides,
     settings,
     importSettings,
+    storeProfile,
+    setStoreProfile,
   } = useData();
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -103,7 +105,7 @@ function AppContent() {
   const settingsFileRef = useRef<HTMLInputElement>(null);
   const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
   const counts = settingsCounts(settings);
-  const settingsTotal = counts.sports + counts.excluded;
+  const settingsTotal = counts.sports + counts.excluded + counts.supplied + counts.hot;
 
   // Восстановление сохранённых данных из IndexedDB
   if (!hydrated) {
@@ -205,6 +207,27 @@ function AppContent() {
             </div>
           </div>
 
+          {/* Профиль устройства: «Мой магазин» */}
+          <div className="px-4 pb-3">
+            <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
+              Мой магазин
+            </label>
+            <select
+              value={storeProfile}
+              onChange={(e) => setStoreProfile(e.target.value)}
+              className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white cursor-pointer focus:ring-2 focus:ring-blue-500"
+              title="«Перемещения» покажут только ваш магазин (входящие/исходящие), «Инвентарь» откроется на нём. Профиль хранится только на этом устройстве."
+            >
+              <option value="">Вся сеть (не выбран)</option>
+              {data.stores.map((store) => (
+                <option key={store.id} value={store.name}>
+                  {isWarehouse(store.name) ? '📦 ' : ''}
+                  {store.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <nav className="space-y-1">
             {tabs.map((tab) => {
               const Icon = tab.icon;
@@ -254,7 +277,7 @@ function AppContent() {
             <button
               onClick={() => downloadSettings(settings)}
               className="w-full mb-2 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 transition-colors"
-              title={`Ориентации вручную: ${counts.sports}, исключено из рекомендаций: ${counts.excluded}. Скачайте JSON, чтобы перенести настройки на другой компьютер или передать коллегам.`}
+              title={`Ориентации: ${counts.sports}, перемещение «Не требуется»: ${counts.excluded}, «Поставляется»: ${counts.supplied}, ходовые вручную: ${counts.hot}. Скачайте JSON, чтобы перенести настройки на другой компьютер, передать коллегам или зафиксировать в public/data/product-settings.json для всех.`}
             >
               <Upload className="w-3.5 h-3.5" />
               Настройки товаров: {settingsTotal} — скачать JSON

@@ -25,6 +25,9 @@ import {
   parseSettings,
   type ProductSettings,
 } from '../utils/settings';
+
+/** Профиль «Мой магазин» — локальный для устройства (в общий JSON не входит) */
+const PROFILE_STORAGE_KEY = 'saletennis-store-profile';
 import type { Sport } from '../utils/sport';
 import { loadProductImages, type ProductImageMap } from '../utils/images';
 import {
@@ -85,6 +88,13 @@ interface DataContextType {
   setSportOverride: (key: string, sport: Sport | null) => void;
   /** Исключить/вернуть товар в рекомендациях (услуги и т.п.) */
   setProductExcluded: (key: string, excluded: boolean) => void;
+  /** Отметить товар «Поставляется» (только такие видны в «Дозакупке») */
+  setProductSupplied: (key: string, supplied: boolean) => void;
+  /** Вручную отметить/снять «Ходовой товар» (🔥 + приоритет в перемещениях) */
+  setProductHot: (key: string, hot: boolean) => void;
+  /** Профиль «Мой магазин» (название магазина или '') — локально для устройства */
+  storeProfile: string;
+  setStoreProfile: (storeName: string) => void;
   /** Импорт настроек из JSON-строки; false — файл невалиден */
   importSettings: (json: string) => boolean;
   /** Товары, исчезнувшие из каталога (убраны с сайта = распроданы) */
@@ -120,6 +130,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [hotProducts, setHotProducts] = useState<HotProductConfig[]>([]);
   const [brandOverrides, setBrandOverrides] = useState<BrandOverrides>({});
   const [settings, setSettingsState] = useState<ProductSettings>(() => loadSettings());
+  const [storeProfile, setStoreProfileState] = useState<string>(() => {
+    try {
+      return localStorage.getItem(PROFILE_STORAGE_KEY) ?? '';
+    } catch {
+      return '';
+    }
+  });
   const [filters, setFiltersState] = useState<DataFilters>(ALL_FILTERS);
   const [hydrated, setHydrated] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -146,6 +163,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
         changes = dataset.changes;
         sizes = dataset.sizeSnapshots;
         hot = dataset.hotProducts;
+        // Общие настройки из public/data/product-settings.json — базовый слой,
+        // локальные правки устройства имеют приоритет
+        if (dataset.settings) {
+          const shared = dataset.settings;
+          setSettingsState((current) => {
+            const merged = mergeSettings(shared, current);
+            saveSettings(merged);
+            return merged;
+          });
+        }
       } catch {
         // Встроенных данных нет (например, сборка без public/data) — не критично
       }
@@ -242,6 +269,38 @@ export function DataProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const setProductSupplied = useCallback((key: string, supplied: boolean) => {
+    setSettingsState((current) => {
+      const suppliedProducts = { ...current.suppliedProducts };
+      if (supplied) suppliedProducts[key] = true;
+      else delete suppliedProducts[key];
+      const next = { ...current, suppliedProducts };
+      saveSettings(next);
+      return next;
+    });
+  }, []);
+
+  const setProductHot = useCallback((key: string, hot: boolean) => {
+    setSettingsState((current) => {
+      const hotProducts = { ...current.hotProducts };
+      if (hot) hotProducts[key] = true;
+      else delete hotProducts[key];
+      const next = { ...current, hotProducts };
+      saveSettings(next);
+      return next;
+    });
+  }, []);
+
+  const setStoreProfile = useCallback((storeName: string) => {
+    setStoreProfileState(storeName);
+    try {
+      if (storeName) localStorage.setItem(PROFILE_STORAGE_KEY, storeName);
+      else localStorage.removeItem(PROFILE_STORAGE_KEY);
+    } catch {
+      /* приватный режим */
+    }
+  }, []);
+
   const importSettings = useCallback((json: string) => {
     const parsed = parseSettings(json);
     if (!parsed) return false;
@@ -306,6 +365,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       settings,
       setSportOverride,
       setProductExcluded,
+      setProductSupplied,
+      setProductHot,
+      storeProfile,
+      setStoreProfile,
       importSettings,
       delistedProducts,
       filters,
@@ -320,7 +383,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [
       data, hydrated, loading, error, history, parserChanges, bundledData,
       productImages, sizeSnapshots, hotProducts, brandOverrides, setBrandOverride,
-      settings, setSportOverride, setProductExcluded, importSettings, delistedProducts,
+      settings, setSportOverride, setProductExcluded, setProductSupplied, setProductHot,
+      storeProfile, setStoreProfile, importSettings, delistedProducts,
       filters, setFilters, resetFilters, setData, clearData, restoreBundled,
     ]
   );

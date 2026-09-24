@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useData } from '../context/DataContext';
 import {
   getMetrics,
@@ -117,16 +117,43 @@ export function useMetrics(): Metrics | null {
 
 export function useTransferRecommendations(): TransferRecommendation[] {
   const data = useDataWithoutExcluded();
-  return useMemo(() => (data ? getTransferRecommendations(data) : []), [data]);
+  const isHot = useIsHot();
+  return useMemo(() => {
+    if (!data) return [];
+    const recs = getTransferRecommendations(data);
+    const byId = new Map(data.products.map((p) => [p.id, p]));
+    // Ходовые товары (🔥 из hot-products.json или отмеченные вручную) — первыми.
+    // Сортировка устойчивая: группы вариантов одного дефицита не разрываются.
+    return [...recs].sort((a, b) => {
+      const pa = byId.get(a.productId);
+      const pb = byId.get(b.productId);
+      return Number(pb ? isHot(pb) : false) - Number(pa ? isHot(pa) : false);
+    });
+  }, [data, isHot]);
 }
 
 export function useRestockRecommendations(): RestockRecommendation[] {
   const data = useDataWithoutExcluded();
-  const { hotProducts } = useData();
-  return useMemo(
-    () => (data ? getRestockRecommendations(data, hotProducts) : []),
-    [data, hotProducts]
-  );
+  const { hotProducts, settings } = useData();
+  return useMemo(() => {
+    if (!data) return [];
+    // Дозакупка — только товары, отмеченные «Поставляется» в карточке товара
+    // (большинство позиций закупается разово). Ходовые из hot-products.json
+    // считаются поставляемыми автоматически — у них явный норматив запаса.
+    const hotArticles = new Set(hotProducts.map((h) => h.article.trim().toLowerCase()));
+    const supplied = data.products.filter((p) => {
+      if (settings.suppliedProducts[productSettingsKey(p)]) return true;
+      return Boolean(p.article && hotArticles.has(p.article.trim().toLowerCase()));
+    });
+    if (supplied.length === 0) return [];
+    const ids = new Set(supplied.map((p) => p.id));
+    const scoped: ParsedData = {
+      ...data,
+      products: supplied,
+      inventory: data.inventory.filter((i) => ids.has(i.productId)),
+    };
+    return getRestockRecommendations(scoped, hotProducts);
+  }, [data, hotProducts, settings]);
 }
 
 /** Отчёт о продажах/движении по истории снимков; null, если снимков меньше двух */
@@ -139,6 +166,30 @@ export function useSalesReport(): SalesReport | null {
 export function useSizeSalesReport(): SizeSalesReport | null {
   const { sizeSnapshots } = useData();
   return useMemo(() => analyzeSizeSales(sizeSnapshots), [sizeSnapshots]);
+}
+
+/**
+ * Ходовой товар: входит в hot-products.json (по артикулу) ИЛИ отмечен вручную
+ * в карточке товара. Используется для 🔥-бейджей и приоритета в перемещениях.
+ */
+export function useIsHot(): (product: {
+  article?: string;
+  link?: string;
+  name: string;
+}) => boolean {
+  const { hotProducts, settings } = useData();
+  const hotArticles = useMemo(
+    () => new Set(hotProducts.map((h) => h.article.trim().toLowerCase())),
+    [hotProducts]
+  );
+  return useCallback(
+    (product) => {
+      if (settings.hotProducts[productSettingsKey(product)]) return true;
+      const article = (product.article ?? '').trim().toLowerCase();
+      return article.length > 0 && hotArticles.has(article);
+    },
+    [hotArticles, settings]
+  );
 }
 
 /**

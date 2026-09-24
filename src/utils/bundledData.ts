@@ -13,6 +13,7 @@ import {
 } from './historyCore';
 import { sortStoresForDisplay } from './storeGroups';
 import { photoFileName } from './images';
+import { parseSettings, type ProductSettings } from './settings';
 import { productMeta, cleanBrand } from './productMeta';
 
 /**
@@ -62,6 +63,8 @@ export interface BundledDataset {
   sizeSnapshots: SizeSnapshot[];
   /** Ходовые товары (hot-products.json) */
   hotProducts: HotProductConfig[];
+  /** Общие настройки товаров из public/data/product-settings.json (если есть) */
+  settings: ProductSettings | null;
 }
 
 const isBadBrandValue = (brand: string): boolean =>
@@ -430,11 +433,12 @@ async function fetchSnapshotRows(url: string): Promise<Record<string, unknown>[]
 export async function loadBundledDataset(): Promise<BundledDataset> {
   const base = `${import.meta.env.BASE_URL ?? '/'}data/`;
 
-  const [productsText, sizesText, changesText, hotText] = await Promise.all([
+  const [productsText, sizesText, changesText, hotText, settingsText] = await Promise.all([
     fetchText(`${base}products.csv`),
     fetchText(`${base}sizes.csv`).catch(() => ''),
     fetchText(`${base}changes.csv`).catch(() => ''),
     fetchText(`${base}hot-products.json`).catch(() => ''),
+    fetchText(`${base}product-settings.json`).catch(() => ''),
   ]);
 
   const productsRows = parseCSVText(productsText);
@@ -502,5 +506,6 @@ export async function loadBundledDataset(): Promise<BundledDataset> {
 
   const asOf = history.length > 0 ? history[history.length - 1].date : undefined;
   const data = parseBundledRows(productsRows, sizesRows, { asOf });
-  return { data, history, changes, sizeSnapshots, hotProducts };
+  const settings = settingsText ? parseSettings(settingsText) : null;
+  return { data, history, changes, sizeSnapshots, hotProducts, settings };
 }

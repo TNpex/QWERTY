@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Search,
   ChevronDown,
@@ -9,7 +9,7 @@ import {
   LayoutGrid,
   List,
 } from 'lucide-react';
-import { useFilteredData, useHotArticles } from '../hooks/useAnalytics';
+import { useFilteredData, useIsHot } from '../hooks/useAnalytics';
 import { useData } from '../context/DataContext';
 import { compareSizes } from '../utils/sizes';
 import { isWarehouse, shortStoreLabel } from '../utils/storeGroups';
@@ -45,8 +45,8 @@ const NOT_CARRIED_CLASS = 'bg-gray-50 text-gray-400';
 export function InventoryTable() {
   // Данные уже отфильтрованы глобальной панелью (бренд / категория / пол / подтип / спорт)
   const data = useFilteredData();
-  const hotArticles = useHotArticles();
-  const { settings, delistedProducts, filters } = useData();
+  const isHot = useIsHot();
+  const { settings, delistedProducts, filters, storeProfile } = useData();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStore, setSelectedStore] = useState<string>('all');
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
@@ -69,6 +69,16 @@ export function InventoryTable() {
       /* приватный режим */
     }
   }, [viewMode]);
+
+  // Профиль «Мой магазин»: при выборе предустанавливаем фильтр магазина
+  const lastProfile = useRef<string | null>(null);
+  useEffect(() => {
+    if (lastProfile.current === storeProfile) return;
+    lastProfile.current = storeProfile;
+    if (!storeProfile || !data) return;
+    const store = data.stores.find((st) => st.name === storeProfile);
+    if (store) setSelectedStore(store.id);
+  }, [storeProfile, data]);
 
   const stores = useMemo(() => data?.stores ?? [], [data]);
   const products = useMemo(() => data?.products ?? [], [data]);
@@ -272,9 +282,8 @@ export function InventoryTable() {
               const isSoldOut = totalStock === 0;
               const sport = sportOf(product, settings.sportOverrides);
               const excluded = Boolean(excludedKeys[productSettingsKey(product)]);
-              const isHot = Boolean(
-                product.article && hotArticles.has(product.article.toLowerCase())
-              );
+              const hot = isHot(product);
+              const supplied = settings.suppliedProducts[productSettingsKey(product)] === true;
               return (
                 <button
                   key={product.id}
@@ -297,12 +306,20 @@ export function InventoryTable() {
                         ⛔
                       </span>
                     )}
-                    {isHot && (
+                    {hot && (
                       <span
                         className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 text-[10px] font-bold"
-                        title="Ходовой товар"
+                        title="Ходовой товар — приоритет в перемещениях"
                       >
                         🔥
+                      </span>
+                    )}
+                    {supplied && (
+                      <span
+                        className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 text-[9px] font-bold"
+                        title="Поставляется — участвует в дозакупке"
+                      >
+                        Поставка
                       </span>
                     )}
                   </div>
@@ -453,7 +470,7 @@ export function InventoryTable() {
                           ⛔
                         </span>
                       )}
-                      {product.article && hotArticles.has(product.article.toLowerCase()) && (
+                      {isHot(product) && (
                         <span
                           className="ml-1.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 text-[10px] font-bold uppercase tracking-wide align-middle"
                           title="Ходовой товар — на особом контроле (индивидуальный норматив запаса)"

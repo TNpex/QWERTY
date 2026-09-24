@@ -134,6 +134,19 @@ export function RestockRecommendations() {
 
   return (
     <div className="space-y-4">
+      {/* Показываются только товары, отмеченные «Поставляется» */}
+      <div className="bg-sky-50 border border-sky-200 rounded-xl px-4 py-2.5 text-xs text-sky-800">
+        Здесь только товары, отмеченные <b>«Поставляется»</b> в карточке товара (ходовые из
+        hot-products.json добавляются автоматически). Большинство позиций закупается разово —
+        отмечайте те, которые поставщик возит регулярно.
+        {recommendations.length === 0 && (
+          <span className="block mt-1 font-semibold">
+            Пока ни один товар не отмечен — откройте карточку товара (клик по названию в
+            «Инвентаре») и нажмите «Не поставляется → Поставляется».
+          </span>
+        )}
+      </div>
+
       {/* Шапка и действия */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
         <div className="flex flex-col lg:flex-row gap-3 lg:items-center">

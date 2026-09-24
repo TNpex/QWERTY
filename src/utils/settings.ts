@@ -20,11 +20,17 @@ export interface ProductSettings {
   sportOverrides: Record<string, Sport>;
   /** ключ товара → причина исключения ('услуга' | 'вручную') */
   excludedProducts: Record<string, string>;
+  /** ключ товара → true: товар ПОСТАВЛЯЕТСЯ (только они видны в «Дозакупке») */
+  suppliedProducts: Record<string, boolean>;
+  /** ключ товара → true: вручную отмечен как ходовой (🔥 + приоритет в перемещениях) */
+  hotProducts: Record<string, boolean>;
 }
 
 export const EMPTY_SETTINGS: ProductSettings = {
   sportOverrides: {},
   excludedProducts: {},
+  suppliedProducts: {},
+  hotProducts: {},
 };
 
 /** Достаёт значение из произвольного объекта по списку ключей (валидация импорта) */
@@ -35,6 +41,17 @@ function pickRecord(raw: unknown, allowed?: string[]): Record<string, string> {
     if (typeof value !== 'string' || !key.trim()) continue;
     if (allowed && !allowed.includes(value)) continue;
     result[key] = value;
+  }
+  return result;
+}
+
+/** То же, но для булевых флагов (Поставляется / Ходовой) */
+function pickBoolRecord(raw: unknown): Record<string, boolean> {
+  const result: Record<string, boolean> = {};
+  if (!raw || typeof raw !== 'object') return result;
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!key.trim()) continue;
+    if (value === true) result[key] = true;
   }
   return result;
 }
@@ -50,6 +67,8 @@ export function parseSettings(json: string): ProductSettings | null {
         Sport
       >,
       excludedProducts: pickRecord(raw.excludedProducts),
+      suppliedProducts: pickBoolRecord(raw.suppliedProducts),
+      hotProducts: pickBoolRecord(raw.hotProducts),
     };
   } catch {
     return null;
@@ -82,6 +101,8 @@ export function mergeSettings(
   return {
     sportOverrides: { ...current.sportOverrides, ...incoming.sportOverrides },
     excludedProducts: { ...current.excludedProducts, ...incoming.excludedProducts },
+    suppliedProducts: { ...current.suppliedProducts, ...incoming.suppliedProducts },
+    hotProducts: { ...current.hotProducts, ...incoming.hotProducts },
   };
 }
 
@@ -100,13 +121,17 @@ export function downloadSettings(settings: ProductSettings): void {
   URL.revokeObjectURL(url);
 }
 
-/** Сводка для сайдбара: сколько правок ориентации и исключений задано */
+/** Сводка для сайдбара: сколько ручных настроек задано */
 export function settingsCounts(settings: ProductSettings): {
   sports: number;
   excluded: number;
+  supplied: number;
+  hot: number;
 } {
   return {
     sports: Object.keys(settings.sportOverrides).length,
     excluded: Object.keys(settings.excludedProducts).length,
+    supplied: Object.keys(settings.suppliedProducts).length,
+    hot: Object.keys(settings.hotProducts).length,
   };
 }

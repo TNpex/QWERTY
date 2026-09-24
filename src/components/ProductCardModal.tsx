@@ -141,11 +141,14 @@ const SPORT_INACTIVE: Record<Sport, string> = {
  * экспортируется в сайдбаре («Настройки товаров — скачать JSON»).
  */
 function ProductSettingsPanel({ product }: { product: Product }) {
-  const { settings, setSportOverride, setProductExcluded } = useData();
+  const { settings, setSportOverride, setProductExcluded, setProductSupplied, setProductHot } =
+    useData();
   const key = productSettingsKey(product);
   const override = settings.sportOverrides[key];
   const current = override ?? detectSport(product.category ?? '', product.name ?? '');
   const excluded = Boolean(settings.excludedProducts[key]);
+  const supplied = settings.suppliedProducts[key] === true;
+  const manualHot = settings.hotProducts[key] === true;
 
   return (
     <div className="px-5 pb-4">
@@ -183,23 +186,60 @@ function ProductSettingsPanel({ product }: { product: Product }) {
             )}
           </div>
         </div>
-        <div className="md:ml-auto">
-          <div className="text-xs font-semibold text-gray-600 mb-2">Рекомендации</div>
-          <button
-            onClick={() => setProductExcluded(key, !excluded)}
-            className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-              excluded
-                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                : 'bg-white text-gray-600 border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200'
-            }`}
-          >
-            {excluded ? '✓ Вернуть в рекомендации' : '⛔ Исключить (услуга / не товар)'}
-          </button>
-          {excluded && (
-            <p className="text-[10px] text-gray-400 mt-1.5 max-w-[220px]">
-              Товар не участвует в «Перемещениях» и «Дозакупке». Выбор запомнен.
+        <div className="md:ml-auto flex flex-col gap-3 md:flex-row md:gap-6">
+          <div>
+            <div className="text-xs font-semibold text-gray-600 mb-2">Перемещение</div>
+            <button
+              onClick={() => setProductExcluded(key, !excluded)}
+              className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                excluded
+                  ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
+                  : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+              }`}
+              title="Нужен ли товар в рекомендациях по перемещению? Услуги и разовые позиции — «Не требуется»"
+            >
+              {excluded ? 'Не требуется' : 'Требуется'}
+            </button>
+            <p className="text-[10px] text-gray-400 mt-1 max-w-[150px]">
+              {excluded
+                ? 'Не участвует в «Перемещениях» и «Дозакупке»'
+                : 'Участвует в рекомендациях'}
             </p>
-          )}
+          </div>
+          <div>
+            <div className="text-xs font-semibold text-gray-600 mb-2">Дозакупка</div>
+            <button
+              onClick={() => setProductSupplied(key, !supplied)}
+              className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                supplied
+                  ? 'bg-sky-600 text-white border-sky-600'
+                  : 'bg-white text-gray-600 border-gray-200 hover:bg-sky-50'
+              }`}
+              title="Поставляется ли товар поставщиком регулярно? Во вкладке «Дозакупка» видны только такие товары"
+            >
+              {supplied ? 'Поставляется' : 'Не поставляется'}
+            </button>
+            <p className="text-[10px] text-gray-400 mt-1 max-w-[150px]">
+              {supplied ? 'Виден во вкладке «Дозакупка»' : 'Разовая закупка — в дозакупке скрыт'}
+            </p>
+          </div>
+          <div>
+            <div className="text-xs font-semibold text-gray-600 mb-2">Контроль</div>
+            <button
+              onClick={() => setProductHot(key, !manualHot)}
+              className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                manualHot
+                  ? 'bg-orange-500 text-white border-orange-500'
+                  : 'bg-white text-gray-600 border-gray-200 hover:bg-orange-50'
+              }`}
+              title="Ходовой товар: огонёк во всех списках и приоритет в рекомендациях по перемещению"
+            >
+              {manualHot ? '🔥 Ходовой товар' : '🔥 Сделать ходовым'}
+            </button>
+            <p className="text-[10px] text-gray-400 mt-1 max-w-[150px]">
+              {manualHot ? 'Первым в «Перемещениях», 🔥 везде' : 'Обычный режим контроля'}
+            </p>
+          </div>
         </div>
       </div>
     </div>
@@ -292,6 +332,22 @@ export function ProductCardModal({
               {soldOut && (
                 <span className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
                   <Flame className="w-3 h-3" /> Распродано
+                </span>
+              )}
+              {!hotRule && settings.hotProducts[productSettingsKey(product)] && (
+                <span
+                  className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700"
+                  title="Отмечен вручную как ходовой — приоритет в перемещениях"
+                >
+                  🔥 Ходовой
+                </span>
+              )}
+              {settings.suppliedProducts[productSettingsKey(product)] && (
+                <span
+                  className="text-xs font-semibold px-2 py-0.5 rounded-full bg-sky-100 text-sky-700"
+                  title="Поставляется — участвует в дозакупке"
+                >
+                  Поставляется
                 </span>
               )}
               {settings.excludedProducts[productSettingsKey(product)] && (
