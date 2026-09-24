@@ -44,6 +44,7 @@ import {
   type OrderSelection,
 } from '../utils/orderSelection';
 import { ProductCardModal, ProductImage } from './ProductCardModal';
+import { useProductRoute } from '../utils/router';
 import type { TransferRecommendation } from '../types';
 
 const PRIORITY_STYLES: Record<string, string> = {
@@ -176,7 +177,13 @@ export function TransferRecommendations() {
   const [selectedSubtype, setSelectedSubtype] = useState('all');
   const [showSpbExpensive, setShowSpbExpensive] = useState(false);
   const [showOverstock, setShowOverstock] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
+  // Карточка товара — часть адреса (?product=<id>): работает кнопка «Назад»,
+  // ссылку на товар можно скопировать, перезагрузка открывает ту же карточку
+  const {
+    productId: selectedProduct,
+    openProduct: openProductCard,
+    closeProduct: closeProductCard,
+  } = useProductRoute('transfers');
 
   useEffect(() => {
     try {
@@ -802,7 +809,7 @@ export function TransferRecommendations() {
                 }`}
               >
                 <button
-                  onClick={() => setSelectedProduct(product.productId)}
+                  onClick={() => openProductCard(product.productId)}
                   className="block w-full h-44 bg-gradient-to-br from-gray-50 to-blue-50 border-b border-gray-100"
                   title="Открыть карточку товара"
                 >
@@ -818,7 +825,7 @@ export function TransferRecommendations() {
                   <div className="flex items-start gap-2">
                     <div className="min-w-0 flex-1">
                       <button
-                        onClick={() => setSelectedProduct(product.productId)}
+                        onClick={() => openProductCard(product.productId)}
                         className="text-sm font-medium text-gray-800 hover:text-blue-600 hover:underline text-left leading-snug"
                         title={product.productName}
                       >
@@ -953,7 +960,7 @@ export function TransferRecommendations() {
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="min-w-0">
                     <button
-                      onClick={() => setSelectedProduct(product.productId)}
+                      onClick={() => openProductCard(product.productId)}
                       className="font-medium text-sm text-gray-800 hover:text-blue-600 hover:underline text-left"
                       title="Открыть карточку товара"
                     >
@@ -1152,7 +1159,7 @@ export function TransferRecommendations() {
                 >
                   <div className="min-w-0">
                     <button
-                      onClick={() => setSelectedProduct(pos.productId)}
+                      onClick={() => openProductCard(pos.productId)}
                       className="text-xs font-medium text-gray-800 hover:text-blue-600 hover:underline truncate block max-w-full text-left"
                       title={pos.productName}
                     >
@@ -1454,7 +1461,7 @@ export function TransferRecommendations() {
       )}
 
       {selectedProduct && (
-        <ProductCardModal productId={selectedProduct} onClose={() => setSelectedProduct(null)} />
+        <ProductCardModal productId={selectedProduct} onClose={() => closeProductCard()} />
       )}
     </div>
   );

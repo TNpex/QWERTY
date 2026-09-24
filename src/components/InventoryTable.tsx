@@ -15,6 +15,7 @@ import { compareSizes } from '../utils/sizes';
 import { isWarehouse, shortStoreLabel } from '../utils/storeGroups';
 import { sportOf, productSettingsKey } from '../utils/sport';
 import { ProductCardModal, ProductImage } from './ProductCardModal';
+import { useProductRoute } from '../utils/router';
 import { SportBadge } from './SportBadge';
 import type { InventoryItem } from '../types';
 
@@ -76,7 +77,13 @@ export function InventoryTable() {
   });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
+  // Карточка товара — часть адреса (?product=<id>): работает кнопка «Назад»,
+  // ссылку на товар можно скопировать, перезагрузка открывает ту же карточку
+  const {
+    productId: selectedProduct,
+    openProduct: openProductCard,
+    closeProduct: closeProductCard,
+  } = useProductRoute('inventory');
 
   // Выбор режима (таблица/карточки) запоминается в браузере
   useEffect(() => {
@@ -345,7 +352,7 @@ export function InventoryTable() {
               return (
                 <button
                   key={product.id}
-                  onClick={() => setSelectedProduct(product.id)}
+                  onClick={() => openProductCard(product.id)}
                   className="group text-left bg-white border border-gray-100 rounded-xl overflow-hidden hover:border-blue-300 hover:shadow-md transition-all flex flex-col"
                   title="Открыть карточку товара (наличие, ориентация, исключения)"
                 >
@@ -506,7 +513,7 @@ export function InventoryTable() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          setSelectedProduct(product.id);
+                          openProductCard(product.id);
                         }}
                         className="font-medium text-gray-800 hover:text-blue-600 hover:underline text-left break-words line-clamp-2"
                       >
@@ -850,7 +857,7 @@ export function InventoryTable() {
       </p>
 
       {selectedProduct && (
-        <ProductCardModal productId={selectedProduct} onClose={() => setSelectedProduct(null)} />
+        <ProductCardModal productId={selectedProduct} onClose={() => closeProductCard()} />
       )}
     </div>
   );

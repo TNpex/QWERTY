@@ -33,6 +33,7 @@ import { detectGender, GENDER_LABELS } from '../utils/productMeta';
 import { normalizeLink } from '../utils/historyCore';
 import type { ProductMovement, ParserChange } from '../utils/historyCore';
 import { ProductCardModal } from './ProductCardModal';
+import { useProductRoute } from '../utils/router';
 
 const CHANGE_TYPES = [
   'all',
@@ -201,7 +202,13 @@ export function SalesHistory() {
   const filteredData = useFilteredData();
   const report = useSalesReport();
   const metrics = useMetrics();
-  const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
+  // Карточка товара — часть адреса (?product=<id>): работает кнопка «Назад»,
+  // ссылку на товар можно скопировать, перезагрузка открывает ту же карточку
+  const {
+    productId: selectedProduct,
+    openProduct: openProductCard,
+    closeProduct: closeProductCard,
+  } = useProductRoute('sales');
 
   // Сопоставление движения товара с текущим каталогом (для клика → карточка)
   const productIdForMovement = (mv: ProductMovement): string | null => {
@@ -218,7 +225,7 @@ export function SalesHistory() {
 
   const openMovement = (mv: ProductMovement) => {
     const id = productIdForMovement(mv);
-    if (id) setSelectedProduct(id);
+    if (id) openProductCard(id);
     else if (mv.link) window.open(mv.link, '_blank', 'noopener');
   };
 
@@ -543,7 +550,7 @@ npm run snapshot -- путь/к/2026-09-24.csv
       )}
 
       {selectedProduct && (
-        <ProductCardModal productId={selectedProduct} onClose={() => setSelectedProduct(null)} />
+        <ProductCardModal productId={selectedProduct} onClose={() => closeProductCard()} />
       )}
     </div>
   );

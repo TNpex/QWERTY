@@ -11,6 +11,7 @@ import {
 } from '../utils/storeRules';
 import { isWarehouse, shortStoreLabel } from '../utils/storeGroups';
 import { ProductCardModal } from './ProductCardModal';
+import { useProductRoute } from '../utils/router';
 
 /**
  * 🏬 Магазины — профили точек продаж.
@@ -36,7 +37,9 @@ export function StoreProfiles() {
     useData();
   const [selected, setSelected] = useState<string>(storeProfile || '');
   const [query, setQuery] = useState('');
-  const [openProduct, setOpenProduct] = useState<string | null>(null);
+  // Карточка товара — часть адреса (?product=<id>), кнопка «Назад» её закрывает
+  const { productId: openProduct, openProduct: openCard, closeProduct: closeCard } =
+    useProductRoute('stores');
   const [savedFile, setSavedFile] = useState<string | null>(null);
 
   const products = useMemo(() => data?.products ?? [], [data]);
@@ -361,7 +364,7 @@ export function StoreProfiles() {
                   return (
                     <div key={product.id} className="flex items-center gap-2 px-3 py-2">
                       <button
-                        onClick={() => setOpenProduct(product.id)}
+                        onClick={() => openCard(product.id)}
                         className="text-xs text-gray-800 hover:text-blue-600 hover:underline text-left min-w-0 truncate"
                         title="Открыть карточку товара"
                       >
@@ -404,7 +407,7 @@ export function StoreProfiles() {
                       <span className="text-xs">🚫</span>
                       {product ? (
                         <button
-                          onClick={() => setOpenProduct(product.id)}
+                          onClick={() => openCard(product.id)}
                           className="text-xs text-gray-800 hover:text-blue-600 hover:underline text-left min-w-0 truncate"
                           title="Открыть карточку товара"
                         >
@@ -459,7 +462,7 @@ export function StoreProfiles() {
       </div>
 
       {openProduct && (
-        <ProductCardModal productId={openProduct} onClose={() => setOpenProduct(null)} />
+        <ProductCardModal productId={openProduct} onClose={closeCard} />
       )}
     </div>
   );

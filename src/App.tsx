@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { DataProvider, useData } from './context/DataContext';
 import { useMetrics } from './hooks/useAnalytics';
 import { oosLevel } from './utils/analyticsCore';
@@ -35,9 +35,21 @@ import {
 import { SalesHistory } from './components/SalesHistory';
 import { FilterBar } from './components/FilterBar';
 import { StoreProfiles } from './components/StoreProfiles';
+import { useRoute, useNavigateTab } from './utils/router';
 import type { TabId } from './types';
 
 type Tab = TabId;
+
+/** Подпись страницы в заголовке вкладки браузера */
+const TAB_TITLES: Record<TabId, string> = {
+  dashboard: '📊 Обзор',
+  inventory: '🎾 Инвентарь',
+  sales: '🔥 Продажи',
+  transfers: '🔄 Перемещения',
+  restock: '🛒 Дозакупка',
+  stores: '🏬 Магазины',
+  analytics: '📈 Аналитика',
+};
 
 const OOS_LEVEL_STYLES = {
   ok: { dot: 'bg-emerald-500', text: 'text-emerald-600' },
@@ -102,8 +114,16 @@ function AppContent() {
     storeProfile,
     setStoreProfile,
   } = useData();
-  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  // Каждая вкладка — своя страница: адрес меняется, работают «Назад»/«Вперёд»
+  const route = useRoute();
+  const activeTab: Tab = route.tab;
+  const setActiveTab = useNavigateTab();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Название раздела — в заголовок вкладки браузера
+  useEffect(() => {
+    document.title = `${TAB_TITLES[activeTab] ?? 'SaleTennis'} — SaleTennis BI`;
+  }, [activeTab]);
   const overrideCount = Object.keys(brandOverrides).length;
   const settingsFileRef = useRef<HTMLInputElement>(null);
   const [settingsMsg, setSettingsMsg] = useState<string | null>(null);

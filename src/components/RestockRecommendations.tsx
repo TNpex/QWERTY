@@ -17,6 +17,7 @@ import {
   supplierSheetRows,
 } from '../utils/supplierOrder';
 import { ProductCardModal } from './ProductCardModal';
+import { useProductRoute } from '../utils/router';
 import type { RestockUrgency } from '../types';
 
 const URGENCY_BADGES: Record<RestockUrgency, { label: string; color: string; border: string }> = {
@@ -55,7 +56,13 @@ async function exportOrderXlsx(rows: ExportRow[], label: string) {
 export function RestockRecommendations() {
   const data = useFilteredData();
   const recommendations = useRestockRecommendations();
-  const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
+  // Карточка товара — часть адреса (?product=<id>): работает кнопка «Назад»,
+  // ссылку на товар можно скопировать, перезагрузка открывает ту же карточку
+  const {
+    productId: selectedProduct,
+    openProduct: openProductCard,
+    closeProduct: closeProductCard,
+  } = useProductRoute('restock');
   const [exporting, setExporting] = useState(false);
 
   const productById = useMemo(
@@ -218,7 +225,7 @@ export function RestockRecommendations() {
                 <div className="flex items-start justify-between gap-3 mb-2">
                   <div className="min-w-0">
                     <button
-                      onClick={() => setSelectedProduct(rec.productId)}
+                      onClick={() => openProductCard(rec.productId)}
                       className="font-medium text-sm text-gray-800 hover:text-blue-600 hover:underline text-left"
                       title="Открыть карточку товара"
                     >
@@ -299,7 +306,7 @@ export function RestockRecommendations() {
       </div>
 
       {selectedProduct && (
-        <ProductCardModal productId={selectedProduct} onClose={() => setSelectedProduct(null)} />
+        <ProductCardModal productId={selectedProduct} onClose={() => closeProductCard()} />
       )}
     </div>
   );
