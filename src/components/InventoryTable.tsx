@@ -21,12 +21,28 @@ import type { InventoryItem } from '../types';
 // Единые пороги цветов (совпадают с легендой внизу таблицы)
 const SIZE_LOW = 2; // ≤ 2 шт одного размера в магазине — «мало»
 const STORE_LOW = 5; // < 5 шт суммарно в магазине — «мало»
-const PAGE_SIZE = 100; // порция отображаемых товаров («Показать ещё»)
+const PAGE_SIZES = [50, 100, 250]; // варианты «на странице»
+const DEFAULT_PAGE_SIZE = 50;
 const GHOST_LIMIT = 60; // сколько «убранных с сайта» товаров показывать списком
 const VIEW_MODE_KEY = 'st-inventory-view';
 
 type ViewMode = 'table' | 'cards';
 type Availability = 'all' | 'inStock' | 'soldOut';
+
+/** Номера страниц для пагинации: 1 … 4 [5] 6 … 22 */
+function pageList(current: number, total: number): (number | '…')[] {
+  const nums = new Set<number>([1, total]);
+  for (let n = current - 2; n <= current + 2; n++) {
+    if (n >= 1 && n <= total) nums.add(n);
+  }
+  const sorted = [...nums].sort((a, b) => a - b);
+  const result: (number | '…')[] = [];
+  sorted.forEach((n, i) => {
+    if (i > 0 && n - sorted[i - 1] > 1) result.push('…');
+    result.push(n);
+  });
+  return result;
+}
 
 function sizeCellClass(qty: number): string {
   if (qty === 0) return 'bg-red-100 text-red-700 font-bold';
@@ -58,7 +74,8 @@ export function InventoryTable() {
       return 'table';
     }
   });
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
 
   // Выбор режима (таблица/карточки) запоминается в браузере
@@ -123,24 +140,31 @@ export function InventoryTable() {
 
   const filteredProducts = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
+    const storeScoped = selectedStore !== 'all';
     return products.filter((p) => {
       const matchesSearch =
         !term ||
         p.name.toLowerCase().includes(term) ||
         p.brand.toLowerCase().includes(term) ||
         (p.article ?? '').toLowerCase().includes(term);
-      const total = indexes.productTotals.get(p.id) ?? 0;
+      // Выбран магазин — показываем только ЕГО инвентарь (товары, которые он возит)
+      if (storeScoped && !indexes.storeTotals.has(`${p.id}|${selectedStore}`)) return false;
+      const total = storeScoped
+        ? indexes.storeTotals.get(`${p.id}|${selectedStore}`)?.total ?? 0
+        : indexes.productTotals.get(p.id) ?? 0;
       const matchesAvailability =
         availability === 'all' ||
         (availability === 'inStock' ? total > 0 : total === 0);
       return matchesSearch && matchesAvailability;
     });
-  }, [products, searchTerm, availability, indexes]);
+  }, [products, searchTerm, availability, indexes, selectedStore]);
 
   // Товары, убранные с сайта (из истории снимков): показываются в «Все» и
   // «Распроданные»; поиск и глобальные фильтры к ним тоже применяются.
   const filteredDelisted = useMemo(() => {
-    if (availability === 'inStock' || delistedProducts.length === 0) return [];
+    if (availability === 'inStock' || selectedStore !== 'all' || delistedProducts.length === 0) {
+      return [];
+    }
     const term = searchTerm.trim().toLowerCase();
     return delistedProducts.filter((g) => {
       const matchesSearch =
@@ -158,20 +182,39 @@ export function InventoryTable() {
           ) === filters.sport);
       return matchesSearch && matchesFilters;
     });
-  }, [delistedProducts, searchTerm, availability, filters, settings]);
+  }, [delistedProducts, searchTerm, availability, filters, settings, selectedStore]);
 
-  const soldOutCount = useMemo(
-    () => products.filter((p) => (indexes.productTotals.get(p.id) ?? 0) === 0).length,
-    [products, indexes]
-  );
-  const inStockCount = products.length - soldOutCount;
+  // Счётчики наличия — по всей сети или по выбранному магазину
+  const scopedBase = useMemo(() => {
+    const storeScoped = selectedStore !== 'all';
+    const list = storeScoped
+      ? products.filter((p) => indexes.storeTotals.has(`${p.id}|${selectedStore}`))
+      : products;
+    let soldOut = 0;
+    for (const p of list) {
+      const total = storeScoped
+        ? indexes.storeTotals.get(`${p.id}|${selectedStore}`)?.total ?? 0
+        : indexes.productTotals.get(p.id) ?? 0;
+      if (total === 0) soldOut++;
+    }
+    return { carried: list.length, soldOut, inStock: list.length - soldOut };
+  }, [products, indexes, selectedStore]);
+  const selectedStoreName = stores.find((st) => st.id === selectedStore)?.name ?? '';
+
+  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
 
   const visibleProducts = useMemo(
-    () => filteredProducts.slice(0, visibleCount),
-    [filteredProducts, visibleCount]
+    () => filteredProducts.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    [filteredProducts, currentPage, pageSize]
   );
 
-  const resetPage = () => setVisibleCount(PAGE_SIZE);
+  const listTopRef = useRef<HTMLDivElement>(null);
+  const goPage = (n: number) => {
+    setPage(Math.max(1, Math.min(n, totalPages)));
+    listTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  const resetPage = () => setPage(1);
 
   if (!data) return null;
 
@@ -198,7 +241,10 @@ export function InventoryTable() {
         <div className="flex gap-3 flex-wrap">
           <select
             value={selectedStore}
-            onChange={(e) => setSelectedStore(e.target.value)}
+            onChange={(e) => {
+              setSelectedStore(e.target.value);
+              setPage(1);
+            }}
             className="px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm appearance-none bg-white cursor-pointer"
           >
             <option value="all">Все магазины</option>
@@ -218,7 +264,10 @@ export function InventoryTable() {
           <span className="font-semibold text-gray-700">
             {filteredProducts.length + filteredDelisted.length}
           </span>{' '}
-          из {products.length + delistedProducts.length}
+          из{' '}
+          {selectedStore === 'all'
+            ? products.length + delistedProducts.length
+            : `${scopedBase.carried} (столько возит выбранный магазин)`}
           {filteredDelisted.length > 0 && (
             <span className="text-gray-400"> (вкл. {filteredDelisted.length} убранных с сайта)</span>
           )}
@@ -228,11 +277,17 @@ export function InventoryTable() {
           <div className="inline-flex rounded-full border border-gray-200 overflow-hidden text-xs">
             {(
               [
-                ['all', `Все (${products.length + delistedProducts.length})`, 'bg-gray-700'],
-                ['inStock', `В наличии (${inStockCount})`, 'bg-emerald-500'],
+                [
+                  'all',
+                  `Все (${scopedBase.carried + (selectedStore === 'all' ? delistedProducts.length : 0)})`,
+                  'bg-gray-700',
+                ],
+                ['inStock', `В наличии (${scopedBase.inStock})`, 'bg-emerald-500'],
                 [
                   'soldOut',
-                  `Распроданные (${soldOutCount + delistedProducts.length})`,
+                  `Распроданные (${
+                    scopedBase.soldOut + (selectedStore === 'all' ? delistedProducts.length : 0)
+                  })`,
                   'bg-red-500',
                 ],
               ] as [Availability, string, string][]
@@ -274,11 +329,14 @@ export function InventoryTable() {
         </div>
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-2" ref={listTopRef}>
         {viewMode === 'cards' ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
             {visibleProducts.map((product) => {
-              const totalStock = indexes.productTotals.get(product.id) ?? 0;
+              const totalStock =
+                selectedStore === 'all'
+                  ? indexes.productTotals.get(product.id) ?? 0
+                  : indexes.storeTotals.get(`${product.id}|${selectedStore}`)?.total ?? 0;
               const isSoldOut = totalStock === 0;
               const sport = sportOf(product, settings.sportOverrides);
               const excluded = Boolean(excludedKeys[productSettingsKey(product)]);
@@ -352,7 +410,7 @@ export function InventoryTable() {
                 </button>
               );
             })}
-            {filteredDelisted.slice(0, GHOST_LIMIT).map((g) => {
+            {currentPage === totalPages && filteredDelisted.slice(0, GHOST_LIMIT).map((g) => {
               const sport = sportOf(
                 { article: g.article, link: g.link, name: g.name, category: g.category },
                 settings.sportOverrides
@@ -408,14 +466,21 @@ export function InventoryTable() {
         >
           <div>🎾 Товар</div>
           <div>Бренд</div>
-          <div className="text-center">Общий остаток</div>
+          <div className="text-center">
+            {selectedStore === 'all' || !selectedStoreName
+              ? 'Общий остаток'
+              : `Остаток · ${shortStoreLabel(selectedStoreName)}`}
+          </div>
           <div className="text-center">По магазинам</div>
         </div>
 
         {/* Product Rows */}
         {visibleProducts.map((product) => {
           const isExpanded = expandedProduct === product.id;
-          const totalStock = indexes.productTotals.get(product.id) ?? 0;
+          const totalStock =
+            selectedStore === 'all'
+              ? indexes.productTotals.get(product.id) ?? 0
+              : indexes.storeTotals.get(`${product.id}|${selectedStore}`)?.total ?? 0;
           const isSoldOut = totalStock === 0;
           const sizes = [...(indexes.sizesByProduct.get(product.id) ?? [])].sort(compareSizes);
 
@@ -618,7 +683,8 @@ export function InventoryTable() {
           );
         })}
 
-        {availability !== 'inStock' &&
+        {currentPage === totalPages &&
+          availability !== 'inStock' &&
           filteredDelisted.slice(0, GHOST_LIMIT).map((g) => {
             const sport = sportOf(
               { article: g.article, link: g.link, name: g.name, category: g.category },
@@ -680,15 +746,66 @@ export function InventoryTable() {
           </div>
         )}
 
-        {filteredProducts.length > visibleProducts.length && (
-          <div className="text-center pt-2">
-            <button
-              onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
-              className="px-6 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-blue-300 transition-colors"
-            >
-              Показать ещё {Math.min(PAGE_SIZE, filteredProducts.length - visibleProducts.length)}{' '}
-              (осталось {filteredProducts.length - visibleProducts.length})
-            </button>
+        {/* Пагинация: страницы + размер страницы + назад/вперёд */}
+        {filteredProducts.length > 0 && (
+          <div className="flex flex-col items-center gap-2 pt-3">
+            <div className="flex items-center gap-1.5 flex-wrap justify-center">
+              <button
+                onClick={() => goPage(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-sm text-gray-600 hover:border-blue-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                ‹ Назад
+              </button>
+              {pageList(currentPage, totalPages).map((n, i) =>
+                n === '…' ? (
+                  <span key={`gap-${i}`} className="px-1 text-gray-400 text-sm">
+                    …
+                  </span>
+                ) : (
+                  <button
+                    key={n}
+                    onClick={() => goPage(n)}
+                    className={`min-w-[2.2rem] px-2 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+                      n === currentPage
+                        ? 'bg-blue-600 border-blue-600 text-white'
+                        : 'bg-white border-gray-200 text-gray-600 hover:border-blue-300'
+                    }`}
+                  >
+                    {n}
+                  </button>
+                )
+              )}
+              <button
+                onClick={() => goPage(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-sm text-gray-600 hover:border-blue-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                Вперёд ›
+              </button>
+            </div>
+            <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap justify-center">
+              <span>
+                Страница {currentPage} из {totalPages} · товаров: {filteredProducts.length}
+              </span>
+              <label className="flex items-center gap-1.5">
+                На странице:
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setPage(1);
+                  }}
+                  className="px-2 py-1 border border-gray-200 rounded-lg bg-white text-xs cursor-pointer"
+                >
+                  {PAGE_SIZES.map((size) => (
+                    <option key={size} value={size}>
+                      {size}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
           </div>
         )}
       </div>
