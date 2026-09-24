@@ -117,6 +117,16 @@ export interface RestockRecommendation {
   hotMinPerStore?: number;
 }
 
+/** Вкладки приложения (навигация между разделами, например из карточек «Обзора») */
+export type TabId =
+  | 'dashboard'
+  | 'inventory'
+  | 'sales'
+  | 'transfers'
+  | 'restock'
+  | 'stores'
+  | 'analytics';
+
 /** Формат исходного файла: «длинный» (строка на остаток) или «широкий» (магазины-колонки) */
 export type FileFormat = 'long' | 'wide';
 

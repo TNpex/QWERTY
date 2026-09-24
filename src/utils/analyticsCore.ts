@@ -273,14 +273,44 @@ const ROUTE_ORDER: Record<TransferRoute, number> = {
  *    UI скрывает по умолчанию и предлагает дозаказать у поставщика).
  * 5. ПРИОРИТЕТ: высокий — дефицит (0) приоритетного размера: у женщин S/M,
  *    у мужчин M/L, плюс ходовые размеры обуви 41–44.
+ * 6. ПРОФИЛИ МАГАЗИНОВ (rules): 🚫 запрет товара в магазине, ⛔ ассортимент
+ *    точки (вид спорта / скрытые категории) и 📴 выключенные перемещения
+ *    убирают магазин из получателей; ⭐ минимум на позицию делает магазин
+ *    получателем, даже если остаток уже 2 шт., и заполняет его до минимума.
  */
-export function getTransferRecommendations(data: ParsedData): TransferRecommendation[] {
+
+/** Правила магазинов для расчёта перемещений (см. utils/storeRules.ts) */
+export interface TransferRules {
+  /** Можно ли предложить товар этому магазину (получателю) */
+  canReceive?: (storeName: string, product: Product) => boolean;
+  /** Участвует ли магазин в перемещениях как донор */
+  canDonate?: (storeName: string) => boolean;
+  /** ⭐ Минимум на позицию в магазине-получателе (0 — не задан) */
+  minimumFor?: (storeName: string, product: Product) => number;
+}
+
+/** Правила магазинов для расчёта дозакупки */
+export interface RestockRules {
+  /** Продаёт ли точка этот товар (норматив ходовых считается только по «своим») */
+  sellsIn?: (storeName: string, product: Product) => boolean;
+}
+
+export function getTransferRecommendations(
+  data: ParsedData,
+  rules: TransferRules = {}
+): TransferRecommendation[] {
   const storeById = new Map(data.stores.map((s) => [s.id, s]));
   const { itemsByProduct } = buildIndex(data);
   const recommendations: TransferRecommendation[] = [];
 
   const warehouse = data.stores.find((s) => isWarehouse(s.name));
-  const storesOrdered = sortStoresForDisplay(data.stores).filter((s) => s.id !== warehouse?.id);
+  const canDonate = rules.canDonate ?? (() => true);
+  const canReceive = rules.canReceive ?? (() => true);
+  const minimumFor = rules.minimumFor ?? (() => 0);
+  // Склад — источник, а не получатель; доноры с выключенными перемещениями исключаются
+  const storesOrdered = sortStoresForDisplay(data.stores).filter(
+    (s) => s.id !== warehouse?.id && canDonate(s.name)
+  );
   const cityRank = new Map(data.stores.map((s, i) => [s.id, i]));
 
   for (const product of data.products) {
@@ -291,6 +321,14 @@ export function getTransferRecommendations(data: ParsedData): TransferRecommenda
     const shoe = isShoeCategory(product.category);
     const bySize = groupBySize(items);
 
+    // Профили магазинов: кому этот товар вообще можно предложить + минимумы на позицию
+    const allowedStores = storesOrdered.filter((s) => canReceive(s.name, product));
+    if (allowedStores.length === 0) continue;
+    const minimumByStore = new Map<string, number>();
+    for (const store of allowedStores) {
+      minimumByStore.set(store.id, Math.max(0, Math.round(minimumFor(store.name, product))));
+    }
+
     for (const [size, stock] of bySize) {
       if (stock.total === 0) continue;
 
@@ -298,14 +336,20 @@ export function getTransferRecommendations(data: ParsedData): TransferRecommenda
         isPrioritySize(gender, size) ||
         (shoe && POPULAR_SHOE_SIZES.includes(size.replace('.', ',')));
 
-      // ---- Получатели: магазины, где размера 0 или 1 ----
-      const recipients = storesOrdered
+      // ---- Получатели: магазины, где размера 0–1 или не хватает до ⭐ минимума ----
+      const recipients = allowedStores
         .filter((s) => {
           const qty = stock.byStore.get(s.id);
-          return qty !== undefined && qty <= 1;
+          if (qty === undefined) return false;
+          const min = minimumByStore.get(s.id) ?? 0;
+          return qty <= 1 || (min > 0 && qty < min);
         })
         .sort((a, b) => (cityRank.get(a.id) ?? 0) - (cityRank.get(b.id) ?? 0));
       if (recipients.length === 0) continue;
+
+      /** До скольки заполняем получателя: 2 шт. или ⭐ минимум, если он больше */
+      const fillTo = (storeId: string): number =>
+        Math.max(FILL_TO, minimumByStore.get(storeId) ?? 0);
 
       const makeRec = (
         fromId: string,
@@ -352,7 +396,7 @@ export function getTransferRecommendations(data: ParsedData): TransferRecommenda
         if (warehouseAvailable > 0) {
           for (const recipient of recipients) {
             if (warehouseAvailable <= 0) break;
-            const need = FILL_TO - (stock.byStore.get(recipient.id) ?? 0);
+            const need = fillTo(recipient.id) - (stock.byStore.get(recipient.id) ?? 0);
             const move = Math.min(warehouseAvailable, need);
             const rec = makeRec(
               warehouse.id,
@@ -400,7 +444,7 @@ export function getTransferRecommendations(data: ParsedData): TransferRecommenda
           if (available <= 0) break;
           if (recipient.id === donor.store.id) continue;
           const currentQty = recipientWorking.get(recipient.id) ?? 0;
-          const need = FILL_TO - currentQty;
+          const need = fillTo(recipient.id) - currentQty;
           if (need <= 0) continue;
           const move = Math.min(available, need, TRANSFER_CAP);
           if (move <= 0) continue;
@@ -502,7 +546,8 @@ const URGENCY_ORDER: Record<RestockUrgency, number> = { critical: 0, high: 1, me
  */
 export function getRestockRecommendations(
   data: ParsedData,
-  hotRules?: { article: string; minPerStore: number }[]
+  hotRules?: { article: string; minPerStore: number }[],
+  rules: RestockRules = {}
 ): RestockRecommendation[] {
   const { itemsByProduct } = buildIndex(data);
   const recommendations: RestockRecommendation[] = [];
@@ -529,7 +574,13 @@ export function getRestockRecommendations(
       }
       let totalNeeded = 0;
       let currentStock = 0;
-      for (const store of retailStores) {
+      // Норматив «минимум в каждом магазине» считается только по «своим» точкам:
+      // магазин «только падел» не должен держать теннисный товар, запрет товара
+      // в магазине и скрытая категория — тоже.
+      const applicableStores = retailStores.filter(
+        (store) => !rules.sellsIn || rules.sellsIn(store.name, product)
+      );
+      for (const store of applicableStores) {
         const have = storeTotals.get(store.id) ?? 0;
         currentStock += have;
         totalNeeded += Math.max(0, hotMin - have);
@@ -557,7 +608,7 @@ export function getRestockRecommendations(
         .map((s) => ({ size: s.size, quantity: s.quantity, target: s.current + s.quantity, current: s.current }))
         .sort((a, b) => compareSizes(a.size, b.size));
 
-      const normTotal = hotMin * retailStores.length;
+      const normTotal = hotMin * applicableStores.length;
       const coveragePercent = normTotal > 0 ? Math.round((currentStock / normTotal) * 100) : 100;
 
       recommendations.push({

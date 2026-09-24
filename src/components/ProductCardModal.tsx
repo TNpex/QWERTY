@@ -12,6 +12,7 @@ import {
 import { SportBadge } from './SportBadge';
 import { compareSizes } from '../utils/sizes';
 import { isWarehouse, getStoreCity, shortStoreLabel } from '../utils/storeGroups';
+import { storeRuleText, storeRuleView, storeRuleViews } from '../utils/storeRules';
 import type { InventoryItem, Product } from '../types';
 
 /**
@@ -246,57 +247,195 @@ function ProductSettingsPanel({ product }: { product: Product }) {
   );
 }
 
+/** Все магазины сразу (кнопка «Все магазины» в правилах по магазинам) */
+const ALL_STORES = '__all__';
+
 /**
- * Минимальный остаток в магазине профиля «Мой магазин».
- * Позиции с нехваткой до минимума поднимаются первыми во входящих
- * перемещениях и помечаются ⭐. Хранится в настройках (общий JSON).
+ * 🏬 Правила по магазинам для одного товара.
+ *
+ * - «Минимум, шт.» — для «Моего магазина» или для любого другого (вплоть до
+ *   «Все магазины»): нехватка до минимума поднимается в перемещениях первой,
+ *   помечается ⭐ и заполняется до минимума;
+ * - «Запретить» — товар больше не предлагается этому магазину в перемещениях
+ *   (на Парина рекомендация остаётся, на Елизаветинском шоссе — исчезает).
+ *   Запрет сильнее всех остальных правил и снимается одной кнопкой;
+ * - в строке каждого магазина виден статус: ✅ перемещение разрешено /
+ *   ⭐ минимум N шт. / 🚫 запрещено / ⛔ магазин не продаёт «Теннис».
+ *
+ * Всё хранится в настройках товаров (localStorage + общий product-settings.json).
  */
-function StoreMinimumPanel({ product }: { product: Product }) {
-  const { storeProfile, settings, setStoreMinimum } = useData();
+function StoreRulesPanel({ product }: { product: Product }) {
+  const { data, settings, storeProfile, setStoreMinimum, setProductBanned } = useData();
   const key = productSettingsKey(product);
-  const saved = storeProfile ? settings.storeMinimums[storeProfile]?.[key] ?? 0 : 0;
-  const [value, setValue] = useState(saved ? String(saved) : '');
+  const storeNames = useMemo(() => (data?.stores ?? []).map((s) => s.name), [data]);
+  const [target, setTarget] = useState<string>(storeProfile || ALL_STORES);
 
+  // «Мой магазин» сменили в сайдбаре — переводим правило на него
   useEffect(() => {
-    setValue(saved ? String(saved) : '');
-  }, [saved, storeProfile]);
+    if (storeProfile && target === ALL_STORES) setTarget(storeProfile);
+  }, [storeProfile, target]);
 
-  if (!storeProfile) return null;
+  const views = useMemo(
+    () => storeRuleViews(settings, storeNames, product),
+    [settings, storeNames, product]
+  );
 
-  const commit = (raw: string) => {
+  const effectiveTarget = target === ALL_STORES ? null : target;
+  const savedMin = effectiveTarget
+    ? settings.storeMinimums[effectiveTarget]?.[key] ?? 0
+    : 0;
+  const [minValue, setMinValue] = useState(savedMin ? String(savedMin) : '');
+  useEffect(() => {
+    setMinValue(savedMin ? String(savedMin) : '');
+  }, [savedMin, target]);
+
+  const bannedInTarget = effectiveTarget
+    ? views.find((v) => v.storeName === effectiveTarget)?.status === 'banned'
+    : views.some((v) => v.status === 'banned');
+
+  const commitMinimum = (raw: string) => {
     const num = parseInt(raw.replace(',', '.'), 10);
-    setStoreMinimum(storeProfile, key, Number.isFinite(num) && num > 0 ? num : null);
+    const value = Number.isFinite(num) && num > 0 ? num : null;
+    const stores = effectiveTarget ? [effectiveTarget] : storeNames;
+    for (const store of stores) setStoreMinimum(store, key, value);
+  };
+
+  const toggleBan = () => {
+    const stores = effectiveTarget ? [effectiveTarget] : storeNames;
+    for (const store of stores) setProductBanned(store, key, !bannedInTarget);
   };
 
   return (
     <div className="px-5 pb-4">
-      <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4">
-        <div className="text-xs font-semibold text-blue-800 mb-2">📍 Мой магазин: {storeProfile}</div>
+      <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
+        <div className="flex items-center gap-2 flex-wrap mb-3">
+          <div className="text-xs font-semibold text-indigo-900">🏬 Правила по магазинам</div>
+          <select
+            value={target}
+            onChange={(e) => setTarget(e.target.value)}
+            className="px-2.5 py-1.5 border border-indigo-200 rounded-lg text-xs bg-white cursor-pointer focus:ring-2 focus:ring-indigo-400"
+            title="К какому магазину применить минимум и запрет"
+          >
+            <option value={ALL_STORES}>🌐 Все магазины</option>
+            {storeProfile && (
+              <option value={storeProfile}>📍 Мой магазин: {storeProfile}</option>
+            )}
+            {storeNames
+              .filter((name) => name !== storeProfile)
+              .map((name) => (
+                <option key={name} value={name}>
+                  {isWarehouse(name) ? '📦 ' : ''}
+                  {name}
+                </option>
+              ))}
+          </select>
+        </div>
+
         <div className="flex items-center gap-2.5 flex-wrap">
           <label htmlFor="store-minimum-input" className="text-xs text-gray-600">
-            Минимальный остаток в магазине, шт.:
+            Минимум, шт.:
           </label>
           <input
             id="store-minimum-input"
             type="number"
             min={0}
             max={99}
-            value={value}
+            value={minValue}
             onChange={(e) => {
-              setValue(e.target.value);
-              commit(e.target.value);
+              setMinValue(e.target.value);
+              commitMinimum(e.target.value);
             }}
             placeholder="0"
-            className="w-20 px-2 py-1.5 text-sm border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-400 bg-white"
+            className="w-20 px-2 py-1.5 text-sm border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-400 bg-white"
+            title={
+              effectiveTarget
+                ? `Минимальный остаток в «${effectiveTarget}» (индивидуальный минимум перекрывает минимум магазина по умолчанию)`
+                : 'Минимальный остаток сразу во всех магазинах'
+            }
           />
-          {saved > 0 ? (
-            <span className="text-[11px] text-blue-700">
-              ⭐ Задан минимум {saved} шт. — нехватка будет первой во входящих перемещениях
-            </span>
-          ) : (
-            <span className="text-[11px] text-gray-400">0 или пусто — минимум не задан</span>
-          )}
+          <button
+            onClick={toggleBan}
+            className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+              bannedInTarget
+                ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-500'
+                : 'bg-white text-red-600 border-red-200 hover:bg-red-50'
+            }`}
+            title={
+              bannedInTarget
+                ? 'Снять запрет — товар снова будет предлагаться магазину'
+                : 'Запретить товар в этом магазине: он исчезнет из перемещений сюда (запрет сильнее всех остальных правил)'
+            }
+          >
+            {bannedInTarget ? '✓ Снять запрет' : '🚫 Запретить'}
+          </button>
+          <span className="text-[11px] text-gray-500">
+            {bannedInTarget
+              ? '🚫 Товар запрещён — в перемещения этому магазину не предлагается'
+              : savedMin > 0
+                ? `⭐ Минимум ${savedMin} шт. — нехватка будет первой в перемещениях`
+                : effectiveTarget
+                  ? '0 или пусто — правило не задано'
+                  : 'Правило применится сразу ко всем магазинам'}
+          </span>
         </div>
+
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-1.5">
+          {views.map((view) => (
+            <div
+              key={view.storeName}
+              className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] border ${
+                view.status === 'banned'
+                  ? 'bg-red-50 border-red-200'
+                  : view.blocked || view.status === 'transfers-off'
+                    ? 'bg-gray-50 border-gray-200'
+                    : view.status === 'minimum'
+                      ? 'bg-amber-50 border-amber-200'
+                      : 'bg-white border-gray-100'
+              }`}
+              title={storeRuleText(view)}
+            >
+              <span className="flex-shrink-0">{view.icon}</span>
+              <span className="font-medium text-gray-700 truncate" title={view.storeName}>
+                {isWarehouse(view.storeName) ? '📦 ' : ''}
+                {view.storeName}
+              </span>
+              <span
+                className={`ml-auto flex-shrink-0 ${
+                  view.status === 'banned'
+                    ? 'text-red-600 font-semibold'
+                    : view.blocked || view.status === 'transfers-off'
+                      ? 'text-gray-500'
+                      : view.status === 'minimum'
+                        ? 'text-amber-700 font-semibold'
+                        : 'text-emerald-600'
+                }`}
+              >
+                {view.status === 'banned'
+                  ? 'запрещено'
+                  : view.status === 'minimum'
+                    ? `минимум ${view.minimum} шт.`
+                    : view.status === 'allowed'
+                      ? 'перемещение разрешено'
+                      : view.label}
+              </span>
+              <button
+                onClick={() => setProductBanned(view.storeName, key, view.status !== 'banned')}
+                className="flex-shrink-0 px-1.5 py-0.5 rounded border border-gray-200 bg-white text-[10px] text-gray-500 hover:bg-gray-50"
+                title={
+                  view.status === 'banned'
+                    ? `Снять запрет в «${view.storeName}»`
+                    : `Запретить товар в «${view.storeName}»`
+                }
+              >
+                {view.status === 'banned' ? '✓' : '🚫'}
+              </button>
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 text-[10px] text-gray-400">
+          ⛔ — магазин не продаёт этот вид спорта или категорию (профиль на вкладке «🏬 Магазины»);
+          📴 — перемещения магазина выключены; 🚫 запрет сильнее всех остальных правил.
+        </p>
       </div>
     </div>
   );
@@ -469,6 +608,7 @@ export function ProductCardModal({
                 const warehouse = isWarehouse(store.name);
                 const total = view.storeTotals.get(store.id);
                 const carried = view.items.some((i) => i.storeId === store.id);
+                const rule = storeRuleView(settings, store.name, product);
                 return (
                   <div
                     key={store.id}
@@ -486,6 +626,14 @@ export function ProductCardModal({
                       <span className="text-[10px] text-gray-400 ml-2">
                         {getStoreCity(store.name)}
                       </span>
+                      {rule.status !== 'allowed' && (
+                        <span
+                          className="text-[10px] ml-1.5"
+                          title={storeRuleText(rule)}
+                        >
+                          {rule.icon}
+                        </span>
+                      )}
                     </div>
                     {carried ? (
                       <span
@@ -510,7 +658,7 @@ export function ProductCardModal({
 
         <ProductSettingsPanel product={product} />
 
-        <StoreMinimumPanel product={product} />
+        <StoreRulesPanel product={product} />
 
         {/* Размерная сетка — ВСЕ магазины */}
         {view.sizes.length > 0 && (

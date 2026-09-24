@@ -4,8 +4,10 @@ import {
   mergeSettings,
   settingsCounts,
   settingsToJson,
+  hasStoreRules,
   EMPTY_SETTINGS,
 } from './settings';
+import { storeProfileJson, storeProfileFileName, EMPTY_STORE_PROFILE } from './storeRules';
 
 describe('parseSettings', () => {
   it('разбирает валидный JSON, отсеивая мусор и недопустимые значения', () => {
@@ -22,6 +24,7 @@ describe('parseSettings', () => {
       suppliedProducts: {},
       hotProducts: {},
       storeMinimums: {},
+      storeProfiles: {},
     });
   });
 
@@ -40,6 +43,7 @@ describe('mergeSettings', () => {
         suppliedProducts: { s1: true },
         hotProducts: { h1: true },
         storeMinimums: { Уфа: { k1: 3 } },
+        storeProfiles: {},
       },
       {
         sportOverrides: { a: 'other' },
@@ -47,6 +51,7 @@ describe('mergeSettings', () => {
         suppliedProducts: { s2: true },
         hotProducts: {},
         storeMinimums: { Уфа: { k2: 5 }, Ижевск: { k3: 2 } },
+        storeProfiles: {},
       }
     );
     expect(merged.sportOverrides).toEqual({ a: 'other', b: 'padel' });
@@ -65,6 +70,8 @@ describe('settingsCounts / roundtrip', () => {
       supplied: 0,
       hot: 0,
       minimums: 0,
+      profiles: 0,
+      bans: 0,
     });
     expect(
       settingsCounts({
@@ -73,8 +80,22 @@ describe('settingsCounts / roundtrip', () => {
         suppliedProducts: { d: true },
         hotProducts: { e: true, f: true },
         storeMinimums: { Уфа: { k1: 3, k2: 2 }, Ижевск: { k3: 4 } },
+        storeProfiles: {
+          Уфа: { ...EMPTY_STORE_PROFILE, bannedProducts: { k1: true, k9: true } },
+          Ижевск: { ...EMPTY_STORE_PROFILE, sport: 'padel', defaultMinimum: 2 },
+          Тюмень: { ...EMPTY_STORE_PROFILE },
+        },
       })
-    ).toEqual({ sports: 1, excluded: 2, supplied: 1, hot: 2, minimums: 3 });
+    ).toEqual({
+      sports: 1,
+      excluded: 2,
+      supplied: 1,
+      hot: 2,
+      minimums: 3,
+      // Тюмень: профиль пустой и минимумов нет — в счётчик не попадает
+      profiles: 2,
+      bans: 2,
+    });
   });
 
   it('флаги «Поставляется»/«Ходовой»: принимает только true', () => {
@@ -95,6 +116,16 @@ describe('settingsCounts / roundtrip', () => {
       suppliedProducts: { c: true },
       hotProducts: { d: true },
       storeMinimums: { Уфа: { k1: 3 } },
+      storeProfiles: {
+        Уфа: {
+          sport: 'padel' as const,
+          hiddenCategories: ['Струны'],
+          transfersDisabled: true,
+          defaultMinimum: 2,
+          bannedProducts: { k1: true as const },
+          note: 'мало места',
+        },
+      },
     };
     expect(parseSettings(settingsToJson(settings))).toEqual(settings);
   });
@@ -110,5 +141,106 @@ describe('settingsCounts / roundtrip', () => {
       })
     );
     expect(parsed?.storeMinimums).toEqual({ Уфа: { a: 3, d: 4 } });
+  });
+});
+
+describe('storeProfiles в настройках', () => {
+  it('разбирает профиль магазина, мусор отбрасывает', () => {
+    const parsed = parseSettings(
+      JSON.stringify({
+        storeProfiles: {
+          'Екатеринбург (Парина)': {
+            sport: 'padel',
+            hiddenCategories: ['Струны', 'Струны', '  ', 5],
+            transfersDisabled: 'yes',
+            defaultMinimum: '3',
+            bannedProducts: { 'ts76-bkwh': true, 'other': false },
+            note: '  точка в ТЦ  ',
+          },
+          Уфа: 'не объект',
+        },
+      })
+    );
+    expect(Object.keys(parsed!.storeProfiles)).toEqual(['Екатеринбург (Парина)']);
+    expect(parsed!.storeProfiles['Екатеринбург (Парина)']).toEqual({
+      sport: 'padel',
+      hiddenCategories: ['Струны'],
+      transfersDisabled: false,
+      defaultMinimum: 3,
+      bannedProducts: { 'ts76-bkwh': true },
+      note: '  точка в ТЦ  ',
+    });
+  });
+
+  it('неизвестный вид спорта → all', () => {
+    const parsed = parseSettings(
+      JSON.stringify({ storeProfiles: { Уфа: { sport: 'футбол' } } })
+    );
+    expect(parsed!.storeProfiles['Уфа'].sport).toBe('all');
+  });
+
+  it('импорт профиля магазина заменяет профиль и его минимумы целиком', () => {
+    const merged = mergeSettings(
+      {
+        ...EMPTY_SETTINGS,
+        storeMinimums: { Уфа: { k1: 3, k2: 2 } },
+        storeProfiles: {
+          Уфа: { ...EMPTY_STORE_PROFILE, bannedProducts: { k9: true }, note: 'старая' },
+        },
+      },
+      {
+        ...EMPTY_SETTINGS,
+        storeMinimums: { Уфа: { k1: 5 } },
+        storeProfiles: { Уфа: { ...EMPTY_STORE_PROFILE, sport: 'padel' } },
+      }
+    );
+    // магазин из входящего файла важнее: старый запрет и снятый минимум не воскресают
+    expect(merged.storeProfiles['Уфа'].sport).toBe('padel');
+    expect(merged.storeProfiles['Уфа'].bannedProducts).toEqual({});
+    expect(merged.storeMinimums).toEqual({ Уфа: { k1: 5 } });
+  });
+
+  it('магазин без профиля во входящем файле сохраняется как был', () => {
+    const merged = mergeSettings(
+      { ...EMPTY_SETTINGS, storeMinimums: { Ижевск: { k3: 4 } }, storeProfiles: {} },
+      { ...EMPTY_SETTINGS, storeProfiles: { Уфа: { ...EMPTY_STORE_PROFILE, sport: 'padel' } } }
+    );
+    expect(merged.storeMinimums).toEqual({ Ижевск: { k3: 4 } });
+  });
+
+  it('профиль магазина выгружается файлом формата product-settings.json', () => {
+    const settings = {
+      ...EMPTY_SETTINGS,
+      sportOverrides: { 'общий-товар': 'padel' as const },
+      storeMinimums: { Уфа: { k1: 3 }, Ижевск: { k2: 2 } },
+      storeProfiles: {
+        Уфа: { ...EMPTY_STORE_PROFILE, bannedProducts: { k1: true as const }, defaultMinimum: 2 },
+      },
+    };
+    const json = storeProfileJson(settings, 'Уфа');
+    const parsed = parseSettings(json);
+    expect(parsed).not.toBeNull();
+    // формат совместим: те же поля, но только данные этого магазина
+    expect(parsed!.storeProfiles).toEqual(settings.storeProfiles);
+    expect(parsed!.storeMinimums).toEqual({ Уфа: { k1: 3 } });
+    expect(parsed!.sportOverrides).toEqual({});
+    // импорт своего же профиля ничего не ломает
+    expect(mergeSettings(settings, parsed!).storeProfiles['Уфа'].bannedProducts).toEqual({ k1: true });
+    expect(storeProfileFileName('Екатеринбург (Елизаветинское шоссе)')).toBe(
+      'product-settings-екатеринбург-елизаветинское-шоссе.json'
+    );
+  });
+
+  it('hasStoreRules: пусто без правил по магазинам', () => {
+    expect(hasStoreRules(EMPTY_SETTINGS)).toBe(false);
+    expect(
+      hasStoreRules({ ...EMPTY_SETTINGS, storeMinimums: { Уфа: { k1: 2 } } })
+    ).toBe(true);
+    expect(
+      hasStoreRules({
+        ...EMPTY_SETTINGS,
+        storeProfiles: { Уфа: { ...EMPTY_STORE_PROFILE, bannedProducts: { k1: true } } },
+      })
+    ).toBe(true);
   });
 });

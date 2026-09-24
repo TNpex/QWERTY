@@ -25,6 +25,7 @@ import {
   parseSettings,
   type ProductSettings,
 } from '../utils/settings';
+import { EMPTY_STORE_PROFILE, type StoreProfile } from '../utils/storeRules';
 
 /** Профиль «Мой магазин» — локальный для устройства (в общий JSON не входит) */
 const PROFILE_STORAGE_KEY = 'saletennis-store-profile';
@@ -98,8 +99,12 @@ interface DataContextType {
   /** Профиль «Мой магазин» (название магазина или '') — локально для устройства */
   storeProfile: string;
   setStoreProfile: (storeName: string) => void;
-  /** Минимальный остаток товара в магазине профиля (null — снять минимум) */
+  /** Минимальный остаток товара в магазине (null — снять индивидуальный минимум) */
   setStoreMinimum: (storeName: string, key: string, value: number | null) => void;
+  /** 🚫 Запретить/разрешить товар в конкретном магазине (сильнее всех остальных правил) */
+  setProductBanned: (storeName: string, key: string, banned: boolean) => void;
+  /** Профиль магазина: вид спорта, скрытые категории, перемещения, минимум, заметка */
+  updateStoreProfile: (storeName: string, patch: Partial<StoreProfile>) => void;
   /** Данные корзины saletennis.com (cart-map.json от парсера) */
   cartMap: CartMap | null;
   /** Сессия saletennis.com (значение PHPSESSID) — хранится только в этом браузере */
@@ -356,6 +361,55 @@ export function DataProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  // 🚫 Индивидуальный запрет товара в магазине (сильнее всех остальных правил)
+  const setProductBanned = useCallback((storeName: string, key: string, banned: boolean) => {
+    const store = storeName.trim();
+    const productKey = key.trim();
+    if (!store || !productKey) return;
+    setSettingsState((current) => {
+      const profile: StoreProfile = {
+        ...EMPTY_STORE_PROFILE,
+        ...(current.storeProfiles[store] ?? {}),
+      };
+      const bannedProducts = { ...profile.bannedProducts };
+      if (banned) bannedProducts[productKey] = true;
+      else delete bannedProducts[productKey];
+      const next = {
+        ...current,
+        storeProfiles: { ...current.storeProfiles, [store]: { ...profile, bannedProducts } },
+      };
+      saveSettings(next);
+      return next;
+    });
+  }, []);
+
+  // Профиль магазина (вид спорта, скрытые категории, перемещения, минимум, заметка)
+  const updateStoreProfile = useCallback((storeName: string, patch: Partial<StoreProfile>) => {
+    const store = storeName.trim();
+    if (!store) return;
+    setSettingsState((current) => {
+      const profile: StoreProfile = {
+        ...EMPTY_STORE_PROFILE,
+        ...(current.storeProfiles[store] ?? {}),
+      };
+      const nextProfile: StoreProfile = { ...profile, ...patch };
+      // Пустой профиль не храним — настройки остаются чистыми
+      const empty =
+        nextProfile.sport === 'all' &&
+        nextProfile.hiddenCategories.length === 0 &&
+        !nextProfile.transfersDisabled &&
+        nextProfile.defaultMinimum <= 0 &&
+        Object.keys(nextProfile.bannedProducts).length === 0 &&
+        !nextProfile.note.trim();
+      const storeProfiles = { ...current.storeProfiles };
+      if (empty) delete storeProfiles[store];
+      else storeProfiles[store] = nextProfile;
+      const next = { ...current, storeProfiles };
+      saveSettings(next);
+      return next;
+    });
+  }, []);
+
   const importSettings = useCallback((json: string) => {
     const parsed = parseSettings(json);
     if (!parsed) return false;
@@ -425,6 +479,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       storeProfile,
       setStoreProfile,
       setStoreMinimum,
+      setProductBanned,
+      updateStoreProfile,
       cartMap,
       saletennisSession,
       setSaletennisSession,
@@ -443,7 +499,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       data, hydrated, loading, error, history, parserChanges, bundledData,
       productImages, sizeSnapshots, hotProducts, brandOverrides, setBrandOverride,
       settings, setSportOverride, setProductExcluded, setProductSupplied, setProductHot,
-      storeProfile, setStoreProfile, setStoreMinimum, cartMap, saletennisSession,
+      storeProfile, setStoreProfile, setStoreMinimum, setProductBanned, updateStoreProfile,
+      cartMap, saletennisSession,
       setSaletennisSession, importSettings, delistedProducts,
       filters, setFilters, resetFilters, setData, clearData, restoreBundled,
     ]

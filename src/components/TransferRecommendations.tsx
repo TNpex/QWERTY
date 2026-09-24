@@ -10,8 +10,16 @@ import {
   ExternalLink,
   MapPin,
   Shirt,
+  LayoutGrid,
+  List,
+  Flame,
 } from 'lucide-react';
-import { useFilteredData, useTransferRecommendations } from '../hooks/useAnalytics';
+import {
+  useFilteredData,
+  useIsHot,
+  useStoreProfileSummaries,
+  useTransferRecommendations,
+} from '../hooks/useAnalytics';
 import { useData } from '../context/DataContext';
 import {
   MAX_TRANSFER_DISPLAY,
@@ -22,16 +30,20 @@ import {
   getOverstockPositions,
 } from '../utils/analyticsCore';
 import { isWarehouse, shortStoreLabel, ROUTE_LABELS, type TransferRoute } from '../utils/storeGroups';
+import { effectiveMinimum, STORE_SPORT_LABELS } from '../utils/storeRules';
 import { productSettingsKey } from '../utils/sport';
+import { ORDER_BOOKMARKLET, type CartLine } from '../utils/cart';
 import {
-  resolveCartItems,
-  cartLinesToText,
-  orderUrl,
-  ORDER_BOOKMARKLET,
-  type CartItemPayload,
-  type CartLine,
-} from '../utils/cart';
-import { ProductCardModal } from './ProductCardModal';
+  addLines,
+  buildOrder,
+  dropLines,
+  removeLine,
+  setLineQty,
+  summarizeKeys,
+  toggleLine,
+  type OrderSelection,
+} from '../utils/orderSelection';
+import { ProductCardModal, ProductImage } from './ProductCardModal';
 import type { TransferRecommendation } from '../types';
 
 const PRIORITY_STYLES: Record<string, string> = {
@@ -65,38 +77,114 @@ interface OptionGroupView {
   key: string;
   size: string;
   toStore: string;
+  toStoreId: string;
   toQty: number;
   variants: TransferRecommendation[];
 }
 
+interface ProductGroupView {
+  productId: string;
+  productName: string;
+  productLink?: string;
+  groups: Map<string, OptionGroupView>;
+}
+
 type MyScope = 'incoming' | 'outgoing' | 'all';
+/** Вид списка рекомендаций: строки или карточки с фото (выбор запоминается) */
+type ViewMode = 'list' | 'cards';
+
+const VIEW_STORAGE_KEY = 'saletennis-transfers-view';
+
+function loadViewMode(): ViewMode {
+  try {
+    return localStorage.getItem(VIEW_STORAGE_KEY) === 'cards' ? 'cards' : 'list';
+  } catch {
+    return 'list';
+  }
+}
+
+/** Счётчик −/+ (общее значение для строки, плавающей панели и окна заказа) */
+function QtyStepper({
+  value,
+  onChange,
+  dark = false,
+}: {
+  value: number;
+  onChange: (value: number) => void;
+  dark?: boolean;
+}) {
+  const btn = dark
+    ? 'bg-white/10 hover:bg-white/25 text-white'
+    : 'bg-white hover:bg-gray-100 text-gray-600 border border-gray-200';
+  const input = dark
+    ? 'bg-white/10 border-white/20 text-white'
+    : 'bg-white border-gray-200 text-gray-800';
+  return (
+    <div className="flex items-center gap-1 flex-shrink-0">
+      <button
+        onClick={() => onChange(value - 1)}
+        className={`w-6 h-6 rounded font-bold ${btn}`}
+        title="Меньше"
+        type="button"
+      >
+        −
+      </button>
+      <input
+        type="number"
+        min={1}
+        max={99}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className={`w-12 h-6 text-center rounded border text-xs focus:ring-1 focus:ring-emerald-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${input}`}
+        title="Сколько заказать (значение общее для строки, панели корзины и окна заказа)"
+      />
+      <button
+        onClick={() => onChange(value + 1)}
+        className={`w-6 h-6 rounded font-bold ${btn}`}
+        title="Больше"
+        type="button"
+      >
+        +
+      </button>
+    </div>
+  );
+}
 
 export function TransferRecommendations() {
   const data = useFilteredData();
   const recommendations = useTransferRecommendations();
+  const isHot = useIsHot();
+  const profileSummaries = useStoreProfileSummaries();
   const { storeProfile, settings, cartMap, saletennisSession, setSaletennisSession } = useData();
   const [myScope, setMyScope] = useState<MyScope>('all');
   // Корзина: выбранные позиции (ключ группы → строка), отправка, сессия
-  const [selected, setSelected] = useState<Map<string, CartLine>>(new Map());
+  const [selected, setSelected] = useState<OrderSelection>(new Map());
   const [cartBusy, setCartBusy] = useState<string | null>(null);
   const [cartMessage, setCartMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [showSessionInput, setShowSessionInput] = useState(false);
   const [sessionDraft, setSessionDraft] = useState('');
   const [showHelp, setShowHelp] = useState(false);
-  // Модальное окно заказа: позиции, вход на сайт, ошибки
-  const [orderPayload, setOrderPayload] = useState<{
-    url: string;
-    items: CartItemPayload[];
-    count: number;
-    units: number;
-    missingCount: number;
-  } | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>(loadViewMode);
+  /**
+   * Окно заказа НЕ хранит снимок списка: оно открыто/закрыто, а содержимое
+   * (числа, ссылка, текст) каждый раз считается из текущего выбора — иначе
+   * правка количества в плавающей панели не доезжала до сайта (уезжало 1 шт.).
+   */
+  const [orderOpen, setOrderOpen] = useState(false);
   const [toStoreId, setToStoreId] = useState('all');
   const [fromStoreId, setFromStoreId] = useState('all');
   const [selectedSubtype, setSelectedSubtype] = useState('all');
   const [showSpbExpensive, setShowSpbExpensive] = useState(false);
   const [showOverstock, setShowOverstock] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(VIEW_STORAGE_KEY, viewMode);
+    } catch {
+      /* приватный режим */
+    }
+  }, [viewMode]);
 
   // Подтипы одежды (носки, футболки, шорты, платья…) — из товаров текущей выборки
   const subtypes = useMemo(() => {
@@ -137,25 +225,26 @@ export function TransferRecommendations() {
 
   const spbExpensiveCount = recommendations.filter((r) => r.route === 'spb-expensive').length;
 
-  // ⭐ Минимумы «Моего магазина»: нехватка до минимума поднимается первой
   const productsById = useMemo(
     () => new Map((data?.products ?? []).map((p) => [p.id, p])),
     [data]
   );
-  const profileMinimums = useMemo(
-    () => (storeProfile ? settings.storeMinimums[storeProfile] ?? {} : {}),
-    [storeProfile, settings]
-  );
+
+  /**
+   * ⭐ Минимум магазина-получателя: индивидуальный минимум товара перекрывает
+   * минимум по умолчанию из профиля магазина. Действует для ЛЮБОГО магазина,
+   * а не только для «Моего».
+   */
   const getMinInfo = useCallback(
-    (rec: TransferRecommendation | undefined): { min: number; current: number } | null => {
-      if (!rec || !profileStoreId || rec.toStoreId !== profileStoreId) return null;
+    (rec: TransferRecommendation | undefined): { min: number; current: number; store: boolean } | null => {
+      if (!rec) return null;
       const product = productsById.get(rec.productId);
       if (!product) return null;
-      const min = profileMinimums[productSettingsKey(product)];
+      const { min, source } = effectiveMinimum(settings, rec.toStore, productSettingsKey(product));
       if (!min || min <= 0 || rec.toQty >= min) return null;
-      return { min, current: rec.toQty };
+      return { min, current: rec.toQty, store: source === 'store' };
     },
-    [profileStoreId, productsById, profileMinimums]
+    [productsById, settings]
   );
 
   const filtered = useMemo(
@@ -177,10 +266,7 @@ export function TransferRecommendations() {
 
   // Группировка: товар → группы вариантов (размер+получатель) → источники-альтернативы
   const productGroups = useMemo(() => {
-    const byProduct = new Map<
-      string,
-      { productId: string; productName: string; productLink?: string; groups: Map<string, OptionGroupView> }
-    >();
+    const byProduct = new Map<string, ProductGroupView>();
     for (const rec of filtered) {
       let product = byProduct.get(rec.productId);
       if (!product) {
@@ -194,7 +280,14 @@ export function TransferRecommendations() {
       }
       let group = product.groups.get(rec.optionGroup);
       if (!group) {
-        group = { key: rec.optionGroup, size: rec.size, toStore: rec.toStore, toQty: rec.toQty, variants: [] };
+        group = {
+          key: rec.optionGroup,
+          size: rec.size,
+          toStore: rec.toStore,
+          toStoreId: rec.toStoreId,
+          toQty: rec.toQty,
+          variants: [],
+        };
         product.groups.set(rec.optionGroup, group);
       }
       group.variants.push(rec);
@@ -202,13 +295,12 @@ export function TransferRecommendations() {
     return [...byProduct.values()].slice(0, MAX_TRANSFER_DISPLAY);
   }, [filtered]);
 
-  // Товары с нехваткой до минимума «моего магазина» — первыми (сортировка устойчивая)
+  // Товары с нехваткой до ⭐ минимума — первыми (сортировка устойчивая)
   const sortedProductGroups = useMemo(() => {
-    if (!profileStoreId) return productGroups;
-    const weight = (g: (typeof productGroups)[number]) =>
+    const weight = (g: ProductGroupView) =>
       [...g.groups.values()].some((gr) => getMinInfo(gr.variants[0])) ? 0 : 1;
     return [...productGroups].sort((a, b) => weight(a) - weight(b));
-  }, [productGroups, profileStoreId, getMinInfo]);
+  }, [productGroups, getMinInfo]);
 
   // ---- Корзина: выбор позиций и отправка на saletennis.com ----
   const totalUnits = useMemo(
@@ -216,70 +308,83 @@ export function TransferRecommendations() {
     [selected]
   );
 
-  const toggleLine = (group: OptionGroupView) => {
-    setSelected((prev) => {
-      const next = new Map(prev);
-      if (next.has(group.key)) {
-        next.delete(group.key);
-        return next;
-      }
-      const rec = group.variants[0];
-      next.set(group.key, {
-        key: group.key,
-        name: rec.productName,
-        ...(rec.productLink ? { link: rec.productLink } : {}),
-        size: group.size,
-        quantity: Math.max(1, rec.quantity),
-        toStore: group.toStore,
-      });
-      return next;
-    });
+  /**
+   * Заказ считается ИЗ ТЕКУЩЕГО ВЫБОРА при каждом рендере: ссылка, числа и
+   * текст всегда свежие, из какого бы места ни правили количество.
+   */
+  const order = useMemo(() => buildOrder(cartMap, selected), [cartMap, selected]);
+
+  const toggleGroup = (group: OptionGroupView) => {
+    const rec = group.variants[0];
+    const line: Omit<CartLine, 'quantity'> & { quantity?: number } = {
+      key: group.key,
+      name: rec.productName,
+      ...(rec.productLink ? { link: rec.productLink } : {}),
+      size: group.size,
+      quantity: Math.max(1, rec.quantity),
+      toStore: group.toStore,
+    };
+    setSelected((prev) => toggleLine(prev, line));
   };
 
   const changeQty = (key: string, value: number) => {
+    setSelected((prev) => setLineQty(prev, key, value));
+  };
+
+  /** Карточный вид: отметить/снять все дефициты товара сразу */
+  const toggleProduct = (product: ProductGroupView) => {
+    const keys = [...product.groups.keys()];
+    const summary = summarizeKeys(selected, keys);
     setSelected((prev) => {
-      const line = prev.get(key);
-      if (!line) return prev;
-      const next = new Map(prev);
-      next.set(key, { ...line, quantity: Math.max(1, Math.min(99, Math.round(value) || 1)) });
-      return next;
+      if (summary.positions === keys.length) return dropLines(prev, keys);
+      return addLines(
+        prev,
+        [...product.groups.values()].map((group) => {
+          const rec = group.variants[0];
+          const existing = prev.get(group.key);
+          return {
+            key: group.key,
+            name: rec.productName,
+            ...(rec.productLink ? { link: rec.productLink } : {}),
+            size: group.size,
+            quantity: existing ? existing.quantity : Math.max(1, rec.quantity),
+            toStore: group.toStore,
+          };
+        })
+      );
     });
   };
 
   /**
-   * Основной сценарий (без cookie): открыть корзину saletennis.com со списком
-   * в #stcart — там пользователь жмёт кнопку-закладку, и товары добавляются
-   * под ЕГО собственным логином. Не залогинен — сайт попросит войти, список
-   * сохранится (кнопка-закладка запомнит его в localStorage страницы).
+   * Основной сценарий (без cookie): открыть окно заказа. Ссылка на корзину
+   * saletennis.com со списком в #stcart собирается в момент нажатия кнопки
+   * внутри окна — из свежих количеств.
    */
   const goOrder = () => {
-    const lines = [...selected.values()];
-    if (lines.length === 0 || cartBusy !== null) return;
-    const { items, missing } = resolveCartItems(cartMap, lines);
-    if (items.length === 0) {
+    if (order.empty || cartBusy !== null) return;
+    if (order.items.length === 0) {
       setCartMessage({
-        text: `Не удалось собрать заказ: ${missing[0]?.reason ?? 'нет данных корзины'}. Используйте «Скопировать список».`,
+        text: `Не удалось собрать заказ: ${order.missing[0]?.reason ?? 'нет данных корзины'}. Используйте «Скопировать список».`,
         error: true,
       });
       return;
     }
-    if (missing.length > 0) {
+    setOrderOpen(true);
+  };
+
+  const openCart = () => {
+    // Свежая ссылка (включая последние правки количества) — в момент клика
+    const draft = buildOrder(cartMap, selected);
+    if (draft.missing.length > 0) {
       navigator.clipboard
-        ?.writeText(cartLinesToText(missing.map((m) => m.line)))
+        ?.writeText(draft.missing.map((m) => `${m.line.name} | ${m.line.size} | ${m.line.quantity} шт. — ${m.reason}`).join('\n'))
         .catch(() => undefined);
     }
-    const payload = {
-      url: orderUrl(items),
-      items,
-      count: items.length,
-      units: items.reduce((sum, i) => sum + i.count, 0),
-      missingCount: missing.length,
-    };
-    setOrderPayload(payload);
+    window.open(draft.url, '_blank', 'noopener');
   };
 
   const copyList = async () => {
-    const text = cartLinesToText([...selected.values()]);
+    const text = buildOrder(cartMap, selected).text;
     try {
       await navigator.clipboard.writeText(text);
       setCartMessage({ text: 'Список скопирован в буфер обмена', error: false });
@@ -289,9 +394,10 @@ export function TransferRecommendations() {
   };
 
   const sendToCart = async () => {
-    const lines = [...selected.values()];
-    if (lines.length === 0 || cartBusy) return;
-    const { items, missing } = resolveCartItems(cartMap, lines);
+    if (order.empty || cartBusy) return;
+    // Свежие позиции — в момент нажатия (не снимок)
+    const draft = buildOrder(cartMap, selected);
+    const { items, missing } = draft;
     const sessionCookie = saletennisSession.trim();
     if (!sessionCookie) {
       setSessionDraft(saletennisSession);
@@ -373,13 +479,13 @@ export function TransferRecommendations() {
     if (added > 0) {
       window.open('https://www.saletennis.com/cabinet/cart/', '_blank', 'noopener');
       setSelected(new Map());
-      setOrderPayload(null);
+      setOrderOpen(false);
     }
     const parts = [`Добавлено в корзину: ${added} из ${items.length}`];
     if (missing.length > 0) {
       parts.push(`${missing.length} позиций без данных корзины — список скопирован в буфер`);
       navigator.clipboard
-        ?.writeText(cartLinesToText(missing.map((m) => m.line)))
+        ?.writeText(missing.map((m) => `${m.line.name} | ${m.line.size} | ${m.line.quantity} шт.`).join('\n'))
         .catch(() => undefined);
     }
     if (errors.length > 0) {
@@ -432,6 +538,63 @@ export function TransferRecommendations() {
         </div>
       )}
 
+      {/* Плашка: какие профили магазинов учтены и почему часть рекомендаций скрыта */}
+      {profileSummaries.length > 0 && (
+        <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3">
+          <div className="text-xs font-semibold text-indigo-900 mb-1.5">
+            🏬 Учтены профили магазинов ({profileSummaries.length}) — часть рекомендаций скрыта
+            намеренно
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {profileSummaries.map((summary) => {
+              const reasons: string[] = [];
+              if (summary.profile.sport !== 'all') {
+                reasons.push(
+                  `${STORE_SPORT_LABELS[summary.profile.sport]} → скрыто ${summary.excluded.sport} тов.`
+                );
+              }
+              if (summary.profile.hiddenCategories.length > 0) {
+                reasons.push(
+                  `⛔ категории (${summary.profile.hiddenCategories.length}) → скрыто ${summary.excluded.category} тов.`
+                );
+              }
+              if (Object.keys(summary.profile.bannedProducts).length > 0) {
+                reasons.push(
+                  `🚫 запреты: ${Object.keys(summary.profile.bannedProducts).length} тов.`
+                );
+              }
+              if (summary.profile.transfersDisabled) reasons.push('📴 перемещения выключены');
+              if (summary.profile.defaultMinimum > 0) {
+                reasons.push(`⭐ минимум ${summary.profile.defaultMinimum} шт. на позицию`);
+              }
+              if (reasons.length === 0) reasons.push('правила не заданы');
+              return (
+                <span
+                  key={summary.storeName}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-indigo-200 text-[11px] text-gray-700"
+                  title={`${summary.storeName}: ${reasons.join('; ')}. Вне ассортимента точки: ${summary.excluded.total} из ${summary.products} товаров — они не предлагаются магазину в перемещениях и не участвуют в его нормативе дозакупки.`}
+                >
+                  <b className="text-indigo-800">
+                    {isWarehouse(summary.storeName) ? '📦 ' : ''}
+                    {shortStoreLabel(summary.storeName)}
+                  </b>
+                  <span className="text-gray-500">{reasons.join(' · ')}</span>
+                  {summary.excluded.total > 0 && (
+                    <span className="text-[10px] text-red-500 font-semibold">
+                      −{summary.excluded.total} тов.
+                    </span>
+                  )}
+                </span>
+              );
+            })}
+          </div>
+          <p className="text-[10px] text-indigo-500 mt-2">
+            Профили правятся на вкладке «🏬 Магазины», индивидуальные запреты и минимумы — в
+            карточке товара («🏬 Правила по магазинам»). 🚫 Запрет сильнее всех остальных правил.
+          </p>
+        </div>
+      )}
+
       {/* Панель фильтров */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
         <div className="flex flex-col lg:flex-row gap-3 lg:items-center">
@@ -448,6 +611,31 @@ export function TransferRecommendations() {
             </p>
           </div>
           <div className="flex gap-2 flex-wrap">
+            {/* Переключатель список ⇄ карточки (выбор запоминается) */}
+            <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden">
+              <button
+                onClick={() => setViewMode('list')}
+                className={`px-2.5 py-2 text-xs font-medium transition-colors ${
+                  viewMode === 'list'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-gray-500 hover:bg-gray-50'
+                }`}
+                title="Список: строки с вариантами перемещения"
+              >
+                <List className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('cards')}
+                className={`px-2.5 py-2 text-xs font-medium transition-colors ${
+                  viewMode === 'cards'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-gray-500 hover:bg-gray-50'
+                }`}
+                title="Карточки: крупное фото товара, дефициты и остатки по магазинам"
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+            </div>
             {subtypes.length > 0 && (
               <select
                 value={selectedSubtype}
@@ -544,7 +732,8 @@ export function TransferRecommendations() {
             Правила: в магазинах <b>Екатеринбурга, Тюмени, Уфы, Ижевска</b> избытком считается{' '}
             <b>&gt; {CITY_EXCESS_TRIGGER - 1} шт.</b> одного размера (донор оставляет{' '}
             {CITY_DONOR_KEEP}), в <b>Санкт-Петербурге</b> — <b>&gt; {SPB_EXCESS_TRIGGER - 1} шт.</b>{' '}
-            (оставляет {SPB_DONOR_KEEP}); перемещаем туда, где позиции <b>0 или 1</b>.{' '}
+            (оставляет {SPB_DONOR_KEEP}); перемещаем туда, где позиции <b>0 или 1</b> (или не
+            хватает до ⭐ минимума магазина).{' '}
             <b>Склад — без правил</b>: если размер есть на складе, показываем вариант перевозки
             одновременно с магазинным (это <b>альтернативы</b>, выбирайте одну). 🔝 Приоритет —
             приоритетные размеры (женские S/M, мужские M/L, обувь 41–44) при нуле у получателя.
@@ -581,8 +770,9 @@ export function TransferRecommendations() {
               <span className="ml-2 text-gray-400">← перетащить, не нажимать</span>
             </p>
             <p>
-              <b>Как заказывать закладкой:</b> 1) отметьте позиции и количество → 2) «Перейти
-              к заказу» → «Открыть корзину со списком» → 3) на открытой странице нажмите
+              <b>Как заказывать закладкой:</b> 1) отметьте позиции и количество (счётчик −/+ есть в
+              строке рекомендации, в плавающей панели и в окне заказа — значение общее) → 2)
+              «Перейти к заказу» → «Открыть корзину со списком» → 3) на открытой странице нажмите
               закладку «🛒 SaleTennis Заказ» — товары добавятся в корзину <b>вашего браузера</b>{' '}
               (входить на сайт не обязательно) → 4) оформляйте заказ.
             </p>
@@ -594,157 +784,332 @@ export function TransferRecommendations() {
         </div>
       )}
 
-      {/* Карточки товаров */}
-      <div className="space-y-3">
-        {sortedProductGroups.map((product) => {
-          const storeTotals = productStoreTotals.get(product.productId);
-          const brand = data.products.find((p) => p.id === product.productId)?.brand ?? '';
-          return (
-            <div
-              key={product.productId}
-              className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md transition-all"
-            >
-              <div className="flex items-start justify-between gap-3 mb-3">
-                <div className="min-w-0">
-                  <button
-                    onClick={() => setSelectedProduct(product.productId)}
-                    className="font-medium text-sm text-gray-800 hover:text-blue-600 hover:underline text-left"
-                    title="Открыть карточку товара"
-                  >
-                    {product.productName}
-                  </button>
-                  {product.productLink && (
-                    <a
-                      href={product.productLink}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="ml-1.5 text-gray-400 hover:text-blue-500"
-                      title="Открыть на saletennis.com"
-                    >
-                      <ExternalLink className="w-3 h-3 inline" />
-                    </a>
-                  )}
-                  <div className="text-xs text-gray-500 mt-0.5">{brand}</div>
-                </div>
-                <span className="text-xs font-bold text-gray-700 bg-gray-100 px-2.5 py-1 rounded-full flex-shrink-0">
-                  {product.groups.size} дефиц.
-                </span>
-              </div>
-
-              {/* Наглядные текущие остатки по магазинам */}
-              {storeTotals && (
-                <div className="flex flex-wrap gap-1.5 mb-3">
-                  {data.stores
-                    .filter((s) => storeTotals.has(s.id))
-                    .map((store) => {
-                      const qty = storeTotals.get(store.id) ?? 0;
-                      const warehouse = isWarehouse(store.name);
-                      return (
-                        <span
-                          key={store.id}
-                          title={`${store.name}: ${qty} шт.`}
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] border ${
-                            warehouse
-                              ? 'bg-blue-50 border-blue-200 text-blue-700'
-                              : qty === 0
-                                ? 'bg-red-50 border-red-200 text-red-600'
-                                : qty >= CITY_EXCESS_TRIGGER
-                                  ? 'bg-amber-50 border-amber-200 text-amber-700'
-                                  : 'bg-gray-50 border-gray-200 text-gray-600'
-                          }`}
-                        >
-                          {shortStoreLabel(store.name)}: <b>{qty}</b>
-                        </span>
-                      );
-                    })}
-                </div>
-              )}
-
-              {/* Группы вариантов: один дефицит — несколько альтернативных источников */}
-              <div className="space-y-2">
-                {[...product.groups.values()].map((group) => (
-                  <div
-                    key={group.key}
-                    className={`rounded-lg px-3 py-2 ${
-                      selected.has(group.key)
-                        ? 'bg-emerald-50 ring-1 ring-emerald-300'
-                        : 'bg-gray-50'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                      <input
-                        type="checkbox"
-                        checked={selected.has(group.key)}
-                        onChange={() => toggleLine(group)}
-                        className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer flex-shrink-0"
-                        title="Выбрать позицию в корзину saletennis.com"
-                      />
-                      <span className="font-bold text-xs text-gray-800 bg-white border border-gray-200 rounded px-2 py-0.5">
-                        {group.size}
-                      </span>
-                      <span className="text-xs text-gray-500">
-                        нужно в <b className="text-gray-700">{shortStoreLabel(group.toStore)}</b>{' '}
-                        (сейчас {group.toQty})
-                      </span>
-                      {(() => {
-                        const mi = getMinInfo(group.variants[0]);
-                        return mi ? (
-                          <span
-                            className="text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-300 rounded-full px-2 py-0.5"
-                            title={`Минимум для «${storeProfile}»: ${mi.min} шт.`}
-                          >
-                            ⭐ Минимум {mi.min} (есть {mi.current})
-                          </span>
-                        ) : null;
-                      })()}
-                      {group.variants.length > 1 && (
-                        <span className="text-[10px] font-semibold text-purple-600 bg-purple-50 border border-purple-200 rounded-full px-2 py-0.5">
-                          {group.variants.length} варианта — выберите один
-                        </span>
-                      )}
+      {/* Карточки товаров (вид «карточки»: крупное фото) */}
+      {viewMode === 'cards' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
+          {sortedProductGroups.map((product) => {
+            const storeTotals = productStoreTotals.get(product.productId);
+            const fullProduct = productsById.get(product.productId);
+            const keys = [...product.groups.keys()];
+            const inOrder = summarizeKeys(selected, keys);
+            const hot = fullProduct ? isHot(fullProduct) : false;
+            const minGroups = [...product.groups.values()].filter((g) => getMinInfo(g.variants[0]));
+            return (
+              <div
+                key={product.productId}
+                className={`bg-white rounded-xl shadow-sm border overflow-hidden flex flex-col hover:shadow-md transition-all ${
+                  inOrder.positions > 0 ? 'border-emerald-300 ring-1 ring-emerald-200' : 'border-gray-100'
+                }`}
+              >
+                <button
+                  onClick={() => setSelectedProduct(product.productId)}
+                  className="block w-full h-44 bg-gradient-to-br from-gray-50 to-blue-50 border-b border-gray-100"
+                  title="Открыть карточку товара"
+                >
+                  {fullProduct ? (
+                    <ProductImage product={fullProduct} alt={product.productName} />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gray-300">
+                      <Package className="w-12 h-12" />
                     </div>
-                    <div className="space-y-1">
-                      {group.variants.map((rec) => {
-                        const RouteIcon = ROUTE_ICONS[rec.route];
-                        return (
-                          <div
-                            key={`${rec.fromStoreId}|${rec.size}|${rec.toStoreId}`}
-                            className="flex items-center gap-2 flex-wrap text-xs bg-white rounded-lg px-3 py-1.5 border border-gray-100"
+                  )}
+                </button>
+                <div className="p-3 flex flex-col gap-2 flex-1">
+                  <div className="flex items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      <button
+                        onClick={() => setSelectedProduct(product.productId)}
+                        className="text-sm font-medium text-gray-800 hover:text-blue-600 hover:underline text-left leading-snug"
+                        title={product.productName}
+                      >
+                        {hot && '🔥 '}
+                        {product.productName}
+                      </button>
+                      <div className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1.5">
+                        <span>{fullProduct?.brand ?? ''}</span>
+                        {product.productLink && (
+                          <a
+                            href={product.productLink}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-gray-400 hover:text-blue-500"
+                            title="Открыть на saletennis.com"
+                            onClick={(e) => e.stopPropagation()}
                           >
+                            <ExternalLink className="w-3 h-3 inline" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                    <span
+                      className="text-[11px] font-bold text-gray-700 bg-gray-100 px-2 py-1 rounded-full flex-shrink-0"
+                      title="Сколько размерных дефицитов у товара"
+                    >
+                      {product.groups.size} дефиц.
+                    </span>
+                  </div>
+
+                  {minGroups.length > 0 && (
+                    <span className="self-start text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-300 rounded-full px-2 py-0.5">
+                      ⭐ минимум не закрыт: {minGroups.length} поз.
+                    </span>
+                  )}
+
+                  {/* Остатки по магазинам */}
+                  {storeTotals && (
+                    <div className="flex flex-wrap gap-1">
+                      {data.stores
+                        .filter((s) => storeTotals.has(s.id))
+                        .map((store) => {
+                          const qty = storeTotals.get(store.id) ?? 0;
+                          const warehouse = isWarehouse(store.name);
+                          return (
                             <span
-                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${ROUTE_STYLES[rec.route]}`}
+                              key={store.id}
+                              title={`${store.name}: ${qty} шт.`}
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] border ${
+                                warehouse
+                                  ? 'bg-blue-50 border-blue-200 text-blue-700'
+                                  : qty === 0
+                                    ? 'bg-red-50 border-red-200 text-red-600'
+                                    : qty >= CITY_EXCESS_TRIGGER
+                                      ? 'bg-amber-50 border-amber-200 text-amber-700'
+                                      : 'bg-gray-50 border-gray-200 text-gray-600'
+                              }`}
                             >
-                              <RouteIcon className="w-3 h-3" />
-                              {ROUTE_LABELS[rec.route]}
+                              {shortStoreLabel(store.name)}: <b>{qty}</b>
                             </span>
-                            <span className={isWarehouse(rec.fromStore) ? 'text-blue-700 font-medium' : 'text-gray-600'}>
-                              {shortStoreLabel(rec.fromStore)}{' '}
-                              <span className="text-gray-400">({rec.fromQty} шт.)</span>
-                            </span>
-                            <ArrowRight className="w-3.5 h-3.5 text-gray-400" />
-                            <span className="text-gray-600">
-                              {shortStoreLabel(rec.toStore)}{' '}
-                              <span className="text-red-400">({rec.toQty} шт.)</span>
-                            </span>
-                            <span className="font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2 py-0.5">
-                              везти {rec.quantity}
-                            </span>
-                            <span
-                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${PRIORITY_STYLES[rec.priority]}`}
-                            >
-                              {PRIORITY_LABELS[rec.priority]}
-                            </span>
-                          </div>
+                          );
+                        })}
+                    </div>
+                  )}
+
+                  {/* Дефициты: размер → куда */}
+                  <div className="flex flex-wrap gap-1">
+                    {[...product.groups.values()].slice(0, 6).map((group) => (
+                      <span
+                        key={group.key}
+                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] border ${
+                          selected.has(group.key)
+                            ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                            : 'bg-white border-gray-200 text-gray-600'
+                        }`}
+                        title={`Размер ${group.size} → ${group.toStore} (сейчас ${group.toQty})`}
+                      >
+                        <b>{group.size}</b>
+                        <ArrowRight className="w-2.5 h-2.5" />
+                        {shortStoreLabel(group.toStore)}
+                      </span>
+                    ))}
+                    {product.groups.size > 6 && (
+                      <span className="text-[10px] text-gray-400 self-center">
+                        +{product.groups.size - 6}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="mt-auto pt-2 flex items-center gap-2">
+                    <button
+                      onClick={() => toggleProduct(product)}
+                      className={`flex-1 px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                        inOrder.positions > 0
+                          ? 'bg-emerald-600 text-white hover:bg-emerald-500'
+                          : 'bg-gray-900 text-white hover:bg-gray-700'
+                      }`}
+                      title={
+                        inOrder.positions > 0
+                          ? 'Убрать все позиции товара из заказа'
+                          : 'Добавить все дефициты товара в заказ (количество можно править в строках и в панели корзины)'
+                      }
+                    >
+                      {inOrder.positions > 0 ? '✓ В заказе — убрать' : 'В заказ: все дефициты'}
+                    </button>
+                  </div>
+                  {inOrder.positions > 0 && (
+                    <div className="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1 text-center">
+                      ✓ {inOrder.positions} поз. · {inOrder.units} шт. уже в заказе
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Список товаров (вид «список») */}
+      {viewMode === 'list' && (
+        <div className="space-y-3">
+          {sortedProductGroups.map((product) => {
+            const storeTotals = productStoreTotals.get(product.productId);
+            const fullProduct = productsById.get(product.productId);
+            const brand = fullProduct?.brand ?? '';
+            const hot = fullProduct ? isHot(fullProduct) : false;
+            return (
+              <div
+                key={product.productId}
+                className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md transition-all"
+              >
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="min-w-0">
+                    <button
+                      onClick={() => setSelectedProduct(product.productId)}
+                      className="font-medium text-sm text-gray-800 hover:text-blue-600 hover:underline text-left"
+                      title="Открыть карточку товара"
+                    >
+                      {hot && (
+                        <Flame className="w-3.5 h-3.5 inline text-orange-500 mr-1 align-[-2px]" />
+                      )}
+                      {product.productName}
+                    </button>
+                    {product.productLink && (
+                      <a
+                        href={product.productLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="ml-1.5 text-gray-400 hover:text-blue-500"
+                        title="Открыть на saletennis.com"
+                      >
+                        <ExternalLink className="w-3 h-3 inline" />
+                      </a>
+                    )}
+                    <div className="text-xs text-gray-500 mt-0.5">{brand}</div>
+                  </div>
+                  <span className="text-xs font-bold text-gray-700 bg-gray-100 px-2.5 py-1 rounded-full flex-shrink-0">
+                    {product.groups.size} дефиц.
+                  </span>
+                </div>
+
+                {/* Наглядные текущие остатки по магазинам */}
+                {storeTotals && (
+                  <div className="flex flex-wrap gap-1.5 mb-3">
+                    {data.stores
+                      .filter((s) => storeTotals.has(s.id))
+                      .map((store) => {
+                        const qty = storeTotals.get(store.id) ?? 0;
+                        const warehouse = isWarehouse(store.name);
+                        return (
+                          <span
+                            key={store.id}
+                            title={`${store.name}: ${qty} шт.`}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] border ${
+                              warehouse
+                                ? 'bg-blue-50 border-blue-200 text-blue-700'
+                                : qty === 0
+                                  ? 'bg-red-50 border-red-200 text-red-600'
+                                  : qty >= CITY_EXCESS_TRIGGER
+                                    ? 'bg-amber-50 border-amber-200 text-amber-700'
+                                    : 'bg-gray-50 border-gray-200 text-gray-600'
+                            }`}
+                          >
+                            {shortStoreLabel(store.name)}: <b>{qty}</b>
+                          </span>
                         );
                       })}
-                    </div>
                   </div>
-                ))}
+                )}
+
+                {/* Группы вариантов: один дефицит — несколько альтернативных источников */}
+                <div className="space-y-2">
+                  {[...product.groups.values()].map((group) => {
+                    const line = selected.get(group.key);
+                    const mi = getMinInfo(group.variants[0]);
+                    return (
+                      <div
+                        key={group.key}
+                        className={`rounded-lg px-3 py-2 ${
+                          line ? 'bg-emerald-50 ring-1 ring-emerald-300' : 'bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(line)}
+                            onChange={() => toggleGroup(group)}
+                            className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer flex-shrink-0"
+                            title="Выбрать позицию в корзину saletennis.com"
+                          />
+                          <span className="font-bold text-xs text-gray-800 bg-white border border-gray-200 rounded px-2 py-0.5">
+                            {group.size}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            нужно в <b className="text-gray-700">{shortStoreLabel(group.toStore)}</b>{' '}
+                            (сейчас {group.toQty})
+                          </span>
+                          {mi && (
+                            <span
+                              className="text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-300 rounded-full px-2 py-0.5"
+                              title={
+                                mi.store
+                                  ? `Минимум по умолчанию для «${group.toStore}»: ${mi.min} шт. (индивидуальный минимум товара его перекрывает)`
+                                  : `Минимум для «${group.toStore}»: ${mi.min} шт.`
+                              }
+                            >
+                              ⭐ Минимум {mi.min} (есть {mi.current})
+                            </span>
+                          )}
+                          {group.variants.length > 1 && (
+                            <span className="text-[10px] font-semibold text-purple-600 bg-purple-50 border border-purple-200 rounded-full px-2 py-0.5">
+                              {group.variants.length} варианта — выберите один
+                            </span>
+                          )}
+                          {/* Счётчик количества — прямо в строке рекомендации */}
+                          {line && (
+                            <span className="ml-auto flex items-center gap-1.5">
+                              <span className="text-[10px] text-emerald-700 whitespace-nowrap">
+                                в заказ:
+                              </span>
+                              <QtyStepper
+                                value={line.quantity}
+                                onChange={(value) => changeQty(group.key, value)}
+                              />
+                            </span>
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          {group.variants.map((rec) => {
+                            const RouteIcon = ROUTE_ICONS[rec.route];
+                            return (
+                              <div
+                                key={`${rec.fromStoreId}|${rec.size}|${rec.toStoreId}`}
+                                className="flex items-center gap-2 flex-wrap text-xs bg-white rounded-lg px-3 py-1.5 border border-gray-100"
+                              >
+                                <span
+                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${ROUTE_STYLES[rec.route]}`}
+                                >
+                                  <RouteIcon className="w-3 h-3" />
+                                  {ROUTE_LABELS[rec.route]}
+                                </span>
+                                <span className={isWarehouse(rec.fromStore) ? 'text-blue-700 font-medium' : 'text-gray-600'}>
+                                  {shortStoreLabel(rec.fromStore)}{' '}
+                                  <span className="text-gray-400">({rec.fromQty} шт.)</span>
+                                </span>
+                                <ArrowRight className="w-3.5 h-3.5 text-gray-400" />
+                                <span className="text-gray-600">
+                                  {shortStoreLabel(rec.toStore)}{' '}
+                                  <span className="text-red-400">({rec.toQty} шт.)</span>
+                                </span>
+                                <span className="font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2 py-0.5">
+                                  везти {rec.quantity}
+                                </span>
+                                <span
+                                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${PRIORITY_STYLES[rec.priority]}`}
+                                >
+                                  {PRIORITY_LABELS[rec.priority]}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       {filtered.length === 0 && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 text-center text-gray-500">
@@ -753,7 +1118,9 @@ export function TransferRecommendations() {
           <p className="text-xs mt-1">
             {spbExpensiveCount > 0 && !showSpbExpensive
               ? 'Возможно, всё скрыто как дорогая логистика из СПб — включите показ выше'
-              : 'Все размеры распределены равномерно'}
+              : profileSummaries.length > 0
+                ? 'Возможно, рекомендации скрыты профилями магазинов (🚫 запреты, ⛔ ассортимент, 📴 перемещения) — см. плашку выше'
+                : 'Все размеры распределены равномерно'}
           </p>
         </div>
       )}
@@ -816,28 +1183,78 @@ export function TransferRecommendations() {
         )}
       </div>
 
-      {/* Модальное окно заказа: корзина сайта привязана к сессии браузера —
-          товары добавляет закладка именно в ВАШЕЙ сессии */}
-      {orderPayload && (
+      {/* Окно заказа: считается из выбранных позиций ВЖИВУЮ — количество можно
+          править и удалять на месте, кнопки всегда берут свежие числа */}
+      {orderOpen && (
         <div
-          className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/50"
-          onClick={() => (cartBusy ? undefined : setOrderPayload(null))}
+          className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/50"
+          onClick={() => (cartBusy ? undefined : setOrderOpen(false))}
           role="dialog"
           aria-modal="true"
           aria-label="Заказ на saletennis.com"
         >
           <div
-            className="bg-white rounded-2xl shadow-2xl max-w-xl w-full p-6 max-h-[90vh] overflow-y-auto"
+            className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-bold text-gray-800 mb-1">
-              🛒 Заказ: {orderPayload.count} поз. · {orderPayload.units} шт.
-            </h3>
+            <div className="flex items-start justify-between gap-3 mb-1">
+              <h3 className="text-lg font-bold text-gray-800">
+                🛒 Заказ: {order.count} поз. · {order.units} шт.
+              </h3>
+              <button
+                onClick={() => setOrderOpen(false)}
+                disabled={cartBusy !== null}
+                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 disabled:opacity-50"
+                aria-label="Закрыть"
+              >
+                ✕
+              </button>
+            </div>
             <p className="text-xs text-gray-500 mb-4">
-              Корзина saletennis.com привязана к <b>сессии вашего браузера</b> (а не к аккаунту),
-              поэтому товары добавляет кнопка-закладка прямо в вашей сессии — корзина откроется
-              уже наполненной.
+              Список считается из выбранных позиций вживую: поправьте количество или удалите
+              позицию здесь — «Открыть корзину со списком», «⚡ Авто-добавление» и «Скопировать
+              список» возьмут свежие числа. Корзина saletennis.com привязана к <b>сессии вашего
+              браузера</b>, поэтому товары добавляет кнопка-закладка.
             </p>
+
+            {/* Позиции заказа с количеством */}
+            <div className="rounded-xl border border-gray-200 divide-y divide-gray-100 mb-3 max-h-64 overflow-y-auto">
+              {order.items.length === 0 && order.missing.length === 0 && (
+                <p className="text-xs text-gray-400 p-3">Нечего заказывать — отметьте позиции</p>
+              )}
+              {[...selected.values()].map((line) => {
+                const resolved = order.items.find(
+                  (item) => item.name === line.name && item.sizeLabel === line.size
+                );
+                return (
+                  <div key={line.key} className="flex items-center gap-2 px-3 py-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-medium text-gray-800 truncate" title={line.name}>
+                        {line.name}
+                      </div>
+                      <div className="text-[10px] text-gray-500">
+                        размер {line.size} → {line.toStore}
+                        {resolved && resolved.count !== line.quantity && (
+                          <span className="text-blue-600">
+                            {' '}
+                            · в корзине сайта суммарно: {resolved.count} шт.
+                          </span>
+                        )}
+                        {!resolved && <span className="text-amber-600"> · нет данных корзины</span>}
+                      </div>
+                    </div>
+                    <QtyStepper value={line.quantity} onChange={(v) => changeQty(line.key, v)} />
+                    <button
+                      onClick={() => setSelected((prev) => removeLine(prev, line.key))}
+                      className="flex-shrink-0 p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50"
+                      title="Убрать позицию из заказа"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
 
             <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 mb-3">
               <div className="text-xs font-semibold text-emerald-800 mb-1.5">
@@ -864,10 +1281,20 @@ export function TransferRecommendations() {
                   🛒 SaleTennis Заказ
                 </a>
                 <button
-                  onClick={() => window.open(orderPayload.url, '_blank', 'noopener')}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-semibold transition-colors"
+                  onClick={openCart}
+                  disabled={order.items.length === 0}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white rounded-xl text-sm font-semibold transition-colors"
+                  title={`Открыть корзину saletennis.com со списком (${order.count} поз. · ${order.units} шт.)`}
                 >
                   Открыть корзину со списком →
+                </button>
+                <button
+                  onClick={() => void sendToCart()}
+                  disabled={cartBusy !== null || order.items.length === 0}
+                  className="px-3 py-2 bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 rounded-xl text-xs whitespace-nowrap transition-colors"
+                  title="Добавить автоматически через сохранённую 🔑-сессию"
+                >
+                  {cartBusy ?? '⚡ Авто-добавление'}
                 </button>
               </div>
               <p className="text-[10px] text-gray-400 mt-2">
@@ -876,22 +1303,23 @@ export function TransferRecommendations() {
               </p>
             </div>
 
-            {orderPayload.missingCount > 0 && (
+            {order.missingCount > 0 && (
               <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                Ещё {orderPayload.missingCount} поз. не добавятся автоматически (нет данных в
-                карте корзины) — их список скопирован в буфер обмена.
+                Ещё {order.missingCount} поз. не добавятся автоматически (нет данных в карте
+                корзины): {order.missing.slice(0, 3).map((m) => `${m.line.name} (${m.line.size})`).join(', ')}
+                {order.missingCount > 3 ? '…' : ''}
               </p>
             )}
 
             <div className="mt-5 flex items-center gap-2 justify-end">
               <button
-                onClick={copyList}
+                onClick={() => void copyList()}
                 className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl text-xs"
               >
                 Скопировать список
               </button>
               <button
-                onClick={() => setOrderPayload(null)}
+                onClick={() => setOrderOpen(false)}
                 disabled={cartBusy !== null}
                 className="px-4 py-2 bg-gray-900 hover:bg-gray-700 disabled:opacity-50 text-white rounded-xl text-sm font-medium"
               >
@@ -902,8 +1330,10 @@ export function TransferRecommendations() {
         </div>
       )}
 
-      {/* Плавающая панель корзины + ввод сессии + сообщения */}
-      {(selected.size > 0 || showSessionInput || cartMessage) && (
+      {/* Плавающая панель корзины + ввод сессии + сообщения.
+          Скрыта, пока открыто окно заказа, — раньше она лежала поверх окна и
+          правка количества не попадала в ссылку для закладки. */}
+      {((selected.size > 0 && !orderOpen) || showSessionInput || cartMessage) && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[120] flex flex-col items-center gap-2 w-full max-w-[96vw] px-2 pointer-events-none">
           {cartMessage && (
             <div
@@ -954,7 +1384,7 @@ export function TransferRecommendations() {
               </div>
             </div>
           )}
-          {selected.size > 0 && (
+          {selected.size > 0 && !orderOpen && (
             <div className="pointer-events-auto bg-gray-900 text-white rounded-2xl shadow-2xl px-5 py-3.5 flex flex-col gap-2.5 w-[640px] max-w-full">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-sm whitespace-nowrap">
@@ -980,31 +1410,18 @@ export function TransferRecommendations() {
                     <span className="text-gray-400 whitespace-nowrap">
                       → {shortStoreLabel(line.toStore)}
                     </span>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <button
-                        onClick={() => changeQty(line.key, line.quantity - 1)}
-                        className="w-6 h-6 rounded bg-white/10 hover:bg-white/25 font-bold"
-                        title="Меньше"
-                      >
-                        −
-                      </button>
-                      <input
-                        type="number"
-                        min={1}
-                        max={99}
-                        value={line.quantity}
-                        onChange={(e) => changeQty(line.key, Number(e.target.value))}
-                        className="w-12 h-6 text-center rounded bg-white/10 border border-white/20 text-white text-xs focus:ring-1 focus:ring-emerald-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                        title="Сколько заказать"
-                      />
-                      <button
-                        onClick={() => changeQty(line.key, line.quantity + 1)}
-                        className="w-6 h-6 rounded bg-white/10 hover:bg-white/25 font-bold"
-                        title="Больше"
-                      >
-                        +
-                      </button>
-                    </div>
+                    <QtyStepper
+                      value={line.quantity}
+                      onChange={(value) => changeQty(line.key, value)}
+                      dark
+                    />
+                    <button
+                      onClick={() => setSelected((prev) => removeLine(prev, line.key))}
+                      className="flex-shrink-0 text-gray-400 hover:text-white px-1"
+                      title="Убрать позицию"
+                    >
+                      ✕
+                    </button>
                   </div>
                 ))}
               </div>
@@ -1012,7 +1429,7 @@ export function TransferRecommendations() {
                 <button
                   onClick={goOrder}
                   className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 rounded-xl text-sm font-semibold whitespace-nowrap transition-colors"
-                  title="Собрать заказ на saletennis.com: закладкой или автоматически по cookie"
+                  title="Открыть окно заказа: список, количества и кнопка-закладка"
                 >
                   Перейти к заказу →
                 </button>
@@ -1025,7 +1442,7 @@ export function TransferRecommendations() {
                   {cartBusy ?? '⚡ Авто-добавление'}
                 </button>
                 <button
-                  onClick={copyList}
+                  onClick={() => void copyList()}
                   className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-xs whitespace-nowrap"
                 >
                   Скопировать список

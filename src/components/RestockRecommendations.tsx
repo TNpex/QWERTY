@@ -10,6 +10,12 @@ import {
 import { useFilteredData, useRestockRecommendations } from '../hooks/useAnalytics';
 import { MAX_RESTOCK_DISPLAY } from '../utils/analyticsCore';
 import { GENDER_LABELS, DEFAULT_MINIMUM } from '../utils/productMeta';
+import {
+  SUPPLIER_COLUMNS,
+  SUPPLIER_COLUMN_WIDTHS,
+  supplierFileName,
+  supplierSheetRows,
+} from '../utils/supplierOrder';
 import { ProductCardModal } from './ProductCardModal';
 import type { RestockUrgency } from '../types';
 
@@ -19,6 +25,11 @@ const URGENCY_BADGES: Record<RestockUrgency, { label: string; color: string; bor
   medium: { label: 'Запланировать', color: 'bg-yellow-100 text-yellow-700', border: 'border-l-yellow-500 bg-yellow-50/50' },
 };
 
+/**
+ * Строка заявки: в XLSX уходят только нужные поставщику колонки
+ * (см. utils/supplierOrder.ts). «В наличии», «Норматив», «Цена» и «Сумма»
+ * остаются внутренними числами сети — в интерфейсе сумма заявки видна.
+ */
 interface ExportRow {
   article: string;
   name: string;
@@ -26,38 +37,19 @@ interface ExportRow {
   category: string;
   gender: string;
   size: string;
-  current: number;
-  target: number;
   toOrder: number;
-  price: number;
 }
 
 /** Выгрузка заявки поставщику в XLSX — построчно по размерам (с учётом фильтров) */
 async function exportOrderXlsx(rows: ExportRow[], label: string) {
   const XLSX = await import('xlsx');
-  const sheetRows = rows.map((r) => ({
-    'Артикул': r.article,
-    'Название': r.name,
-    'Бренд': r.brand,
-    'Категория': r.category,
-    'Пол': r.gender,
-    'Размер': r.size,
-    'В наличии (сеть)': r.current,
-    'Норматив (сеть)': r.target,
-    'Заказать, шт.': r.toOrder,
-    'Цена, ₽': r.price,
-    'Сумма, ₽': Math.round(r.price * r.toOrder),
-  }));
-  const worksheet = XLSX.utils.json_to_sheet(sheetRows);
-  worksheet['!cols'] = [
-    { wch: 14 }, { wch: 52 }, { wch: 12 }, { wch: 18 }, { wch: 10 },
-    { wch: 9 }, { wch: 15 }, { wch: 15 }, { wch: 13 }, { wch: 10 }, { wch: 12 },
-  ];
+  const worksheet = XLSX.utils.json_to_sheet(supplierSheetRows(rows), {
+    header: [...SUPPLIER_COLUMNS],
+  });
+  worksheet['!cols'] = SUPPLIER_COLUMN_WIDTHS;
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Заявка');
-  const safeLabel = label.replace(/[^\p{L}\p{N}._-]+/gu, '_').slice(0, 40);
-  const date = new Date().toISOString().slice(0, 10);
-  XLSX.writeFile(workbook, `Заявка_${safeLabel}_${date}.xlsx`);
+  XLSX.writeFile(workbook, supplierFileName(label));
 }
 
 export function RestockRecommendations() {
@@ -119,10 +111,7 @@ export function RestockRecommendations() {
             category: r.category,
             gender: GENDER_LABELS[r.gender] ?? '',
             size: s.size,
-            current: s.current,
-            target: s.target,
             toOrder: s.quantity,
-            price: product?.price ?? 0,
           });
         }
       }
@@ -164,7 +153,7 @@ export function RestockRecommendations() {
             onClick={handleExport}
             disabled={exporting || stats.toPurchase === 0}
             className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Выгрузить заявку поставщику в XLSX (с учётом фильтров)"
+            title="Выгрузить заявку поставщику в XLSX (с учётом фильтров). В файле: Артикул, Название, Бренд, Категория, Пол, Размер, Заказать шт. — остатки, нормативы и цены сети в заявку не попадают"
           >
             <Download className="w-4 h-4" />
             {exporting ? 'Формируем…' : 'Заявка в XLSX'}
@@ -180,6 +169,13 @@ export function RestockRecommendations() {
             41:8 … 43:11 … 47:1. Неизвестный пол или уникальный размер (сет, банка, ростовка и т.п.) —
             минимум {DEFAULT_MINIMUM}. Срочность: <b>критично</b> — товара нет совсем;{' '}
             <b>срочно</b> — покрытие нормативов &lt; 50%.
+          </p>
+          <p className="mt-1.5">
+            В файле заявки — только <b>Артикул, Название, Бренд, Категория, Пол, Размер,
+            Заказать шт.</b> Остатки сети, нормативы, цены и сумма остаются внутренними
+            числами (сумма заявки видна в карточке выше). Норматив ходового товара
+            «минимум в каждом магазине» считается только по точкам, которые продают этот
+            товар (профиль магазина — вкладка «🏬 Магазины»).
           </p>
         </div>
       </div>

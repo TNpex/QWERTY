@@ -5,7 +5,24 @@ import {
   getTransferRecommendations,
   getRestockRecommendations,
   type Metrics,
+  type RestockRules,
+  type TransferRules,
 } from '../utils/analyticsCore';
+import {
+  activeStoreProfiles,
+  effectiveMinimum,
+  profileOf,
+  storeAcceptsTransfer,
+  storeCanDonate,
+  storeSellsProduct,
+  type StoreProfile,
+  type StoreProfileSummary,
+} from '../utils/storeRules';
+import {
+  computeOverview,
+  type OverviewMetrics,
+  type OverviewScope,
+} from '../utils/storeScope';
 import {
   analyzeSales,
   analyzeSizeSales,
@@ -16,6 +33,8 @@ import {
 } from '../utils/historyCore';
 import { sportOf, productSettingsKey } from '../utils/sport';
 import type { ParsedData, TransferRecommendation, RestockRecommendation } from '../types';
+
+export type { OverviewMetrics, OverviewScope, StoreProfileSummary, StoreProfile };
 
 /**
  * Мемоизированные хуки аналитики. Расчёт выполняется один раз на изменение
@@ -115,12 +134,72 @@ export function useMetrics(): Metrics | null {
   return useMemo(() => (data ? getMetrics(data) : null), [data]);
 }
 
+/**
+ * Правила магазинов (профили + минимумы) для расчёта рекомендаций.
+ * 🚫 запрет и ⛔ ассортимент точки убирают магазин из получателей,
+ * 📴 выключенные перемещения — из доноров и получателей,
+ * ⭐ минимум делает точку получателем и заполняет её до минимума.
+ */
+export function useStoreTransferRules(): TransferRules {
+  const { settings } = useData();
+  return useMemo(
+    () => ({
+      canReceive: (storeName: string, product) =>
+        storeAcceptsTransfer(settings, storeName, product),
+      canDonate: (storeName: string) => storeCanDonate(settings, storeName),
+      minimumFor: (storeName: string, product) =>
+        effectiveMinimum(settings, storeName, productSettingsKey(product)).min,
+    }),
+    [settings]
+  );
+}
+
+/** Правила магазинов для дозакупки (норматив ходовых — только по «своим» точкам) */
+export function useStoreRestockRules(): RestockRules {
+  const { settings } = useData();
+  return useMemo(
+    () => ({ sellsIn: (storeName: string, product) => storeSellsProduct(settings, storeName, product) }),
+    [settings]
+  );
+}
+
+/** Активные профили магазинов: сколько товаров и почему отсекает каждая точка */
+export function useStoreProfileSummaries(): StoreProfileSummary[] {
+  const data = useDataWithoutExcluded();
+  const { settings } = useData();
+  return useMemo(() => {
+    if (!data) return [];
+    return activeStoreProfiles(
+      data.products,
+      settings,
+      data.stores.map((s) => s.name)
+    );
+  }, [data, settings]);
+}
+
+/** Профиль конкретного магазина (с значениями по умолчанию) */
+export function useStoreProfile(storeName: string) {
+  const { settings } = useData();
+  return useMemo(() => profileOf(settings, storeName), [settings, storeName]);
+}
+
+/** «Обзор»: метрики по сети или по одному магазину (с учётом профилей точек) */
+export function useOverview(scope: OverviewScope = 'all'): OverviewMetrics | null {
+  const data = useFilteredData();
+  const { settings } = useData();
+  return useMemo(() => {
+    if (!data) return null;
+    return computeOverview(data, { scope, settings });
+  }, [data, scope, settings]);
+}
+
 export function useTransferRecommendations(): TransferRecommendation[] {
   const data = useDataWithoutExcluded();
   const isHot = useIsHot();
+  const rules = useStoreTransferRules();
   return useMemo(() => {
     if (!data) return [];
-    const recs = getTransferRecommendations(data);
+    const recs = getTransferRecommendations(data, rules);
     const byId = new Map(data.products.map((p) => [p.id, p]));
     // Ходовые товары (🔥 из hot-products.json или отмеченные вручную) — первыми.
     // Сортировка устойчивая: группы вариантов одного дефицита не разрываются.
@@ -129,12 +208,13 @@ export function useTransferRecommendations(): TransferRecommendation[] {
       const pb = byId.get(b.productId);
       return Number(pb ? isHot(pb) : false) - Number(pa ? isHot(pa) : false);
     });
-  }, [data, isHot]);
+  }, [data, isHot, rules]);
 }
 
 export function useRestockRecommendations(): RestockRecommendation[] {
   const data = useDataWithoutExcluded();
   const { hotProducts, settings } = useData();
+  const rules = useStoreRestockRules();
   return useMemo(() => {
     if (!data) return [];
     // Дозакупка — только товары, отмеченные «Поставляется» в карточке товара
@@ -152,8 +232,8 @@ export function useRestockRecommendations(): RestockRecommendation[] {
       products: supplied,
       inventory: data.inventory.filter((i) => ids.has(i.productId)),
     };
-    return getRestockRecommendations(scoped, hotProducts);
-  }, [data, hotProducts, settings]);
+    return getRestockRecommendations(scoped, hotProducts, rules);
+  }, [data, hotProducts, settings, rules]);
 }
 
 /** Отчёт о продажах/движении по истории снимков; null, если снимков меньше двух */

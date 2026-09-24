@@ -7,7 +7,19 @@ import {
   getOverstockPositions,
   excessTrigger,
   donorKeep,
+  type RestockRules,
+  type TransferRules,
 } from './analyticsCore';
+import {
+  effectiveMinimum,
+  EMPTY_STORE_PROFILE,
+  storeAcceptsTransfer,
+  storeCanDonate,
+  storeSellsProduct,
+  type StoreProfile,
+} from './storeRules';
+import { EMPTY_SETTINGS, type ProductSettings } from './settings';
+import { productSettingsKey } from './sport';
 
 // ============ Фикстуры ============
 
@@ -374,5 +386,199 @@ describe('ходовые товары (hot-products)', () => {
     const recs = getRestockRecommendations(data);
     expect(recs[0].sizes[0].target).toBe(4); // DEFAULT_MINIMUM для аксессуаров
     expect(recs[0].sizes[0].quantity).toBe(2);
+  });
+});
+
+// ============ Профили магазинов в рекомендациях ============
+
+/** Настройки с профилями магазинов (+ ручная ориентация товаров) */
+function settingsWith(
+  profiles: Record<string, Partial<StoreProfile>> = {},
+  minimums: ProductSettings['storeMinimums'] = {},
+  sportOverrides: ProductSettings['sportOverrides'] = {}
+): ProductSettings {
+  const storeProfiles: Record<string, StoreProfile> = {};
+  for (const [name, patch] of Object.entries(profiles)) {
+    storeProfiles[name] = { ...EMPTY_STORE_PROFILE, ...patch };
+  }
+  return { ...EMPTY_SETTINGS, storeProfiles, storeMinimums: minimums, sportOverrides };
+}
+
+/** Так же, как это делает useAnalytics: профиль → правила расчёта */
+function transferRules(settings: ProductSettings): TransferRules {
+  return {
+    canReceive: (storeName, product) => storeAcceptsTransfer(settings, storeName, product),
+    canDonate: (storeName) => storeCanDonate(settings, storeName),
+    minimumFor: (storeName, product) =>
+      effectiveMinimum(settings, storeName, productSettingsKey(product)).min,
+  };
+}
+
+function restockRules(settings: ProductSettings): RestockRules {
+  return { sellsIn: (storeName, product) => storeSellsProduct(settings, storeName, product) };
+}
+
+describe('профили магазинов в перемещениях', () => {
+  it('🚫 запрет товара: рекомендация исчезает только у этого магазина', () => {
+    const settings = settingsWith({
+      Уфа: { bannedProducts: { [productSettingsKey({ name: 'Юбка женская 7/6 Kris' })]: true } },
+    });
+    const recs = getTransferRecommendations(fixture(), transferRules(settings));
+    // юбка в Уфу больше не предлагается
+    expect(recs.filter((r) => r.productId === 'p2' && r.toStore === 'Уфа')).toHaveLength(0);
+    // на Парина и в остальные магазины — остаётся
+    expect(recs.some((r) => r.productId === 'p2' && r.toStore === 'Екатеринбург (Парина)')).toBe(
+      false
+    ); // Парина — донор по p2/S, а не получатель
+    expect(recs.filter((r) => r.productId === 'p2').length).toBeGreaterThan(0);
+    // остальные товары в Уфу по-прежнему едут
+    expect(recs.some((r) => r.productId === 'p3' && r.toStore === 'Уфа')).toBe(true);
+  });
+
+  it('⛔ магазин «только теннис» не получает падел-товар', () => {
+    const settings = settingsWith(
+      { Уфа: { sport: 'tennis' } },
+      {},
+      { [productSettingsKey({ name: 'Юбка женская 7/6 Kris' })]: 'padel' }
+    );
+    const recs = getTransferRecommendations(fixture(), transferRules(settings));
+    expect(recs.filter((r) => r.productId === 'p2' && r.toStore === 'Уфа')).toHaveLength(0);
+    expect(recs.some((r) => r.productId === 'p2')).toBe(true); // в других магазинах — без изменений
+    expect(recs.some((r) => r.toStore === 'Уфа')).toBe(true); // остальные товары едут
+  });
+
+  it('⛔ скрытая категория магазина убирает товар из его перемещений', () => {
+    const settings = settingsWith({ Уфа: { hiddenCategories: ['Одежда'] } });
+    const recs = getTransferRecommendations(fixture(), transferRules(settings));
+    expect(recs.filter((r) => r.toStore === 'Уфа' && r.category === 'Одежда')).toHaveLength(0);
+    expect(recs.some((r) => r.toStore === 'Уфа' && r.category === 'Теннисные струны')).toBe(true);
+  });
+
+  it('📴 перемещения выключены: магазин не получает и не отдаёт', () => {
+    const settings = settingsWith({ 'Санкт-Петербург (Спортивная)': { transfersDisabled: true } });
+    const recs = getTransferRecommendations(fixture(), transferRules(settings));
+    expect(recs.filter((r) => r.fromStore === 'Санкт-Петербург (Спортивная)')).toHaveLength(0);
+    expect(recs.filter((r) => r.toStore === 'Санкт-Петербург (Спортивная)')).toHaveLength(0);
+    // без профиля этот магазин был донором (p2/S, p3/M)
+    const plain = getTransferRecommendations(fixture());
+    expect(plain.some((r) => r.fromStore === 'Санкт-Петербург (Спортивная)')).toBe(true);
+  });
+
+  it('⭐ минимум магазина: получатель заполняется до минимума, а не до 2', () => {
+    const settings = settingsWith(
+      {},
+      { 'Санкт-Петербург (Ярослава Гашека)': { [productSettingsKey({ name: 'Юбка женская 7/6 Kris' })]: 3 } }
+    );
+    const recs = getTransferRecommendations(fixture(), transferRules(settings));
+    // spb2 держит 1 шт. p2/S: со склада теперь везем 2 (до минимума 3), а не 1
+    const fromWarehouse = recs.find(
+      (r) => r.productId === 'p2' && r.size === 'S' && r.toStoreId === 'spb2' && r.route === 'warehouse'
+    );
+    expect(fromWarehouse?.quantity).toBe(2);
+    // магазинный вариант добирает остаток до минимума
+    const storeMoves = recs.filter(
+      (r) => r.productId === 'p2' && r.size === 'S' && r.toStoreId === 'spb2' && r.route !== 'warehouse'
+    );
+    expect(storeMoves.reduce((sum, r) => sum + r.quantity, 0)).toBe(2);
+  });
+
+  it('⭐ минимум делает получателем магазин, где остаток уже 2 шт.', () => {
+    const data: ParsedData = {
+      stores: [
+        { id: 'a', name: 'Магазин А' },
+        { id: 'w', name: 'Основной склад' },
+      ],
+      products: [
+        { id: 'p', name: 'Носки 7/6 Socks Pro', brand: '7/6', category: 'Аксессуары', price: 990, article: 'SL76-WH' },
+      ],
+      inventory: [
+        { productId: 'p', storeId: 'a', size: '39-42', quantity: 2, lastUpdated: '' },
+        { productId: 'p', storeId: 'w', size: '39-42', quantity: 5, lastUpdated: '' },
+      ],
+    };
+    // без минимума остатка 2 достаточно — перемещений нет
+    expect(getTransferRecommendations(data)).toHaveLength(0);
+    const settings = settingsWith({}, { 'Магазин А': { 'sl76-wh': 4 } });
+    const recs = getTransferRecommendations(data, transferRules(settings));
+    expect(recs).toHaveLength(1);
+    expect(recs[0].route).toBe('warehouse');
+    expect(recs[0].quantity).toBe(2); // 4 − 2
+  });
+
+  it('⭐ минимум по умолчанию из профиля магазина действует на все товары', () => {
+    const data: ParsedData = {
+      stores: [
+        { id: 'a', name: 'Магазин А' },
+        { id: 'w', name: 'Основной склад' },
+      ],
+      products: [
+        { id: 'p', name: 'Носки 7/6 Socks Pro', brand: '7/6', category: 'Аксессуары', price: 990, article: 'SL76-WH' },
+      ],
+      inventory: [
+        { productId: 'p', storeId: 'a', size: '39-42', quantity: 1, lastUpdated: '' },
+        { productId: 'p', storeId: 'w', size: '39-42', quantity: 5, lastUpdated: '' },
+      ],
+    };
+    const byDefault = getTransferRecommendations(data, transferRules(settingsWith({ 'Магазин А': { defaultMinimum: 3 } })));
+    expect(byDefault[0].quantity).toBe(2); // до минимума 3
+    // индивидуальный минимум товара перекрывает минимум магазина
+    const individual = getTransferRecommendations(
+      data,
+      transferRules(settingsWith({ 'Магазин А': { defaultMinimum: 3 } }, { 'Магазин А': { 'sl76-wh': 5 } }))
+    );
+    expect(individual[0].quantity).toBe(4); // до минимума 5
+  });
+
+  it('профили не ломают детерминированность и не меняют расчёт без правил', () => {
+    const plain = getTransferRecommendations(fixture());
+    expect(getTransferRecommendations(fixture(), transferRules(EMPTY_SETTINGS))).toEqual(plain);
+    expect(getTransferRecommendations(fixture(), transferRules(EMPTY_SETTINGS))).toEqual(plain);
+  });
+});
+
+describe('профили магазинов в дозакупке', () => {
+  const hotData: ParsedData = {
+    stores: [
+      { id: 'a', name: 'Магазин А' },
+      { id: 'b', name: 'Магазин Б' },
+      { id: 'w', name: 'Основной склад' },
+    ],
+    products: [
+      { id: 'p', name: 'Носки 7/6 Socks Pro - White', brand: '7/6', category: 'Аксессуары', price: 990, article: 'SL76-WH' },
+    ],
+    inventory: [
+      { productId: 'p', storeId: 'a', size: '39-42', quantity: 2, lastUpdated: '' },
+      { productId: 'p', storeId: 'b', size: '39-42', quantity: 1, lastUpdated: '' },
+      { productId: 'p', storeId: 'w', size: '39-42', quantity: 10, lastUpdated: '' },
+    ],
+  };
+  const hotRules = [{ article: 'SL76-WH', minPerStore: 5 }];
+
+  it('без профилей: минимум в каждом розничном магазине', () => {
+    const recs = getRestockRecommendations(hotData, hotRules);
+    expect(recs[0].totalNeeded).toBe(3 + 4); // А: 5−2, Б: 5−1
+  });
+
+  it('🚫 запрещённый товар: норматив считается только по «своим» точкам', () => {
+    const settings = settingsWith({ 'Магазин Б': { bannedProducts: { 'sl76-wh': true } } });
+    const recs = getRestockRecommendations(hotData, hotRules, restockRules(settings));
+    expect(recs[0].totalNeeded).toBe(3); // только А
+    // покрытие: (А 2 + склад 10) / норматив (5 × 1 «своя» точка) — складская часть сети
+    expect(recs[0].coveragePercent).toBe(Math.round((12 / 5) * 100));
+  });
+
+  it('⛔ точка «только падел» не держит теннисный товар — норматив без неё', () => {
+    const settings = settingsWith(
+      { 'Магазин А': { sport: 'padel' }, 'Магазин Б': { sport: 'padel' } },
+      {},
+      { 'sl76-wh': 'tennis' }
+    );
+    expect(getRestockRecommendations(hotData, hotRules, restockRules(settings))).toHaveLength(0);
+  });
+
+  it('📴 выключенные перемещения НЕ убирают точку из норматива (она продолжает продавать)', () => {
+    const settings = settingsWith({ 'Магазин Б': { transfersDisabled: true } });
+    const recs = getRestockRecommendations(hotData, hotRules, restockRules(settings));
+    expect(recs[0].totalNeeded).toBe(3 + 4);
   });
 });

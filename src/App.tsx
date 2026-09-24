@@ -23,6 +23,7 @@ import {
   ArrowLeftRight,
   ShoppingCart,
   BarChart3,
+  Store,
   Menu,
   X,
   Upload,
@@ -33,8 +34,10 @@ import {
 } from 'lucide-react';
 import { SalesHistory } from './components/SalesHistory';
 import { FilterBar } from './components/FilterBar';
+import { StoreProfiles } from './components/StoreProfiles';
+import type { TabId } from './types';
 
-type Tab = 'dashboard' | 'inventory' | 'transfers' | 'restock' | 'sales' | 'analytics';
+type Tab = TabId;
 
 const OOS_LEVEL_STYLES = {
   ok: { dot: 'bg-emerald-500', text: 'text-emerald-600' },
@@ -106,7 +109,7 @@ function AppContent() {
   const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
   const counts = settingsCounts(settings);
   const settingsTotal =
-    counts.sports + counts.excluded + counts.supplied + counts.hot + counts.minimums;
+    counts.sports + counts.excluded + counts.supplied + counts.hot + counts.minimums + counts.profiles;
 
   // Восстановление сохранённых данных из IndexedDB
   if (!hydrated) {
@@ -129,6 +132,7 @@ function AppContent() {
     { id: 'sales' as Tab, label: '🔥 Продажи', icon: Flame },
     { id: 'transfers' as Tab, label: '🔄 Перемещения', icon: ArrowLeftRight },
     { id: 'restock' as Tab, label: '🛒 Дозакупка', icon: ShoppingCart },
+    { id: 'stores' as Tab, label: '🏬 Магазины', icon: Store },
     { id: 'analytics' as Tab, label: '📈 Аналитика', icon: BarChart3 },
   ];
 
@@ -142,15 +146,7 @@ function AppContent() {
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return (
-          <div className="space-y-6">
-            <Dashboard />
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <StoreStockChart />
-              <CategoryChart />
-            </div>
-          </div>
-        );
+        return <Dashboard onNavigate={setActiveTab} />;
       case 'inventory':
         return <InventoryTable />;
       case 'sales':
@@ -159,6 +155,8 @@ function AppContent() {
         return <TransferRecommendations />;
       case 'restock':
         return <RestockRecommendations />;
+      case 'stores':
+        return <StoreProfiles />;
       case 'analytics':
         return (
           <div className="space-y-6">
@@ -278,7 +276,7 @@ function AppContent() {
             <button
               onClick={() => downloadSettings(settings)}
               className="w-full mb-2 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 transition-colors"
-              title={`Ориентации: ${counts.sports}, перемещение «Не требуется»: ${counts.excluded}, «Поставляется»: ${counts.supplied}, ходовые вручную: ${counts.hot}, минимумы магазинов: ${counts.minimums}. Скачайте JSON, чтобы перенести настройки на другой компьютер, передать коллегам или зафиксировать в public/data/product-settings.json для всех.`}
+              title={`Ориентации: ${counts.sports}, перемещение «Не требуется»: ${counts.excluded}, «Поставляется»: ${counts.supplied}, ходовые вручную: ${counts.hot}, минимумы товаров: ${counts.minimums}, профили магазинов: ${counts.profiles} (в т.ч. 🚫 запретов: ${counts.bans}). Скачайте JSON, чтобы перенести настройки на другой компьютер, передать коллегам или зафиксировать в public/data/product-settings.json для всех.`}
             >
               <Upload className="w-3.5 h-3.5" />
               Настройки товаров: {settingsTotal} — скачать JSON
@@ -349,11 +347,12 @@ function AppContent() {
                   {tabs.find((t) => t.id === activeTab)?.label}
                 </h2>
                 <p className="text-xs text-gray-500">
-                  {activeTab === 'dashboard' && 'Общая сводка по всем магазинам'}
+                  {activeTab === 'dashboard' && 'Сводка по сети или по выбранному магазину'}
                   {activeTab === 'inventory' && 'Детальная таблица наличия товаров и размеров'}
                   {activeTab === 'sales' && 'Продажи, перемещения и распроданные товары по снимкам'}
                   {activeTab === 'transfers' && 'Рекомендации по перемещению между магазинами'}
                   {activeTab === 'restock' && 'Что нужно дозакупить у поставщика'}
+                  {activeTab === 'stores' && 'Профили точек: вид спорта, категории, перемещения, запреты товаров'}
                   {activeTab === 'analytics' && 'Графики и аналитические отчёты'}
                 </p>
               </div>

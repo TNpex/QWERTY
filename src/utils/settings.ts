@@ -10,8 +10,16 @@ import type { Sport } from './sport';
  * Состав:
  * - sportOverrides: ручная ориентация товара (Падел/Теннис/Прочее);
  * - excludedProducts: товары-услуги и исключённые вручную — НЕ участвуют
- *   в рекомендациях «Перемещения» и «Дозакупка» (выбор запоминается).
+ *   в рекомендациях «Перемещения» и «Дозакупка» (выбор запоминается);
+ * - storeMinimums / storeProfiles: правила по магазинам (минимумы товаров,
+ *   профили точек: вид спорта, скрытые категории, перемещения, 🚫 запреты).
  */
+
+import {
+  normalizeStoreProfiles,
+  profileOf,
+  type StoreProfile,
+} from './storeRules';
 
 const STORAGE_KEY = 'saletennis-product-settings';
 
@@ -26,10 +34,16 @@ export interface ProductSettings {
   hotProducts: Record<string, boolean>;
   /**
    * Минимальные остатки по магазинам: название магазина → ключ товара → N шт.
-   * Влияют на входящие перемещения профиля «Мой магазин»: позиции с нехваткой
-   * до минимума поднимаются первыми и помечаются ⭐.
+   * Позиции с нехваткой до минимума поднимаются в перемещениях первыми,
+   * помечаются ⭐ и заполняются до минимума (а не до 2 шт.).
    */
   storeMinimums: Record<string, Record<string, number>>;
+  /**
+   * Профили магазинов: название магазина → правила точки (вид спорта,
+   * скрытые категории, перемещения выключены, минимум по умолчанию,
+   * 🚫 индивидуальные запреты товаров, заметка). См. utils/storeRules.ts.
+   */
+  storeProfiles: Record<string, StoreProfile>;
 }
 
 export const EMPTY_SETTINGS: ProductSettings = {
@@ -38,6 +52,7 @@ export const EMPTY_SETTINGS: ProductSettings = {
   suppliedProducts: {},
   hotProducts: {},
   storeMinimums: {},
+  storeProfiles: {},
 };
 
 /** Достаёт значение из произвольного объекта по списку ключей (валидация импорта) */
@@ -105,6 +120,7 @@ export function parseSettings(json: string): ProductSettings | null {
       suppliedProducts: pickBoolRecord(raw.suppliedProducts),
       hotProducts: pickBoolRecord(raw.hotProducts),
       storeMinimums: pickMinimums(raw.storeMinimums),
+      storeProfiles: normalizeStoreProfiles(raw.storeProfiles),
     };
   } catch {
     return null;
@@ -129,17 +145,34 @@ export function saveSettings(settings: ProductSettings): void {
   }
 }
 
-/** Объединяет входящие настройки с текущими (импорт файла) */
+/**
+ * Объединяет входящие настройки с текущими (импорт файла).
+ *
+ * Профили магазинов — «файл точки важнее»: магазин, описанный во входящем
+ * файле, заменяет текущий профиль ЦЕЛИКОМ, вместе со своими индивидуальными
+ * минимумами товаров (иначе снятый магазином запрет/минимум воскресал бы
+ * при каждом импорте). Остальные магазины не трогаются.
+ */
 export function mergeSettings(
   current: ProductSettings,
   incoming: ProductSettings
 ): ProductSettings {
+  const storeProfiles: Record<string, StoreProfile> = {
+    ...current.storeProfiles,
+    ...incoming.storeProfiles,
+  };
+  const storeMinimums = mergeMinimums(current.storeMinimums, incoming.storeMinimums);
+  for (const storeName of Object.keys(incoming.storeProfiles)) {
+    storeMinimums[storeName] = { ...(incoming.storeMinimums[storeName] ?? {}) };
+    if (Object.keys(storeMinimums[storeName]).length === 0) delete storeMinimums[storeName];
+  }
   return {
     sportOverrides: { ...current.sportOverrides, ...incoming.sportOverrides },
     excludedProducts: { ...current.excludedProducts, ...incoming.excludedProducts },
     suppliedProducts: { ...current.suppliedProducts, ...incoming.suppliedProducts },
     hotProducts: { ...current.hotProducts, ...incoming.hotProducts },
-    storeMinimums: mergeMinimums(current.storeMinimums, incoming.storeMinimums),
+    storeMinimums,
+    storeProfiles,
   };
 }
 
@@ -165,10 +198,32 @@ export function settingsCounts(settings: ProductSettings): {
   supplied: number;
   hot: number;
   minimums: number;
+  /** Магазины с непустым профилем */
+  profiles: number;
+  /** Индивидуальные запреты товаров (суммарно по магазинам) */
+  bans: number;
 } {
   let minimums = 0;
   for (const perStore of Object.values(settings.storeMinimums)) {
     minimums += Object.keys(perStore).length;
+  }
+  let profiles = 0;
+  let bans = 0;
+  for (const [storeName, profile] of Object.entries(settings.storeProfiles)) {
+    bans += Object.keys(profile?.bannedProducts ?? {}).length;
+    if (
+      profile &&
+      (profile.sport !== 'all' ||
+        (profile.hiddenCategories?.length ?? 0) > 0 ||
+        profile.transfersDisabled ||
+        profile.defaultMinimum > 0 ||
+        Object.keys(profile.bannedProducts ?? {}).length > 0 ||
+        Boolean(profile.note?.trim()))
+    ) {
+      profiles++;
+    } else if (Object.keys(settings.storeMinimums[storeName] ?? {}).length > 0) {
+      profiles++;
+    }
   }
   return {
     sports: Object.keys(settings.sportOverrides).length,
@@ -176,5 +231,26 @@ export function settingsCounts(settings: ProductSettings): {
     supplied: Object.keys(settings.suppliedProducts).length,
     hot: Object.keys(settings.hotProducts).length,
     minimums,
+    profiles,
+    bans,
   };
+}
+
+/** Есть ли в настройках хоть одно правило по магазинам (для подписей в UI) */
+export function hasStoreRules(settings: ProductSettings): boolean {
+  return (
+    Object.keys(settings.storeMinimums).length > 0 ||
+    Object.keys(settings.storeProfiles).some((store) => !isEmptyProfile(profileOf(settings, store)))
+  );
+}
+
+function isEmptyProfile(profile: StoreProfile): boolean {
+  return (
+    profile.sport === 'all' &&
+    profile.hiddenCategories.length === 0 &&
+    !profile.transfersDisabled &&
+    profile.defaultMinimum <= 0 &&
+    Object.keys(profile.bannedProducts).length === 0 &&
+    !profile.note.trim()
+  );
 }
