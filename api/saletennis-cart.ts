@@ -77,18 +77,58 @@ const BROWSER_HEADERS = {
   'Accept-Language': 'ru-RU,ru;q=0.9,en;q=0.5',
 };
 
-/** Вход на saletennis.com по логину/паролю. Возвращает jar сессии или null. */
-async function loginToSite(login: string, password: string): Promise<Jar | null> {
+/** Результат попытки входа: сессия или понятная причина неудачи */
+type LoginResult = { jar: Jar | null; reason?: string };
+
+/**
+ * Авторизована ли сессия: у вошедшего пользователя в шапке есть «Выйти»
+ * (href="/logout"), у гостя — «Войти». Важно: PHP принимает старый ID сессии
+ * и создаёт под него НОВУЮ гостевую — без этой проверки товары уезжали бы
+ * в призрачную гостевую корзину при «протухшей» cookie.
+ */
+async function isJarLoggedIn(jar: Jar): Promise<boolean> {
+  try {
+    const r = await fetch(`${SITE}/cabinet/cart/`, {
+      headers: { ...BROWSER_HEADERS, Cookie: cookieHeader(jar), Accept: 'text/html' },
+      redirect: 'follow',
+    });
+    mergeSetCookies(jar, r);
+    const html = await r.text();
+    return html.includes('href="/logout"');
+  } catch {
+    return false;
+  }
+}
+
+/** Вход на saletennis.com по логину/паролю. */
+async function loginToSite(login: string, password: string): Promise<LoginResult> {
   const jar: Jar = {};
   // 1) Страница входа: получаем анонимную сессию и CSRF-токен формы
-  const page = await fetch(LOGIN_URL, {
-    headers: { ...BROWSER_HEADERS, Accept: 'text/html' },
-    redirect: 'follow',
-  });
+  let page: Response;
+  try {
+    page = await fetch(LOGIN_URL, {
+      headers: { ...BROWSER_HEADERS, Accept: 'text/html' },
+      redirect: 'follow',
+    });
+  } catch (e) {
+    return {
+      jar: null,
+      reason:
+        'Сайт saletennis.com не ответил серверу дашборда (сетевая ошибка) — вероятно, хостинг блокирует облачные IP. Используйте способ 1 (закладка).',
+    };
+  }
+  if (!page.ok) {
+    return {
+      jar: null,
+      reason: `Страница входа saletennis.com недоступна (HTTP ${page.status}). Возможно, хостинг блокирует серверы Vercel — используйте способ 1 (закладка).`,
+    };
+  }
   mergeSetCookies(jar, page);
   const html = await page.text();
   const csrf = html.match(/name="_csrf_token"\s+value="([^"]+)"/);
-  if (!csrf) return null; // сайт изменил форму логина
+  if (!csrf) {
+    return { jar: null, reason: 'Форма входа на сайте изменилась — сообщите администратору дашборда. Пока используйте способ 1 (закладка).' };
+  }
   // 2) POST /login_check — как это делает браузер
   const form = new URLSearchParams({
     _csrf_token: csrf[1],
@@ -109,18 +149,18 @@ async function loginToSite(login: string, password: string): Promise<Jar | null>
     redirect: 'manual',
   });
   mergeSetCookies(jar, resp);
-  if (!jar['PHPSESSID']) return null;
-  // 3) Проверка входа. Корзина saletennis.com доступна и гостям, поэтому
-  //    проверяем не доступ, а маркер авторизации: у вошедшего пользователя
-  //    в шапке есть ссылка «Выйти» (href="/logout"), у гостя — «Войти».
-  const check = await fetch(`${SITE}/cabinet/cart/`, {
-    headers: { ...BROWSER_HEADERS, Cookie: cookieHeader(jar), Accept: 'text/html' },
-    redirect: 'follow',
-  });
-  mergeSetCookies(jar, check);
-  const cartHtml = await check.text();
-  if (!cartHtml.includes('href="/logout"')) return null;
-  return jar;
+  if (!jar['PHPSESSID']) {
+    return { jar: null, reason: 'Сайт не выдал сессию после входа — попробуйте способ 1 (закладка).' };
+  }
+  // 3) Проверка входа по маркеру «Выйти» на странице корзины
+  if (!(await isJarLoggedIn(jar))) {
+    return {
+      jar: null,
+      reason:
+        'Не удалось войти: неверный логин/пароль ИЛИ сайт отклоняет вход с серверов Vercel. Проверьте учётные данные; если они верны — используйте способ 1 (закладка), он работает всегда.',
+    };
+  }
+  return { jar };
 }
 
 /** Сколько позиций сейчас в корзине (подтверждение, что добавление сработало) */
@@ -202,19 +242,28 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
   const cookie = String(body.cookie ?? '').trim();
 
   if (login && password) {
-    const loggedIn = await loginToSite(login, password);
-    if (!loggedIn) {
+    const loginResult = await loginToSite(login, password);
+    if (!loginResult.jar) {
       res.status(200).json({
         ok: false,
         loginFailed: true,
-        error: 'Не удалось войти на saletennis.com (проверьте логин/пароль)',
+        error: loginResult.reason ?? 'Не удалось войти на saletennis.com',
       });
       return;
     }
-    jar = loggedIn;
+    jar = loginResult.jar;
     sessionToken = jar['PHPSESSID'];
   } else if (cookie) {
     jar = { PHPSESSID: cookie };
+    if (!(await isJarLoggedIn(jar))) {
+      res.status(200).json({
+        ok: false,
+        unauthorized: true,
+        error:
+          'Сохранённая PHPSESSID устарела или не авторизована (товары попали бы в невидимую гостевую корзину — добавление отменено). Войдите на saletennis.com в браузере, заново экспортируйте cookie через Cookie-Editor и обновите её в 🔑. Либо используйте способ 1 (закладка).',
+      });
+      return;
+    }
   } else {
     res.status(400).json({ ok: false, error: 'нужны login+password или cookie' });
     return;

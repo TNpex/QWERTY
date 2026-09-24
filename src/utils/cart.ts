@@ -175,14 +175,17 @@ export const ORDER_BOOKMARKLET =
   "javascript:(function(){var h=location.hash.match(/stcart=([A-Za-z0-9+/=]+)/);var raw=null;" +
   "if(h){try{raw=JSON.parse(atob(h[1]));}catch(e){}}" +
   "if(!raw){try{raw=JSON.parse(localStorage.getItem('stcart')||'null');}catch(e){}}" +
-  "if(!raw||!raw.items||!raw.items.length){alert('Список товаров не найден на этой странице.\\n\\nВернитесь в дашборд SaleTennis Analytics → «Перемещения» → «Перейти к заказу» → «Открыть корзину», и нажмите эту закладку на ОТКРЫВШЕЙСЯ странице.');return;}" +
+  "if(!raw||!raw.items||!raw.items.length){alert('Список товаров не найден на этой странице.\\n\\nОткройте дашборд SaleTennis Analytics → «Перемещения» → отметьте позиции → «Перейти к заказу» → «Открыть корзину», и нажмите эту закладку там.');return;}" +
   "try{localStorage.setItem('stcart',JSON.stringify(raw));}catch(e){}" +
-  "if(!document.querySelector('a[href*=\"logout\"]')){alert('Вы не вошли на saletennis.com.\\nСписок товаров сохранён: войдите в аккаунт (кнопка «Войти» в шапке) и нажмите эту закладку ещё раз.');return;}" +
+  "var loggedIn=!!document.querySelector('a[href*=logout]');" +
   "var items=raw.items,i=0,ok=0,fail=0;var box=document.createElement('div');" +
-  "box.style.cssText='position:fixed;top:16px;right:16px;z-index:2147483647;background:#111827;color:#fff;padding:14px 18px;border-radius:12px;font:14px sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.4);max-width:320px';" +
+  "box.style.cssText='position:fixed;top:16px;right:16px;z-index:2147483647;background:#111827;color:#fff;padding:14px 18px;border-radius:12px;font:14px sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.4);max-width:340px;line-height:1.5';" +
   "document.body.appendChild(box);" +
-  "function step(){if(i>=items.length){box.textContent='Готово: добавлено '+ok+' из '+items.length+(fail?' (ошибок: '+fail+')':'')+'. Обновляю корзину...';setTimeout(function(){location.reload();},1500);return;}" +
-  "var it=items[i];box.textContent='Добавляю в корзину '+(i+1)+' из '+items.length+'...';" +
+  "function fin(){box.innerHTML=(loggedIn?'':'<b>Вы не вошли в аккаунт</b> — товары добавлены в гостевую корзину.<br>');" +
+  "box.innerHTML+='Добавлено: <b>'+ok+'</b> из '+items.length+(fail?' (ошибок: '+fail+')':'')+" +
+  "(loggedIn?'<br>Обновляю корзину…':'<br>Теперь войдите (шапка → «Войти») и проверьте корзину. Если она очистилась — нажмите эту закладку ещё раз, список сохранён.');" +
+  "if(loggedIn){setTimeout(function(){location.reload();},2500);}}" +
+  "function step(){if(i>=items.length){fin();return;}var it=items[i];box.textContent='Добавляю в корзину '+(i+1)+' из '+items.length+'…';" +
   "fetch('/cabinet/cart/add/',{method:'POST',credentials:'include',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'XMLHttpRequest'},body:'item='+encodeURIComponent(it[0])+'&count='+encodeURIComponent(it[2])+'&size='+encodeURIComponent(it[1])})" +
   ".then(function(r){return r.json();}).then(function(j){if(j&&!j.error){ok++;}else{fail++;}})" +
   ".catch(function(){fail++;}).then(function(){i++;setTimeout(step,150);});}step();})();";

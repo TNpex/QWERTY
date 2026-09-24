@@ -329,12 +329,15 @@ export function TransferRecommendations() {
         }
         if (data.loginFailed) {
           setOrderError(
-            'Не удалось войти на saletennis.com — проверьте логин и пароль (они такие же, как при входе на сайт)'
+            data.error ??
+              'Не удалось войти на saletennis.com — проверьте логин и пароль (они такие же, как при входе на сайт)'
           );
           return;
         }
         if (data.unauthorized) {
-          setOrderError('Сессия saletennis.com недействительна — укажите логин/пароль заново');
+          setOrderError(
+            data.error ?? 'Сессия saletennis.com недействительна — укажите логин/пароль заново'
+          );
           return;
         }
         if (data.sessionToken) sessionToken = data.sessionToken;
@@ -445,6 +448,7 @@ export function TransferRecommendations() {
     setCartMessage(null);
     let added = 0;
     let unauthorized = false;
+    let unauthorizedError = '';
     const errors: string[] = [];
     const BATCH = 10;
     try {
@@ -470,6 +474,7 @@ export function TransferRecommendations() {
         }
         const payload = (await resp.json().catch(() => null)) as {
           unauthorized?: boolean;
+          error?: string;
           results?: { name: string; ok: boolean; error?: string }[];
         } | null;
         if (!resp.ok || !payload) {
@@ -478,6 +483,7 @@ export function TransferRecommendations() {
         }
         if (payload.unauthorized) {
           unauthorized = true;
+          unauthorizedError = payload.error ?? '';
           break;
         }
         for (const r of payload.results ?? []) {
@@ -493,7 +499,9 @@ export function TransferRecommendations() {
       setSessionDraft('');
       setShowSessionInput(true);
       setCartMessage({
-        text: 'Сессия saletennis.com истекла — вставьте свежий PHPSESSID (🔑)',
+        text:
+          unauthorizedError ||
+          'Сессия saletennis.com истекла — вставьте свежий PHPSESSID (🔑)',
         error: true,
       });
       return;
@@ -966,9 +974,38 @@ export function TransferRecommendations() {
               оформления.
             </p>
 
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 mb-3">
+              <div className="text-xs font-semibold text-emerald-800 mb-1.5">
+                Способ 1 — кнопка-закладка (без пароля, работает всегда)
+              </div>
+              <p className="text-[11px] text-gray-600 leading-relaxed mb-2.5">
+                <b>Один раз:</b> перетащите тёмную кнопку ниже на панель закладок браузера
+                (Ctrl+Shift+B, если панели не видно). <b>Каждый заказ:</b> нажмите «Открыть
+                корзину» → на открывшейся странице нажмите закладку «🛒 SaleTennis Заказ» →
+                товары добавятся (войдя под своим логином — в корзину аккаунта; без входа —
+                в гостевую корзину, после входа проверьте её).
+              </p>
+              <div className="flex gap-2 flex-wrap items-center">
+                <a
+                  href={ORDER_BOOKMARKLET}
+                  onClick={(e) => e.preventDefault()}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-gray-900 text-white rounded-xl text-sm font-semibold cursor-grab select-none"
+                  title="Перетащите меня на панель закладок (не нажимать!)"
+                >
+                  🛒 SaleTennis Заказ
+                </a>
+                <button
+                  onClick={() => window.open(orderPayload.url, '_blank', 'noopener')}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-semibold transition-colors"
+                >
+                  Открыть корзину со списком →
+                </button>
+              </div>
+            </div>
+
             <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4">
               <div className="text-xs font-semibold text-gray-700 mb-3">
-                Вход на saletennis.com (те же логин и пароль, что и на сайте)
+                Способ 2 — автоматически по логину/паролю saletennis.com
               </div>
               <div className="space-y-2.5">
                 <input
@@ -1026,42 +1063,10 @@ export function TransferRecommendations() {
               </div>
             </div>
 
-            <details className="mt-4 text-xs text-gray-500">
-              <summary className="cursor-pointer select-none hover:text-gray-700">
-                Другие способы (без ввода пароля): кнопка-закладка или 🔑-сессия
-              </summary>
-              <div className="mt-3 space-y-2 leading-relaxed pl-1">
-                <p>
-                  <b>Кнопка-закладка</b> (один раз перетащить на панель закладок, Ctrl+Shift+B
-                  если её не видно): откройте корзину ссылкой{' '}
-                  <button
-                    onClick={() => {
-                      window.open(orderPayload.url, '_blank', 'noopener');
-                    }}
-                    className="text-blue-600 hover:underline font-medium"
-                  >
-                    «Открыть корзину со списком»
-                  </button>{' '}
-                  и нажмите на ней закладку — товары добавятся под вашим браузерным логином:
-                </p>
-                <p>
-                  <a
-                    href={ORDER_BOOKMARKLET}
-                    onClick={(e) => e.preventDefault()}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-gray-900 text-white rounded-xl text-sm font-semibold cursor-grab select-none"
-                    title="Перетащите меня на панель закладок (не нажимать!)"
-                  >
-                    🛒 SaleTennis Заказ
-                  </a>
-                  <span className="ml-2 text-gray-400">← перетащить, не нажимать</span>
-                </p>
-                <p>
-                  <b>🔑-сессия</b>: кнопка «🔑 Корзина saletennis» рядом с фильтрами — вставьте
-                  значение cookie PHPSESSID (Cookie-Editor → Export), затем «⚡ Авто-добавление»
-                  в нижней панели.
-                </p>
-              </div>
-            </details>
+            <p className="mt-3 text-[11px] text-gray-400">
+              Способ 3 (альтернатива закладке): «🔑 Корзина saletennis» рядом с фильтрами →
+              вставить значение cookie PHPSESSID → «⚡ Авто-добавление» в нижней панели.
+            </p>
 
             <div className="mt-5 flex items-center gap-2 justify-end">
               <button
