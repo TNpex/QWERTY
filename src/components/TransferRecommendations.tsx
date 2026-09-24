@@ -26,6 +26,8 @@ import { productSettingsKey } from '../utils/sport';
 import {
   resolveCartItems,
   cartLinesToText,
+  orderUrl,
+  ORDER_BOOKMARKLET,
   type CartLine,
 } from '../utils/cart';
 import { ProductCardModal } from './ProductCardModal';
@@ -79,6 +81,7 @@ export function TransferRecommendations() {
   const [cartMessage, setCartMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [showSessionInput, setShowSessionInput] = useState(false);
   const [sessionDraft, setSessionDraft] = useState('');
+  const [showHelp, setShowHelp] = useState(false);
   const [toStoreId, setToStoreId] = useState('all');
   const [fromStoreId, setFromStoreId] = useState('all');
   const [selectedSubtype, setSelectedSubtype] = useState('all');
@@ -222,6 +225,50 @@ export function TransferRecommendations() {
       });
       return next;
     });
+  };
+
+  const changeQty = (key: string, value: number) => {
+    setSelected((prev) => {
+      const line = prev.get(key);
+      if (!line) return prev;
+      const next = new Map(prev);
+      next.set(key, { ...line, quantity: Math.max(1, Math.min(99, Math.round(value) || 1)) });
+      return next;
+    });
+  };
+
+  /**
+   * Основной сценарий (без cookie): открыть корзину saletennis.com со списком
+   * в #stcart — там пользователь жмёт кнопку-закладку, и товары добавляются
+   * под ЕГО собственным логином. Не залогинен — сайт попросит войти, список
+   * сохранится (кнопка-закладка запомнит его в localStorage страницы).
+   */
+  const goOrder = () => {
+    const lines = [...selected.values()];
+    if (lines.length === 0) return;
+    const { items, missing } = resolveCartItems(cartMap, lines);
+    if (items.length === 0) {
+      setCartMessage({
+        text: `Не удалось собрать заказ: ${missing[0]?.reason ?? 'нет данных корзины'}. Используйте «Скопировать список».`,
+        error: true,
+      });
+      return;
+    }
+    window.open(orderUrl(items), '_blank', 'noopener');
+    if (missing.length > 0) {
+      navigator.clipboard
+        ?.writeText(cartLinesToText(missing.map((m) => m.line)))
+        .catch(() => undefined);
+      setCartMessage({
+        text: `Открыта корзина с ${items.length} поз. Ещё ${missing.length} поз. без данных корзины — скопированы в буфер. На открытой странице нажмите кнопку-закладку «🛒 SaleTennis Заказ».`,
+        error: false,
+      });
+    } else {
+      setCartMessage({
+        text: `Корзина открыта с ${items.length} поз. (${totalUnits} шт.) — на странице нажмите кнопку-закладку «🛒 SaleTennis Заказ». Не залогинены? Войдите и нажмите её ещё раз.`,
+        error: false,
+      });
+    }
   };
 
   const copyList = async () => {
@@ -429,6 +476,17 @@ export function TransferRecommendations() {
               ))}
             </select>
             <button
+              onClick={() => setShowHelp((v) => !v)}
+              className={`px-3 py-2 border rounded-lg text-xs whitespace-nowrap transition-colors ${
+                showHelp
+                  ? 'border-blue-300 bg-blue-50 text-blue-700'
+                  : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+              }`}
+              title="Как переносить заказ на saletennis.com без вставки cookie (одноразовая настройка)"
+            >
+              📖 Как заказать
+            </button>
+            <button
               onClick={() => {
                 setSessionDraft(saletennisSession);
                 setShowSessionInput(true);
@@ -479,6 +537,43 @@ export function TransferRecommendations() {
           </p>
         </div>
       </div>
+
+      {/* Инструкция: заказ без вставки cookie (кнопка-закладка) */}
+      {showHelp && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+          <h4 className="text-sm font-semibold text-gray-800 mb-2">
+            🛒 Перенос заказа на saletennis.com — без паролей и cookie
+          </h4>
+          <div className="text-xs text-gray-600 space-y-2 leading-relaxed">
+            <p>
+              <b>Одноразовая настройка (на каждом компьютере):</b> перетащите кнопку ниже на{' '}
+              <b>панель закладок</b> браузера (если панели нет — нажмите Ctrl+Shift+B):
+            </p>
+            <p className="py-1">
+              <a
+                href={ORDER_BOOKMARKLET}
+                onClick={(e) => e.preventDefault()}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-gray-900 text-white rounded-xl text-sm font-semibold cursor-grab select-none"
+                title="Перетащите меня на панель закладок (не нажимайте!)"
+              >
+                🛒 SaleTennis Заказ
+              </a>
+              <span className="ml-2 text-gray-400">← перетащить, не нажимать</span>
+            </p>
+            <p>
+              <b>Как заказывать:</b> 1) отметьте позиции чекбоксами и укажите количество →
+              2) «Перейти к заказу» — откроется корзина saletennis.com → 3) на ней нажмите
+              закладку «🛒 SaleTennis Заказ» — товары добавятся <b>под вашим логином</b>{' '}
+              (не вошли? сайт попросит логин/пароль — войдите и нажмите закладку ещё раз,
+              список сохранится) → 4) оформляйте заказ как обычно.
+            </p>
+            <p className="text-gray-400">
+              Альтернатива без закладки — «⚡ Авто-добавление» через 🔑-сессию (полностью
+              автоматически, но значение PHPSESSID придётся обновлять, когда сайт разлогинит).
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Карточки товаров */}
       <div className="space-y-3">
@@ -755,29 +850,82 @@ export function TransferRecommendations() {
             </div>
           )}
           {selected.size > 0 && (
-            <div className="pointer-events-auto bg-gray-900 text-white rounded-2xl shadow-2xl px-5 py-3 flex items-center gap-3 flex-wrap justify-center max-w-full">
-              <span className="text-sm whitespace-nowrap">
-                🛒 Выбрано: <b>{selected.size}</b> поз. · <b>{totalUnits}</b> шт.
-              </span>
-              <button
-                onClick={sendToCart}
-                disabled={cartBusy !== null}
-                className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-wait rounded-xl text-sm font-semibold whitespace-nowrap transition-colors"
-              >
-                {cartBusy ?? 'Перенести в корзину saletennis.com'}
-              </button>
-              <button
-                onClick={copyList}
-                className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-xs whitespace-nowrap"
-              >
-                Скопировать список
-              </button>
-              <button
-                onClick={() => setSelected(new Map())}
-                className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-xs whitespace-nowrap"
-              >
-                Сбросить
-              </button>
+            <div className="pointer-events-auto bg-gray-900 text-white rounded-2xl shadow-2xl px-5 py-3.5 flex flex-col gap-2.5 w-[640px] max-w-full">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm whitespace-nowrap">
+                  🛒 Выбрано: <b>{selected.size}</b> поз. · <b>{totalUnits}</b> шт.
+                </span>
+                <button
+                  onClick={() => setSelected(new Map())}
+                  className="px-2.5 py-1 bg-white/10 hover:bg-white/20 rounded-lg text-xs whitespace-nowrap"
+                >
+                  Сбросить всё
+                </button>
+              </div>
+              <div className="max-h-40 overflow-y-auto space-y-1 pr-1 -mr-1">
+                {[...selected.values()].map((line) => (
+                  <div
+                    key={line.key}
+                    className="flex items-center gap-2 text-xs bg-white/5 rounded-lg px-2.5 py-1.5"
+                  >
+                    <span className="truncate flex-1 min-w-0" title={line.name}>
+                      {line.name}
+                    </span>
+                    <span className="text-gray-300 whitespace-nowrap">разм. {line.size}</span>
+                    <span className="text-gray-400 whitespace-nowrap">
+                      → {shortStoreLabel(line.toStore)}
+                    </span>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        onClick={() => changeQty(line.key, line.quantity - 1)}
+                        className="w-6 h-6 rounded bg-white/10 hover:bg-white/25 font-bold"
+                        title="Меньше"
+                      >
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        min={1}
+                        max={99}
+                        value={line.quantity}
+                        onChange={(e) => changeQty(line.key, Number(e.target.value))}
+                        className="w-12 h-6 text-center rounded bg-white/10 border border-white/20 text-white text-xs focus:ring-1 focus:ring-emerald-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        title="Сколько заказать"
+                      />
+                      <button
+                        onClick={() => changeQty(line.key, line.quantity + 1)}
+                        className="w-6 h-6 rounded bg-white/10 hover:bg-white/25 font-bold"
+                        title="Больше"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={goOrder}
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 rounded-xl text-sm font-semibold whitespace-nowrap transition-colors"
+                  title="Открыть корзину saletennis.com со списком — там нажать закладку «🛒 SaleTennis Заказ»"
+                >
+                  Перейти к заказу →
+                </button>
+                <button
+                  onClick={sendToCart}
+                  disabled={cartBusy !== null}
+                  className="px-3 py-2 bg-white/10 hover:bg-white/20 disabled:opacity-60 disabled:cursor-wait rounded-xl text-xs whitespace-nowrap transition-colors"
+                  title="Добавить автоматически через сохранённую 🔑-сессию (без кнопки-закладки)"
+                >
+                  {cartBusy ?? '⚡ Авто-добавление'}
+                </button>
+                <button
+                  onClick={copyList}
+                  className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-xs whitespace-nowrap"
+                >
+                  Скопировать список
+                </button>
+              </div>
             </div>
           )}
         </div>

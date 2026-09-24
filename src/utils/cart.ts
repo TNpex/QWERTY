@@ -146,6 +146,47 @@ export function resolveCartItems(cartMap: CartMap | null, lines: CartLine[]): Re
   return { items: [...merged.values()], missing };
 }
 
+/** Адрес корзины saletennis.com (на него открываем вкладку со списком в hash) */
+export const SALETENNIS_CART_URL = 'https://www.saletennis.com/cabinet/cart/';
+
+/**
+ * Компактный payload заказа для передачи через URL-hash (#stcart=...).
+ * Читают его только страницы saletennis.com (букмарклет): [{itemId, size, count}]
+ * → base64. В hash не попадает ничего чувствительного — только IDs товаров.
+ */
+export function buildOrderHash(items: CartItemPayload[]): string {
+  const compact = { v: 1, items: items.map((i) => [i.itemId, i.size, i.count]) };
+  return btoa(JSON.stringify(compact));
+}
+
+/** Ссылка на корзину saletennis.com со списком товаров в hash */
+export function orderUrl(items: CartItemPayload[]): string {
+  return `${SALETENNIS_CART_URL}#stcart=${buildOrderHash(items)}`;
+}
+
+/**
+ * Код букмарклета (кнопки на панели закладок). Работает ПОД логином самого
+ * пользователя на saletennis.com: читает список из #stcart (или из
+ * localStorage, если hash потерялся при редиректе через страницу входа),
+ * последовательно добавляет позиции в корзину и обновляет страницу.
+ * Никаких cookie дашборду не передаётся.
+ */
+export const ORDER_BOOKMARKLET =
+  "javascript:(function(){var h=location.hash.match(/stcart=([A-Za-z0-9+/=]+)/);var raw=null;" +
+  "if(h){try{raw=JSON.parse(atob(h[1]));}catch(e){}}" +
+  "if(!raw){try{raw=JSON.parse(localStorage.getItem('stcart')||'null');}catch(e){}}" +
+  "if(!raw||!raw.items||!raw.items.length){alert('Список пуст. Откройте корзину кнопкой «Перейти к заказу» из дашборда SaleTennis Analytics.');return;}" +
+  "try{localStorage.setItem('stcart',JSON.stringify(raw));}catch(e){}" +
+  "if(document.getElementById('form-login-username')){alert('Сначала войдите в аккаунт saletennis.com — список сохранится. После входа нажмите эту кнопку ещё раз.');return;}" +
+  "var items=raw.items,i=0,ok=0,fail=0;var box=document.createElement('div');" +
+  "box.style.cssText='position:fixed;top:16px;right:16px;z-index:2147483647;background:#111827;color:#fff;padding:14px 18px;border-radius:12px;font:14px sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.4);max-width:320px';" +
+  "document.body.appendChild(box);" +
+  "function step(){if(i>=items.length){box.textContent='Готово: добавлено '+ok+' из '+items.length+(fail?' (ошибок: '+fail+')':'')+'. Обновляю корзину...';setTimeout(function(){location.reload();},1500);return;}" +
+  "var it=items[i];box.textContent='Добавляю в корзину '+(i+1)+' из '+items.length+'...';" +
+  "fetch('/cabinet/cart/add/',{method:'POST',credentials:'include',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'XMLHttpRequest'},body:'item='+encodeURIComponent(it[0])+'&count='+encodeURIComponent(it[2])+'&size='+encodeURIComponent(it[1])})" +
+  ".then(function(r){return r.json();}).then(function(j){if(j&&!j.error){ok++;}else{fail++;}})" +
+  ".catch(function(){fail++;}).then(function(){i++;setTimeout(step,150);});}step();})();";
+
 /** Текстовый список позиций (копирование в буфер / отправка менеджеру) */
 export function cartLinesToText(lines: CartLine[]): string {
   return lines

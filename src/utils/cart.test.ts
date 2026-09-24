@@ -4,6 +4,9 @@ import {
   sizeIdFor,
   resolveCartItems,
   cartLinesToText,
+  buildOrderHash,
+  orderUrl,
+  ORDER_BOOKMARKLET,
   type CartLine,
   type CartMap,
 } from './cart';
@@ -97,6 +100,32 @@ describe('resolveCartItems', () => {
     ]);
     expect(items).toHaveLength(0);
     expect(missing).toHaveLength(1);
+  });
+});
+
+describe('buildOrderHash / orderUrl', () => {
+  const map: CartMap | null = parseCartMap(MAP_JSON);
+
+  it('hash компактный и декодируется обратно в itemId/size/count', () => {
+    const { items } = resolveCartItems(map, [
+      { key: 'g1', name: 'Кроссовки 7/6', link: 'https://saletennis.com/catalog/product/krossovki-7-6-17063', size: '42,5', quantity: 2, toStore: 'Уфа' },
+      { key: 'g2', name: 'Струна Head', link: 'https://saletennis.com/catalog/product/struna-head-8073', size: '—', quantity: 3, toStore: 'Тюмень' },
+    ]);
+    const hash = buildOrderHash(items);
+    const decoded = JSON.parse(atob(hash)) as { v: number; items: [string, string, number][] };
+    expect(decoded.v).toBe(1);
+    expect(decoded.items).toEqual([
+      ['17063', '38495', 2],
+      ['8073', '0', 3],
+    ]);
+    expect(orderUrl(items)).toBe(`https://www.saletennis.com/cabinet/cart/#stcart=${hash}`);
+  });
+
+  it('букмарклет — это javascript: с добавлением в корзину и без обращений к чужим доменам', () => {
+    expect(ORDER_BOOKMARKLET.startsWith('javascript:')).toBe(true);
+    expect(ORDER_BOOKMARKLET).toContain('/cabinet/cart/add/');
+    expect(ORDER_BOOKMARKLET).toContain('stcart');
+    expect(ORDER_BOOKMARKLET).not.toContain('vercel');
   });
 });
 
