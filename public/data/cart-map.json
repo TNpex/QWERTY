@@ -1,5 +1,5 @@
 {
- "generatedAt": "2026-09-24 06:17:31",
+ "generatedAt": "2026-09-24 21:16:35",
  "items": {
   "https://saletennis.com/catalog/product/chiekhol-dlia-rakietki-7-6-one-racket-black-19469": {
    "itemId": "19469",
@@ -159,11 +159,6 @@
   "https://saletennis.com/catalog/product/riukzak-head-tour-backpack-25l-orange-19318": {
    "itemId": "19318",
    "article": "260336-OR",
-   "sizes": {}
-  },
-  "https://saletennis.com/catalog/product/riukzak-head-tour-backpack-25l-pink-19319": {
-   "itemId": "19319",
-   "article": "260436-PK",
    "sizes": {}
   },
   "https://saletennis.com/catalog/product/riukzak-head-tour-backpack-25l-purple-19327": {
@@ -2054,11 +2049,11 @@
    "itemId": "17940",
    "article": "NS76-0628",
    "sizes": {
-    "XXS": "41221",
-    "XS": "41220",
-    "S": "41219",
+    "L": "41217",
     "M": "41218",
-    "L": "41217"
+    "S": "41219",
+    "XS": "41220",
+    "XXS": "41221"
    }
   },
   "https://saletennis.com/catalog/product/iubka-zhienskaia-7-6-nata-skirt-light-green-green-17941": {
@@ -2171,8 +2166,7 @@
    "itemId": "16448",
    "article": "W1390010-DBLMX",
    "sizes": {
-    "S": "36972",
-    "M": "36971"
+    "S": "36972"
    }
   },
   "https://saletennis.com/catalog/product/iubka-zhienskaia-mizuno-charge-printed-flying-skirt-blue-glow-16336": {
@@ -2197,13 +2191,6 @@
    "article": "62GBC701-22",
    "sizes": {
     "S": "42149"
-   }
-  },
-  "https://saletennis.com/catalog/product/iubka-zhienskaia-mizuno-flex-skirt-black-17462": {
-   "itemId": "17462",
-   "article": "62GBB730-09",
-   "sizes": {
-    "S": "39752"
    }
   },
   "https://saletennis.com/catalog/product/iubka-zhienskaia-mizuno-flex-skirt-crocus-petal-17463": {
@@ -3724,6 +3711,150 @@
     "XL": "44226"
    }
   },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-7-6-nika-dress-2-0-pearl-19390": {
+   "itemId": "19390",
+   "article": "ND276-1304",
+   "sizes": {
+    "XXS": "44234",
+    "XS": "44233",
+    "S": "44231",
+    "M": "44230",
+    "L": "44229",
+    "XL": "44232"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-7-6-nika-dress-bright-pink-17897": {
+   "itemId": "17897",
+   "article": "ND76-1265",
+   "sizes": {
+    "XXS": "41141",
+    "XS": "41140",
+    "S": "41139",
+    "M": "41003"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-7-6-nika-dress-lavander-haze-17925": {
+   "itemId": "17925",
+   "article": "ND276-3612",
+   "sizes": {
+    "XXS": "41146",
+    "XS": "41145",
+    "S": "41144",
+    "M": "41143",
+    "L": "41142"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-7-6-nika-dress-light-green-17926": {
+   "itemId": "17926",
+   "article": "ND76-0116",
+   "sizes": {
+    "XXS": "41151",
+    "XS": "41150",
+    "S": "41149",
+    "M": "41148",
+    "L": "41147",
+    "XL": "41268"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-7-6-nika-dress-white-17106": {
+   "itemId": "17106",
+   "article": "ND76-100",
+   "sizes": {
+    "XXS": "38604",
+    "L": "38600",
+    "XL": "38721"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-beach-spirit-darkblue-15727": {
+   "itemId": "15727",
+   "article": "W2300005-DB",
+   "sizes": {
+    "XS": "35089",
+    "S": "35088",
+    "M": "35087"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-beach-spirit-neon-yellow-15728": {
+   "itemId": "15728",
+   "article": "W2300005-NYCY",
+   "sizes": {
+    "XS": "35093",
+    "S": "35092",
+    "M": "35091"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-colortwist-turquoise-blue-14499": {
+   "itemId": "14499",
+   "article": "W1300001",
+   "sizes": {
+    "XS": "31516",
+    "S": "31515"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-jala-tech-red-blue-14350": {
+   "itemId": "14350",
+   "article": "W214102221",
+   "sizes": {
+    "XS": "31008"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-kaleido-white-mixed-17218": {
+   "itemId": "17218",
+   "article": "W1300011",
+   "sizes": {
+    "XS": "38812",
+    "S": "38811"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-spectrum-turquoise-navy-17219": {
+   "itemId": "17219",
+   "article": "W2300010",
+   "sizes": {
+    "XS": "38815",
+    "S": "38814"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-spike-lilac-pink-16363": {
+   "itemId": "16363",
+   "article": "W1300008",
+   "sizes": {
+    "XS": "36681",
+    "S": "36680",
+    "M": "36679"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-spike-navy-pink-16364": {
+   "itemId": "16364",
+   "article": "W2300008",
+   "sizes": {
+    "XS": "36684",
+    "S": "36683",
+    "M": "36682"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-tuelo-tech-blue-white-red-13930": {
+   "itemId": "13930",
+   "article": "W214102222",
+   "sizes": {
+    "S": "29992"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-tuelo-tech-dark-grey-pink-14351": {
+   "itemId": "14351",
+   "article": "W214102222",
+   "sizes": {
+    "XS": "31011"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-twiggy-blue-mixed-16440": {
+   "itemId": "16440",
+   "article": "W1300007-DBLMX",
+   "sizes": {
+    "XS": "36949",
+    "S": "36948",
+    "M": "36947"
+   }
+  },
   "https://saletennis.com/catalog/product/plat-ie-zhienskoie-mizuno-charge-printed-dress-lilac-chiffon-16330": {
    "itemId": "16330",
    "article": "62GHB20164",
@@ -3775,6 +3906,20 @@
     "XS": "43226"
    }
   },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-nike-court-dri-fit-advantage-white-black-16781": {
+   "itemId": "16781",
+   "article": "DX1427-100",
+   "sizes": {
+    "M": "37847"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-nike-court-slam-luminous-green-17843": {
+   "itemId": "17843",
+   "article": "FZ6463-331",
+   "sizes": {
+    "M": "40776"
+   }
+  },
   "https://saletennis.com/catalog/product/plat-ie-zhienskoie-nike-court-slam-tennis-dress-light-lemon-twist-18846": {
    "itemId": "18846",
    "article": "II3136-736",
@@ -3791,11 +3936,25 @@
     "L": "43961"
    }
   },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-nike-court-slam-white-18114": {
+   "itemId": "18114",
+   "article": "FZ6746-100",
+   "sizes": {
+    "M": "41509"
+   }
+  },
   "https://saletennis.com/catalog/product/plat-ie-zhienskoie-nike-court-victory-dress-rush-pink-white-18443": {
    "itemId": "18443",
    "article": "FQ1780-666",
    "sizes": {
     "XS": "42333"
+   }
+  },
+  "https://saletennis.com/catalog/product/polo-dietskoie-7-6-niki-polo-gradient-16662": {
+   "itemId": "16662",
+   "article": "BPL76-0000",
+   "sizes": {
+    "XL": "37567"
    }
   },
   "https://saletennis.com/catalog/product/polo-dietskoie-7-6-sasha-polo-forest-elf-15398": {
@@ -3822,6 +3981,14 @@
    "sizes": {
     "XS": "34036",
     "S": "34035"
+   }
+  },
+  "https://saletennis.com/catalog/product/polo-muzhskoie-7-6-andy-polo-antarctica-18608": {
+   "itemId": "18608",
+   "article": "MPA76-4104",
+   "sizes": {
+    "S": "42780",
+    "M": "42779"
    }
   },
   "https://saletennis.com/catalog/product/polo-muzhskoie-7-6-andy-polo-black-17115": {
@@ -3884,9 +4051,9 @@
    "itemId": "18610",
    "article": "PL7060-4109",
    "sizes": {
-    "L": "42788",
+    "S": "42790",
     "M": "42789",
-    "S": "42790"
+    "L": "42788"
    }
   },
   "https://saletennis.com/catalog/product/polo-muzhskoie-7-6-ankl-polo-2-0-black-17117": {
@@ -3964,9 +4131,9 @@
    "itemId": "17118",
    "article": "PL7060-100",
    "sizes": {
-    "S": "38660",
-    "M": "38659",
     "L": "38658",
+    "M": "38659",
+    "S": "38660",
     "XL": "38661",
     "XXL": "38662"
    }
@@ -4123,7 +4290,6 @@
    "itemId": "19237",
    "article": "IB1028-486",
    "sizes": {
-    "S": "43881",
     "M": "43880",
     "L": "43879"
    }
@@ -4675,7 +4841,6 @@
    "itemId": "19246",
    "article": "IF1560-060",
    "sizes": {
-    "S": "43921",
     "M": "43920",
     "XL": "43922"
    }
@@ -4742,7 +4907,6 @@
    "itemId": "19251",
    "article": "IF1560-486",
    "sizes": {
-    "S": "43939",
     "M": "43938",
     "L": "43937",
     "XL": "43940"
@@ -5684,12 +5848,12 @@
    "itemId": "17927",
    "article": "KT76-0205",
    "sizes": {
-    "XL": "41274",
-    "L": "41152",
-    "M": "41153",
-    "S": "41154",
+    "XXS": "41156",
     "XS": "41155",
-    "XXS": "41156"
+    "S": "41154",
+    "M": "41153",
+    "L": "41152",
+    "XL": "41274"
    }
   },
   "https://saletennis.com/catalog/product/top-zhienskii-7-6-kris-top-ebony-18590": {
@@ -5855,7 +6019,6 @@
    "sizes": {
     "XXS": "41181",
     "XS": "41180",
-    "S": "41179",
     "XL": "41279"
    }
   },
@@ -6130,7 +6293,8 @@
    "itemId": "15599",
    "article": "275404-ORDR",
    "sizes": {
-    "27": "34640"
+    "27": "34640",
+    "27,5": "34641"
    }
   },
   "https://saletennis.com/catalog/product/krossovki-dietskiie-head-sprint-velcro-4-0-blueberry-teal-18577": {
@@ -6360,8 +6524,7 @@
    "itemId": "17423",
    "article": "273245-DBRD",
    "sizes": {
-    "44": "39511",
-    "44,5": "39512"
+    "44": "39511"
    }
   },
   "https://saletennis.com/catalog/product/krossovki-muzhskiie-head-revolt-pro-4-5-navy-lime-17424": {
@@ -6553,7 +6716,6 @@
    "article": "273436-NVCG",
    "sizes": {
     "42": "42995",
-    "42,5": "42996",
     "43": "42997",
     "44": "42998"
    }
@@ -6691,7 +6853,6 @@
    "itemId": "18728",
    "article": "TSPINS2612OM",
    "sizes": {
-    "42": "43062",
     "42,5": "43063",
     "43": "43064",
     "44": "43065",
@@ -7332,6 +7493,13 @@
     "45,5": "41859"
    }
   },
+  "https://saletennis.com/catalog/product/krossovki-seven-six-sprint-black-white-15535": {
+   "itemId": "15535",
+   "article": "TS101001-BKWH",
+   "sizes": {
+    "44": "34367"
+   }
+  },
   "https://saletennis.com/catalog/product/krossovki-seven-six-sprint-w-black-white-15543": {
    "itemId": "15543",
    "article": "TSW101001-BKWH",
@@ -7609,7 +7777,6 @@
    "itemId": "19021",
    "article": "HQ6027-501",
    "sizes": {
-    "37,5": "43719",
     "38": "43463",
     "38,5": "43464",
     "39": "43465",
@@ -7713,7 +7880,6 @@
    "sizes": {
     "38,5": "43533",
     "39": "43534",
-    "40": "43535",
     "41": "43536"
    }
   },
@@ -8678,11 +8844,6 @@
   "https://saletennis.com/catalog/product/tiennisnaia-struna-luxilon-eco-spin-1-25-200-mietrov-16056": {
    "itemId": "16056",
    "article": "WR8310701125",
-   "sizes": {}
-  },
-  "https://saletennis.com/catalog/product/tiennisnaia-struna-luxilon-eco-spin-black-1-25-12-mietrov-16572": {
-   "itemId": "16572",
-   "article": "WR8310601125",
    "sizes": {}
   },
   "https://saletennis.com/catalog/product/tiennisnaia-struna-luxilon-element-1-25-12-mietrov-4576": {
@@ -9766,13 +9927,6 @@
    "article": "RK-FS-ELV-TOUR",
    "sizes": {
     "3": "30432"
-   }
-  },
-  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-diadem-nova-fs-100-14122": {
-   "itemId": "14122",
-   "article": "RK-FS-NVA",
-   "sizes": {
-    "3": "30434"
    }
   },
   "https://saletennis.com/catalog/product/tiennisnaia-rakietka-diadem-rise-26-teal-14178": {
@@ -11290,13 +11444,6 @@
     "0": "39882"
    }
   },
-  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-ultra-100l-v5-0-roland-garros-2026-18989": {
-   "itemId": "18989",
-   "article": "WR204311",
-   "sizes": {
-    "3": "43383"
-   }
-  },
   "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-ultra-99-pro-v5-0-18046": {
    "itemId": "18046",
    "article": "WR178711",
@@ -11528,11 +11675,6 @@
   "https://saletennis.com/catalog/product/blistatiel-naia-sieriena-dzhieral-d-marzorati-1-16749": {
    "itemId": "16749",
    "article": "KA-00392223",
-   "sizes": {}
-  },
-  "https://saletennis.com/catalog/product/bol-shoi-tiennis-ighra-biez-oshibok-16750": {
-   "itemId": "16750",
-   "article": "978-5-532-07147-6",
    "sizes": {}
   },
   "https://saletennis.com/catalog/product/brielok-miachik-7-6-pink-10275": {
@@ -15003,157 +15145,6 @@
    "itemId": "18257",
    "article": "PB76-003",
    "sizes": {}
-  },
-  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-7-6-nika-dress-2-0-pearl-19390": {
-   "itemId": "19390",
-   "article": "ND276-1304",
-   "sizes": {
-    "XXS": "44234",
-    "XS": "44233",
-    "S": "44231",
-    "M": "44230",
-    "L": "44229",
-    "XL": "44232"
-   }
-  },
-  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-7-6-nika-dress-black-17105": {
-   "itemId": "17105",
-   "article": "ND76-010",
-   "sizes": {
-    "XXS": "38599"
-   }
-  },
-  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-7-6-nika-dress-bright-pink-17897": {
-   "itemId": "17897",
-   "article": "ND76-1265",
-   "sizes": {
-    "XXS": "41141",
-    "XS": "41140",
-    "S": "41139",
-    "M": "41003"
-   }
-  },
-  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-7-6-nika-dress-lavander-haze-17925": {
-   "itemId": "17925",
-   "article": "ND276-3612",
-   "sizes": {
-    "XXS": "41146",
-    "XS": "41145",
-    "S": "41144",
-    "M": "41143",
-    "L": "41142"
-   }
-  },
-  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-7-6-nika-dress-light-green-17926": {
-   "itemId": "17926",
-   "article": "ND76-0116",
-   "sizes": {
-    "XXS": "41151",
-    "XS": "41150",
-    "S": "41149",
-    "M": "41148",
-    "L": "41147",
-    "XL": "41268"
-   }
-  },
-  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-7-6-nika-dress-white-17106": {
-   "itemId": "17106",
-   "article": "ND76-100",
-   "sizes": {
-    "XXS": "38604",
-    "L": "38600",
-    "XL": "38721"
-   }
-  },
-  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-beach-spirit-darkblue-15727": {
-   "itemId": "15727",
-   "article": "W2300005-DB",
-   "sizes": {
-    "XS": "35089",
-    "S": "35088",
-    "M": "35087"
-   }
-  },
-  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-beach-spirit-neon-yellow-15728": {
-   "itemId": "15728",
-   "article": "W2300005-NYCY",
-   "sizes": {
-    "XS": "35093",
-    "S": "35092",
-    "M": "35091"
-   }
-  },
-  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-colortwist-turquoise-blue-14499": {
-   "itemId": "14499",
-   "article": "W1300001",
-   "sizes": {
-    "XS": "31516",
-    "S": "31515"
-   }
-  },
-  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-jala-tech-red-blue-14350": {
-   "itemId": "14350",
-   "article": "W214102221",
-   "sizes": {
-    "XS": "31008"
-   }
-  },
-  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-kaleido-white-mixed-17218": {
-   "itemId": "17218",
-   "article": "W1300011",
-   "sizes": {
-    "XS": "38812",
-    "S": "38811"
-   }
-  },
-  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-spectrum-turquoise-navy-17219": {
-   "itemId": "17219",
-   "article": "W2300010",
-   "sizes": {
-    "XS": "38815",
-    "S": "38814"
-   }
-  },
-  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-spike-lilac-pink-16363": {
-   "itemId": "16363",
-   "article": "W1300008",
-   "sizes": {
-    "XS": "36681",
-    "S": "36680",
-    "M": "36679"
-   }
-  },
-  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-spike-navy-pink-16364": {
-   "itemId": "16364",
-   "article": "W2300008",
-   "sizes": {
-    "XS": "36684",
-    "S": "36683",
-    "M": "36682"
-   }
-  },
-  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-tuelo-tech-blue-white-red-13930": {
-   "itemId": "13930",
-   "article": "W214102222",
-   "sizes": {
-    "S": "29992"
-   }
-  },
-  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-tuelo-tech-dark-grey-pink-14351": {
-   "itemId": "14351",
-   "article": "W214102222",
-   "sizes": {
-    "XS": "31011"
-   }
-  },
-  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-twiggy-blue-mixed-16440": {
-   "itemId": "16440",
-   "article": "W1300007-DBLMX",
-   "sizes": {
-    "XS": "36949",
-    "S": "36948",
-    "M": "36947"
-   }
   }
  }
 }
