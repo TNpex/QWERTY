@@ -175,9 +175,9 @@ export const ORDER_BOOKMARKLET =
   "javascript:(function(){var h=location.hash.match(/stcart=([A-Za-z0-9+/=]+)/);var raw=null;" +
   "if(h){try{raw=JSON.parse(atob(h[1]));}catch(e){}}" +
   "if(!raw){try{raw=JSON.parse(localStorage.getItem('stcart')||'null');}catch(e){}}" +
-  "if(!raw||!raw.items||!raw.items.length){alert('Список пуст. Откройте корзину кнопкой «Перейти к заказу» из дашборда SaleTennis Analytics.');return;}" +
+  "if(!raw||!raw.items||!raw.items.length){alert('Список товаров не найден на этой странице.\\n\\nВернитесь в дашборд SaleTennis Analytics → «Перемещения» → «Перейти к заказу» → «Открыть корзину», и нажмите эту закладку на ОТКРЫВШЕЙСЯ странице.');return;}" +
   "try{localStorage.setItem('stcart',JSON.stringify(raw));}catch(e){}" +
-  "if(document.getElementById('form-login-username')){alert('Сначала войдите в аккаунт saletennis.com — список сохранится. После входа нажмите эту кнопку ещё раз.');return;}" +
+  "if(!document.querySelector('a[href*=\"logout\"]')){alert('Вы не вошли на saletennis.com.\\nСписок товаров сохранён: войдите в аккаунт (кнопка «Войти» в шапке) и нажмите эту закладку ещё раз.');return;}" +
   "var items=raw.items,i=0,ok=0,fail=0;var box=document.createElement('div');" +
   "box.style.cssText='position:fixed;top:16px;right:16px;z-index:2147483647;background:#111827;color:#fff;padding:14px 18px;border-radius:12px;font:14px sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.4);max-width:320px';" +
   "document.body.appendChild(box);" +
