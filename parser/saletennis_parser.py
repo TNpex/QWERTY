@@ -105,7 +105,9 @@ STORES_FULL = {
 
 PAGE_DELAY = 0.5          # вежливая пауза между страницами
 PRODUCT_RETRIES = 2       # повторы при сбое загрузки товара
-REQUEST_TIMEOUT = 30
+REQUEST_TIMEOUT = 30      # таймаут HTTP-запросов (фото и т.п.)
+PAGE_LOAD_TIMEOUT = 60    # таймаут загрузки страницы браузером
+LOGIN_RETRIES = 3         # попытки авторизации (облачные раннеры бывают медленными)
 
 # ================= ПУТИ (настраиваются через --out) =================
 
@@ -180,6 +182,26 @@ def load_credentials():
 
 # ================= ДРАЙВЕР =================
 
+def _block_analytics(driver):
+    """
+    Отключает счётчики/рекламу (Метрика, Sentry, click.ru, GA...). Они не нужны
+    парсеру, но именно из-за них страница логина на облачном раннере иногда не
+    «догружается» за 30 секунд → TimeoutException «Timed out receiving message
+    from renderer». Бонус: страницы грузятся заметно быстрее.
+    """
+    try:
+        driver.execute_cdp_cmd(
+            "Network.setBlockedURLs",
+            {"urls": [
+                "*mc.yandex.ru*", "*yandexmetrika*", "*sentry-cdn*", "*af.click.ru*",
+                "*google-analytics*", "*googletagmanager*", "*doubleclick*",
+                "*facebook.net*", "*facebook.com/tr*",
+            ]},
+        )
+    except Exception as e:
+        log(f"[WARN] Не удалось заблокировать аналитику (не критично): {e}")
+
+
 def init_driver():
     log("[INFO] Инициализация headless-браузера...")
     from selenium.webdriver.edge.options import Options as EdgeOptions
@@ -190,8 +212,13 @@ def init_driver():
     edge_options.add_argument("--window-size=1920,1080")
     edge_options.add_argument("--disable-gpu")
     edge_options.add_argument("--no-sandbox")
+    edge_options.add_argument("--disable-dev-shm-usage")  # в контейнере /dev/shm мал — рендерер не будет «зависать»
     edge_options.add_argument("--log-level=3")
     edge_options.add_argument("--disable-blink-features=AutomationControlled")
+    # Ждём только DOM (DOMContentLoaded), а не полную загрузку с картинками и
+    # аналитикой: на headless-браузере в GitHub Actions полная загрузка
+    # страницы логина иногда не успевала за 30 с и роняла весь прогон.
+    edge_options.page_load_strategy = "eager"
 
     # Selenium 4.6+ сам находит драйвер (Selenium Manager); fallback — webdriver_manager
     try:
@@ -201,33 +228,51 @@ def init_driver():
         service = EdgeService(EdgeChromiumDriverManager().install())
         driver = webdriver.Edge(service=service, options=edge_options)
 
-    driver.set_page_load_timeout(REQUEST_TIMEOUT)
+    driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
+    _block_analytics(driver)
     return driver
 
 
-def login(driver, email, password):
-    log(f"[INFO] Авторизация на {LOGIN_URL}")
-    driver.get(LOGIN_URL)
-    time.sleep(2)
+def _login_once(driver, email, password):
+    """Одна попытка авторизации. Бросает исключение, если форма/переход не удались."""
     try:
-        email_input = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.ID, "form-login-username"))
-        )
-        password_input = driver.find_element(By.ID, "form-login-password")
-        login_button = driver.find_element(
-            By.XPATH, "//input[@type='submit' and contains(@class, 'button')]"
-        )
-        email_input.clear()
-        email_input.send_keys(email)
-        password_input.clear()
-        password_input.send_keys(password)
-        driver.execute_script("arguments[0].click();", login_button)
-        WebDriverWait(driver, 10).until(lambda d: '/login' not in d.current_url.lower())
-        log("[OK] Авторизация успешна")
-        return True
+        driver.get(LOGIN_URL)
     except Exception as e:
-        log(f"[ERROR] Ошибка авторизации: {e}")
-        return False
+        # Таймаут загрузки страницы — ещё не приговор: с стратегией «eager» DOM
+        # обычно уже построен, форма логина на месте. Пробуем работать с тем,
+        # что загрузилось (раньше здесь сразу падал весь прогон).
+        log(f"[WARN] Страница логина не догрузилась ({e.__class__.__name__}) — пробую текущий DOM")
+    time.sleep(2)
+    email_input = WebDriverWait(driver, 15).until(
+        EC.presence_of_element_located((By.ID, "form-login-username"))
+    )
+    password_input = driver.find_element(By.ID, "form-login-password")
+    login_button = driver.find_element(
+        By.XPATH, "//input[@type='submit' and contains(@class, 'button')]"
+    )
+    email_input.clear()
+    email_input.send_keys(email)
+    password_input.clear()
+    password_input.send_keys(password)
+    driver.execute_script("arguments[0].click();", login_button)
+    WebDriverWait(driver, 20).until(lambda d: '/login' not in d.current_url.lower())
+    return True
+
+
+def login(driver, email, password):
+    """Авторизация с несколькими попытками (облачные раннеры бывают медленными)."""
+    log(f"[INFO] Авторизация на {LOGIN_URL}")
+    for attempt in range(1, LOGIN_RETRIES + 1):
+        try:
+            if _login_once(driver, email, password):
+                log("[OK] Авторизация успешна")
+                return True
+        except Exception as e:
+            log(f"[WARN] Попытка авторизации {attempt}/{LOGIN_RETRIES} не удалась: {e}")
+        if attempt < LOGIN_RETRIES:
+            time.sleep(5 * attempt)
+    log("[ERROR] Авторизация не удалась после всех попыток")
+    return False
 
 
 # ================= КАТАЛОГ =================
@@ -832,8 +877,12 @@ def main():
 
     try:
         if not login(driver, email, password):
-            log("[ERROR] Не удалось войти. Завершение.")
-            sys.exit(1)
+            log("[WARN] Перезапускаю браузер и пробую войти ещё раз...")
+            restarted = restart_driver(driver, email, password)
+            if restarted is None:
+                log("[ERROR] Не удалось войти. Завершение.")
+                sys.exit(1)
+            driver = restarted
 
         consecutive_failures = 0
         for cat_name, cat_url in categories.items():
