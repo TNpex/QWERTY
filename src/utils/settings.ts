@@ -24,6 +24,12 @@ export interface ProductSettings {
   suppliedProducts: Record<string, boolean>;
   /** ключ товара → true: вручную отмечен как ходовой (🔥 + приоритет в перемещениях) */
   hotProducts: Record<string, boolean>;
+  /**
+   * Минимальные остатки по магазинам: название магазина → ключ товара → N шт.
+   * Влияют на входящие перемещения профиля «Мой магазин»: позиции с нехваткой
+   * до минимума поднимаются первыми и помечаются ⭐.
+   */
+  storeMinimums: Record<string, Record<string, number>>;
 }
 
 export const EMPTY_SETTINGS: ProductSettings = {
@@ -31,6 +37,7 @@ export const EMPTY_SETTINGS: ProductSettings = {
   excludedProducts: {},
   suppliedProducts: {},
   hotProducts: {},
+  storeMinimums: {},
 };
 
 /** Достаёт значение из произвольного объекта по списку ключей (валидация импорта) */
@@ -56,6 +63,34 @@ function pickBoolRecord(raw: unknown): Record<string, boolean> {
   return result;
 }
 
+/** Валидация вложенных минимумов: магазин → товар → положительное число */
+function pickMinimums(raw: unknown): Record<string, Record<string, number>> {
+  const result: Record<string, Record<string, number>> = {};
+  if (!raw || typeof raw !== 'object') return result;
+  for (const [store, perProduct] of Object.entries(raw as Record<string, unknown>)) {
+    if (!store.trim() || !perProduct || typeof perProduct !== 'object') continue;
+    const entry: Record<string, number> = {};
+    for (const [key, value] of Object.entries(perProduct as Record<string, unknown>)) {
+      const num = typeof value === 'number' ? value : Number(value);
+      if (key.trim() && Number.isFinite(num) && num > 0) entry[key.trim()] = Math.round(num);
+    }
+    if (Object.keys(entry).length > 0) result[store.trim()] = entry;
+  }
+  return result;
+}
+
+/** Глубокое слияние минимумов: по магазину и по товару */
+function mergeMinimums(
+  a: Record<string, Record<string, number>>,
+  b: Record<string, Record<string, number>>
+): Record<string, Record<string, number>> {
+  const out: Record<string, Record<string, number>> = { ...a };
+  for (const [store, mins] of Object.entries(b)) {
+    out[store] = { ...(out[store] ?? {}), ...mins };
+  }
+  return out;
+}
+
 /** Безопасный разбор JSON настроек (из файла или localStorage) */
 export function parseSettings(json: string): ProductSettings | null {
   try {
@@ -69,6 +104,7 @@ export function parseSettings(json: string): ProductSettings | null {
       excludedProducts: pickRecord(raw.excludedProducts),
       suppliedProducts: pickBoolRecord(raw.suppliedProducts),
       hotProducts: pickBoolRecord(raw.hotProducts),
+      storeMinimums: pickMinimums(raw.storeMinimums),
     };
   } catch {
     return null;
@@ -103,6 +139,7 @@ export function mergeSettings(
     excludedProducts: { ...current.excludedProducts, ...incoming.excludedProducts },
     suppliedProducts: { ...current.suppliedProducts, ...incoming.suppliedProducts },
     hotProducts: { ...current.hotProducts, ...incoming.hotProducts },
+    storeMinimums: mergeMinimums(current.storeMinimums, incoming.storeMinimums),
   };
 }
 
@@ -127,11 +164,17 @@ export function settingsCounts(settings: ProductSettings): {
   excluded: number;
   supplied: number;
   hot: number;
+  minimums: number;
 } {
+  let minimums = 0;
+  for (const perStore of Object.values(settings.storeMinimums)) {
+    minimums += Object.keys(perStore).length;
+  }
   return {
     sports: Object.keys(settings.sportOverrides).length,
     excluded: Object.keys(settings.excludedProducts).length,
     supplied: Object.keys(settings.suppliedProducts).length,
     hot: Object.keys(settings.hotProducts).length,
+    minimums,
   };
 }

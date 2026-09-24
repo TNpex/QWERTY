@@ -247,6 +247,62 @@ function ProductSettingsPanel({ product }: { product: Product }) {
 }
 
 /**
+ * Минимальный остаток в магазине профиля «Мой магазин».
+ * Позиции с нехваткой до минимума поднимаются первыми во входящих
+ * перемещениях и помечаются ⭐. Хранится в настройках (общий JSON).
+ */
+function StoreMinimumPanel({ product }: { product: Product }) {
+  const { storeProfile, settings, setStoreMinimum } = useData();
+  const key = productSettingsKey(product);
+  const saved = storeProfile ? settings.storeMinimums[storeProfile]?.[key] ?? 0 : 0;
+  const [value, setValue] = useState(saved ? String(saved) : '');
+
+  useEffect(() => {
+    setValue(saved ? String(saved) : '');
+  }, [saved, storeProfile]);
+
+  if (!storeProfile) return null;
+
+  const commit = (raw: string) => {
+    const num = parseInt(raw.replace(',', '.'), 10);
+    setStoreMinimum(storeProfile, key, Number.isFinite(num) && num > 0 ? num : null);
+  };
+
+  return (
+    <div className="px-5 pb-4">
+      <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4">
+        <div className="text-xs font-semibold text-blue-800 mb-2">📍 Мой магазин: {storeProfile}</div>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <label htmlFor="store-minimum-input" className="text-xs text-gray-600">
+            Минимальный остаток в магазине, шт.:
+          </label>
+          <input
+            id="store-minimum-input"
+            type="number"
+            min={0}
+            max={99}
+            value={value}
+            onChange={(e) => {
+              setValue(e.target.value);
+              commit(e.target.value);
+            }}
+            placeholder="0"
+            className="w-20 px-2 py-1.5 text-sm border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-400 bg-white"
+          />
+          {saved > 0 ? (
+            <span className="text-[11px] text-blue-700">
+              ⭐ Задан минимум {saved} шт. — нехватка будет первой во входящих перемещениях
+            </span>
+          ) : (
+            <span className="text-[11px] text-gray-400">0 или пусто — минимум не задан</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Модальная карточка товара: картинка с saletennis.com, цена, артикул,
  * наличие по ВСЕМ магазинам и размерам (не возит — «—»). Склад подсвечен синим.
  */
@@ -453,6 +509,8 @@ export function ProductCardModal({
         </div>
 
         <ProductSettingsPanel product={product} />
+
+        <StoreMinimumPanel product={product} />
 
         {/* Размерная сетка — ВСЕ магазины */}
         {view.sizes.length > 0 && (

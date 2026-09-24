@@ -21,6 +21,7 @@ describe('parseSettings', () => {
       excludedProducts: { '700': 'услуга' },
       suppliedProducts: {},
       hotProducts: {},
+      storeMinimums: {},
     });
   });
 
@@ -38,18 +39,21 @@ describe('mergeSettings', () => {
         excludedProducts: { x: 'услуга' },
         suppliedProducts: { s1: true },
         hotProducts: { h1: true },
+        storeMinimums: { Уфа: { k1: 3 } },
       },
       {
         sportOverrides: { a: 'other' },
         excludedProducts: {},
         suppliedProducts: { s2: true },
         hotProducts: {},
+        storeMinimums: { Уфа: { k2: 5 }, Ижевск: { k3: 2 } },
       }
     );
     expect(merged.sportOverrides).toEqual({ a: 'other', b: 'padel' });
     expect(merged.excludedProducts).toEqual({ x: 'услуга' });
     expect(merged.suppliedProducts).toEqual({ s1: true, s2: true });
     expect(merged.hotProducts).toEqual({ h1: true });
+    expect(merged.storeMinimums).toEqual({ Уфа: { k1: 3, k2: 5 }, Ижевск: { k3: 2 } });
   });
 });
 
@@ -60,6 +64,7 @@ describe('settingsCounts / roundtrip', () => {
       excluded: 0,
       supplied: 0,
       hot: 0,
+      minimums: 0,
     });
     expect(
       settingsCounts({
@@ -67,8 +72,9 @@ describe('settingsCounts / roundtrip', () => {
         excludedProducts: { b: 'услуга', c: 'вручную' },
         suppliedProducts: { d: true },
         hotProducts: { e: true, f: true },
+        storeMinimums: { Уфа: { k1: 3, k2: 2 }, Ижевск: { k3: 4 } },
       })
-    ).toEqual({ sports: 1, excluded: 2, supplied: 1, hot: 2 });
+    ).toEqual({ sports: 1, excluded: 2, supplied: 1, hot: 2, minimums: 3 });
   });
 
   it('флаги «Поставляется»/«Ходовой»: принимает только true', () => {
@@ -88,7 +94,21 @@ describe('settingsCounts / roundtrip', () => {
       excludedProducts: { b: 'услуга' },
       suppliedProducts: { c: true },
       hotProducts: { d: true },
+      storeMinimums: { Уфа: { k1: 3 } },
     };
     expect(parseSettings(settingsToJson(settings))).toEqual(settings);
+  });
+
+  it('минимумы: принимает только положительные числа, мусор отбрасывает', () => {
+    const parsed = parseSettings(
+      JSON.stringify({
+        storeMinimums: {
+          Уфа: { a: 3, b: -1, c: 0, d: '4', e: 'много', f: null },
+          '  ': { x: 1 },
+          Ижевск: 'не объект',
+        },
+      })
+    );
+    expect(parsed?.storeMinimums).toEqual({ Уфа: { a: 3, d: 4 } });
   });
 });

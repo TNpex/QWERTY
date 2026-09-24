@@ -105,7 +105,8 @@ function AppContent() {
   const settingsFileRef = useRef<HTMLInputElement>(null);
   const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
   const counts = settingsCounts(settings);
-  const settingsTotal = counts.sports + counts.excluded + counts.supplied + counts.hot;
+  const settingsTotal =
+    counts.sports + counts.excluded + counts.supplied + counts.hot + counts.minimums;
 
   // Восстановление сохранённых данных из IndexedDB
   if (!hydrated) {
@@ -277,7 +278,7 @@ function AppContent() {
             <button
               onClick={() => downloadSettings(settings)}
               className="w-full mb-2 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 transition-colors"
-              title={`Ориентации: ${counts.sports}, перемещение «Не требуется»: ${counts.excluded}, «Поставляется»: ${counts.supplied}, ходовые вручную: ${counts.hot}. Скачайте JSON, чтобы перенести настройки на другой компьютер, передать коллегам или зафиксировать в public/data/product-settings.json для всех.`}
+              title={`Ориентации: ${counts.sports}, перемещение «Не требуется»: ${counts.excluded}, «Поставляется»: ${counts.supplied}, ходовые вручную: ${counts.hot}, минимумы магазинов: ${counts.minimums}. Скачайте JSON, чтобы перенести настройки на другой компьютер, передать коллегам или зафиксировать в public/data/product-settings.json для всех.`}
             >
               <Upload className="w-3.5 h-3.5" />
               Настройки товаров: {settingsTotal} — скачать JSON

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowRight,
   Package,
@@ -22,6 +22,12 @@ import {
   getOverstockPositions,
 } from '../utils/analyticsCore';
 import { isWarehouse, shortStoreLabel, ROUTE_LABELS, type TransferRoute } from '../utils/storeGroups';
+import { productSettingsKey } from '../utils/sport';
+import {
+  resolveCartItems,
+  cartLinesToText,
+  type CartLine,
+} from '../utils/cart';
 import { ProductCardModal } from './ProductCardModal';
 import type { TransferRecommendation } from '../types';
 
@@ -65,8 +71,14 @@ type MyScope = 'incoming' | 'outgoing' | 'all';
 export function TransferRecommendations() {
   const data = useFilteredData();
   const recommendations = useTransferRecommendations();
-  const { storeProfile } = useData();
+  const { storeProfile, settings, cartMap, saletennisSession, setSaletennisSession } = useData();
   const [myScope, setMyScope] = useState<MyScope>('all');
+  // Корзина: выбранные позиции (ключ группы → строка), отправка, сессия
+  const [selected, setSelected] = useState<Map<string, CartLine>>(new Map());
+  const [cartBusy, setCartBusy] = useState<string | null>(null);
+  const [cartMessage, setCartMessage] = useState<{ text: string; error: boolean } | null>(null);
+  const [showSessionInput, setShowSessionInput] = useState(false);
+  const [sessionDraft, setSessionDraft] = useState('');
   const [toStoreId, setToStoreId] = useState('all');
   const [fromStoreId, setFromStoreId] = useState('all');
   const [selectedSubtype, setSelectedSubtype] = useState('all');
@@ -113,6 +125,27 @@ export function TransferRecommendations() {
 
   const spbExpensiveCount = recommendations.filter((r) => r.route === 'spb-expensive').length;
 
+  // ⭐ Минимумы «Моего магазина»: нехватка до минимума поднимается первой
+  const productsById = useMemo(
+    () => new Map((data?.products ?? []).map((p) => [p.id, p])),
+    [data]
+  );
+  const profileMinimums = useMemo(
+    () => (storeProfile ? settings.storeMinimums[storeProfile] ?? {} : {}),
+    [storeProfile, settings]
+  );
+  const getMinInfo = useCallback(
+    (rec: TransferRecommendation | undefined): { min: number; current: number } | null => {
+      if (!rec || !profileStoreId || rec.toStoreId !== profileStoreId) return null;
+      const product = productsById.get(rec.productId);
+      if (!product) return null;
+      const min = profileMinimums[productSettingsKey(product)];
+      if (!min || min <= 0 || rec.toQty >= min) return null;
+      return { min, current: rec.toQty };
+    },
+    [profileStoreId, productsById, profileMinimums]
+  );
+
   const filtered = useMemo(
     () =>
       recommendations.filter(
@@ -156,6 +189,149 @@ export function TransferRecommendations() {
     }
     return [...byProduct.values()].slice(0, MAX_TRANSFER_DISPLAY);
   }, [filtered]);
+
+  // Товары с нехваткой до минимума «моего магазина» — первыми (сортировка устойчивая)
+  const sortedProductGroups = useMemo(() => {
+    if (!profileStoreId) return productGroups;
+    const weight = (g: (typeof productGroups)[number]) =>
+      [...g.groups.values()].some((gr) => getMinInfo(gr.variants[0])) ? 0 : 1;
+    return [...productGroups].sort((a, b) => weight(a) - weight(b));
+  }, [productGroups, profileStoreId, getMinInfo]);
+
+  // ---- Корзина: выбор позиций и отправка на saletennis.com ----
+  const totalUnits = useMemo(
+    () => [...selected.values()].reduce((sum, line) => sum + line.quantity, 0),
+    [selected]
+  );
+
+  const toggleLine = (group: OptionGroupView) => {
+    setSelected((prev) => {
+      const next = new Map(prev);
+      if (next.has(group.key)) {
+        next.delete(group.key);
+        return next;
+      }
+      const rec = group.variants[0];
+      next.set(group.key, {
+        key: group.key,
+        name: rec.productName,
+        ...(rec.productLink ? { link: rec.productLink } : {}),
+        size: group.size,
+        quantity: Math.max(1, rec.quantity),
+        toStore: group.toStore,
+      });
+      return next;
+    });
+  };
+
+  const copyList = async () => {
+    const text = cartLinesToText([...selected.values()]);
+    try {
+      await navigator.clipboard.writeText(text);
+      setCartMessage({ text: 'Список скопирован в буфер обмена', error: false });
+    } catch {
+      setCartMessage({ text: 'Не удалось скопировать — разрешите доступ к буферу', error: true });
+    }
+  };
+
+  const sendToCart = async () => {
+    const lines = [...selected.values()];
+    if (lines.length === 0 || cartBusy) return;
+    const { items, missing } = resolveCartItems(cartMap, lines);
+    if (!saletennisSession.trim()) {
+      setSessionDraft(saletennisSession);
+      setShowSessionInput(true);
+      setCartMessage({
+        text: 'Сначала укажите сессию saletennis.com (🔑) — инструкция в открывшемся окне',
+        error: true,
+      });
+      return;
+    }
+    if (items.length === 0) {
+      setCartMessage({
+        text: `Нечего добавлять: ${missing[0]?.reason ?? 'нет данных корзины'}. Воспользуйтесь «Скопировать список».`,
+        error: true,
+      });
+      return;
+    }
+    setCartMessage(null);
+    let added = 0;
+    let unauthorized = false;
+    const errors: string[] = [];
+    const BATCH = 10;
+    try {
+      for (let i = 0; i < items.length; i += BATCH) {
+        const batch = items.slice(i, i + BATCH);
+        setCartBusy(`Добавляю ${Math.min(i + BATCH, items.length)}/${items.length}…`);
+        const resp = await fetch('/api/saletennis-cart', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            cookie: saletennisSession.trim(),
+            items: batch.map((it) => ({
+              itemId: it.itemId,
+              count: it.count,
+              size: it.size,
+              name: it.name,
+            })),
+          }),
+        });
+        if (resp.status === 404) {
+          errors.push('API корзины недоступно (работает только на сайте Vercel, не в локальной сборке)');
+          break;
+        }
+        const payload = (await resp.json().catch(() => null)) as {
+          unauthorized?: boolean;
+          results?: { name: string; ok: boolean; error?: string }[];
+        } | null;
+        if (!resp.ok || !payload) {
+          errors.push(`HTTP ${resp.status}`);
+          continue;
+        }
+        if (payload.unauthorized) {
+          unauthorized = true;
+          break;
+        }
+        for (const r of payload.results ?? []) {
+          if (r.ok) added++;
+          else errors.push(`${r.name}: ${r.error ?? 'ошибка'}`);
+        }
+      }
+    } catch (e) {
+      errors.push(String(e));
+    }
+    setCartBusy(null);
+    if (unauthorized) {
+      setSessionDraft('');
+      setShowSessionInput(true);
+      setCartMessage({
+        text: 'Сессия saletennis.com истекла — вставьте свежий PHPSESSID (🔑)',
+        error: true,
+      });
+      return;
+    }
+    if (added > 0) {
+      window.open('https://www.saletennis.com/cabinet/cart/', '_blank', 'noopener');
+      setSelected(new Map());
+    }
+    const parts = [`Добавлено в корзину: ${added} из ${items.length}`];
+    if (missing.length > 0) {
+      parts.push(`${missing.length} позиций без данных корзины — список скопирован в буфер`);
+      navigator.clipboard
+        ?.writeText(cartLinesToText(missing.map((m) => m.line)))
+        .catch(() => undefined);
+    }
+    if (errors.length > 0) {
+      parts.push(`ошибки: ${errors.slice(0, 2).join('; ')}${errors.length > 2 ? '…' : ''}`);
+    }
+    setCartMessage({ text: parts.join(' · '), error: added === 0 });
+  };
+
+  const saveSession = () => {
+    setSaletennisSession(sessionDraft);
+    setShowSessionInput(false);
+    setCartMessage({ text: 'Сессия saletennis.com сохранена (только в этом браузере)', error: false });
+  };
 
   if (!data) return null;
 
@@ -252,6 +428,20 @@ export function TransferRecommendations() {
                 </option>
               ))}
             </select>
+            <button
+              onClick={() => {
+                setSessionDraft(saletennisSession);
+                setShowSessionInput(true);
+              }}
+              className={`px-3 py-2 border rounded-lg text-xs whitespace-nowrap transition-colors ${
+                saletennisSession
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                  : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+              }`}
+              title="Сессия (cookie PHPSESSID) для переноса корзины на saletennis.com"
+            >
+              🔑 Корзина saletennis: {saletennisSession ? 'подключена ✓' : 'не подключена'}
+            </button>
           </div>
         </div>
 
@@ -292,7 +482,7 @@ export function TransferRecommendations() {
 
       {/* Карточки товаров */}
       <div className="space-y-3">
-        {productGroups.map((product) => {
+        {sortedProductGroups.map((product) => {
           const storeTotals = productStoreTotals.get(product.productId);
           const brand = data.products.find((p) => p.id === product.productId)?.brand ?? '';
           return (
@@ -359,8 +549,22 @@ export function TransferRecommendations() {
               {/* Группы вариантов: один дефицит — несколько альтернативных источников */}
               <div className="space-y-2">
                 {[...product.groups.values()].map((group) => (
-                  <div key={group.key} className="bg-gray-50 rounded-lg px-3 py-2">
+                  <div
+                    key={group.key}
+                    className={`rounded-lg px-3 py-2 ${
+                      selected.has(group.key)
+                        ? 'bg-emerald-50 ring-1 ring-emerald-300'
+                        : 'bg-gray-50'
+                    }`}
+                  >
                     <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(group.key)}
+                        onChange={() => toggleLine(group)}
+                        className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer flex-shrink-0"
+                        title="Выбрать позицию в корзину saletennis.com"
+                      />
                       <span className="font-bold text-xs text-gray-800 bg-white border border-gray-200 rounded px-2 py-0.5">
                         {group.size}
                       </span>
@@ -368,6 +572,17 @@ export function TransferRecommendations() {
                         нужно в <b className="text-gray-700">{shortStoreLabel(group.toStore)}</b>{' '}
                         (сейчас {group.toQty})
                       </span>
+                      {(() => {
+                        const mi = getMinInfo(group.variants[0]);
+                        return mi ? (
+                          <span
+                            className="text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-300 rounded-full px-2 py-0.5"
+                            title={`Минимум для «${storeProfile}»: ${mi.min} шт.`}
+                          >
+                            ⭐ Минимум {mi.min} (есть {mi.current})
+                          </span>
+                        ) : null;
+                      })()}
                       {group.variants.length > 1 && (
                         <span className="text-[10px] font-semibold text-purple-600 bg-purple-50 border border-purple-200 rounded-full px-2 py-0.5">
                           {group.variants.length} варианта — выберите один
@@ -486,6 +701,87 @@ export function TransferRecommendations() {
           </div>
         )}
       </div>
+
+      {/* Плавающая панель корзины + ввод сессии + сообщения */}
+      {(selected.size > 0 || showSessionInput || cartMessage) && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 w-full max-w-[96vw] px-2 pointer-events-none">
+          {cartMessage && (
+            <div
+              className={`pointer-events-auto px-4 py-2.5 rounded-xl shadow-lg text-xs font-medium flex items-center gap-3 max-w-full ${
+                cartMessage.error ? 'bg-red-600 text-white' : 'bg-emerald-600 text-white'
+              }`}
+            >
+              <span className="truncate">{cartMessage.text}</span>
+              <button
+                onClick={() => setCartMessage(null)}
+                className="opacity-70 hover:opacity-100 flex-shrink-0"
+                aria-label="Закрыть сообщение"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+          {showSessionInput && (
+            <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl border border-gray-200 px-5 py-4 w-[540px] max-w-full">
+              <div className="text-sm font-semibold text-gray-800 mb-1.5">
+                🔑 Сессия saletennis.com (один раз)
+              </div>
+              <p className="text-[11px] text-gray-500 mb-2.5 leading-relaxed">
+                Войдите в saletennis.com в этом браузере → расширение <b>Cookie-Editor</b> →
+                Export → найдите cookie <b>PHPSESSID</b> → скопируйте её значение сюда.
+                Значение хранится только в этом браузере и используется лишь для добавления
+                товаров в вашу корзину.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  value={sessionDraft}
+                  onChange={(e) => setSessionDraft(e.target.value)}
+                  placeholder="значение PHPSESSID"
+                  className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  onClick={saveSession}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+                >
+                  Сохранить
+                </button>
+                <button
+                  onClick={() => setShowSessionInput(false)}
+                  className="px-3 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200"
+                >
+                  Закрыть
+                </button>
+              </div>
+            </div>
+          )}
+          {selected.size > 0 && (
+            <div className="pointer-events-auto bg-gray-900 text-white rounded-2xl shadow-2xl px-5 py-3 flex items-center gap-3 flex-wrap justify-center max-w-full">
+              <span className="text-sm whitespace-nowrap">
+                🛒 Выбрано: <b>{selected.size}</b> поз. · <b>{totalUnits}</b> шт.
+              </span>
+              <button
+                onClick={sendToCart}
+                disabled={cartBusy !== null}
+                className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-wait rounded-xl text-sm font-semibold whitespace-nowrap transition-colors"
+              >
+                {cartBusy ?? 'Перенести в корзину saletennis.com'}
+              </button>
+              <button
+                onClick={copyList}
+                className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-xs whitespace-nowrap"
+              >
+                Скопировать список
+              </button>
+              <button
+                onClick={() => setSelected(new Map())}
+                className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-xs whitespace-nowrap"
+              >
+                Сбросить
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {selectedProduct && (
         <ProductCardModal productId={selectedProduct} onClose={() => setSelectedProduct(null)} />

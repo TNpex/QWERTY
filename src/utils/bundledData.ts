@@ -14,6 +14,7 @@ import {
 import { sortStoresForDisplay } from './storeGroups';
 import { photoFileName } from './images';
 import { parseSettings, type ProductSettings } from './settings';
+import { parseCartMap, type CartMap } from './cart';
 import { productMeta, cleanBrand } from './productMeta';
 
 /**
@@ -65,6 +66,8 @@ export interface BundledDataset {
   hotProducts: HotProductConfig[];
   /** Общие настройки товаров из public/data/product-settings.json (если есть) */
   settings: ProductSettings | null;
+  /** Данные корзины saletennis.com (public/data/cart-map.json, собирает парсер) */
+  cartMap: CartMap | null;
 }
 
 const isBadBrandValue = (brand: string): boolean =>
@@ -433,13 +436,15 @@ async function fetchSnapshotRows(url: string): Promise<Record<string, unknown>[]
 export async function loadBundledDataset(): Promise<BundledDataset> {
   const base = `${import.meta.env.BASE_URL ?? '/'}data/`;
 
-  const [productsText, sizesText, changesText, hotText, settingsText] = await Promise.all([
-    fetchText(`${base}products.csv`),
-    fetchText(`${base}sizes.csv`).catch(() => ''),
-    fetchText(`${base}changes.csv`).catch(() => ''),
-    fetchText(`${base}hot-products.json`).catch(() => ''),
-    fetchText(`${base}product-settings.json`).catch(() => ''),
-  ]);
+  const [productsText, sizesText, changesText, hotText, settingsText, cartMapText] =
+    await Promise.all([
+      fetchText(`${base}products.csv`),
+      fetchText(`${base}sizes.csv`).catch(() => ''),
+      fetchText(`${base}changes.csv`).catch(() => ''),
+      fetchText(`${base}hot-products.json`).catch(() => ''),
+      fetchText(`${base}product-settings.json`).catch(() => ''),
+      fetchText(`${base}cart-map.json`).catch(() => ''),
+    ]);
 
   const productsRows = parseCSVText(productsText);
   const sizesRows = sizesText ? parseCSVText(sizesText) : [];
@@ -507,5 +512,6 @@ export async function loadBundledDataset(): Promise<BundledDataset> {
   const asOf = history.length > 0 ? history[history.length - 1].date : undefined;
   const data = parseBundledRows(productsRows, sizesRows, { asOf });
   const settings = settingsText ? parseSettings(settingsText) : null;
-  return { data, history, changes, sizeSnapshots, hotProducts, settings };
+  const cartMap = cartMapText ? parseCartMap(cartMapText) : null;
+  return { data, history, changes, sizeSnapshots, hotProducts, settings, cartMap };
 }

@@ -28,7 +28,10 @@ import {
 
 /** Профиль «Мой магазин» — локальный для устройства (в общий JSON не входит) */
 const PROFILE_STORAGE_KEY = 'saletennis-store-profile';
+/** Сессия (PHPSESSID) saletennis.com для переноса корзины — только на устройстве */
+const SESSION_STORAGE_KEY = 'saletennis-session';
 import type { Sport } from '../utils/sport';
+import type { CartMap } from '../utils/cart';
 import { loadProductImages, type ProductImageMap } from '../utils/images';
 import {
   loadBrandOverrides,
@@ -95,6 +98,13 @@ interface DataContextType {
   /** Профиль «Мой магазин» (название магазина или '') — локально для устройства */
   storeProfile: string;
   setStoreProfile: (storeName: string) => void;
+  /** Минимальный остаток товара в магазине профиля (null — снять минимум) */
+  setStoreMinimum: (storeName: string, key: string, value: number | null) => void;
+  /** Данные корзины saletennis.com (cart-map.json от парсера) */
+  cartMap: CartMap | null;
+  /** Сессия saletennis.com (значение PHPSESSID) — хранится только в этом браузере */
+  saletennisSession: string;
+  setSaletennisSession: (value: string) => void;
   /** Импорт настроек из JSON-строки; false — файл невалиден */
   importSettings: (json: string) => boolean;
   /** Товары, исчезнувшие из каталога (убраны с сайта = распроданы) */
@@ -137,6 +147,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
       return '';
     }
   });
+  const [cartMap, setCartMap] = useState<CartMap | null>(null);
+  const [saletennisSession, setSessionState] = useState<string>(() => {
+    try {
+      return localStorage.getItem(SESSION_STORAGE_KEY) ?? '';
+    } catch {
+      return '';
+    }
+  });
   const [filters, setFiltersState] = useState<DataFilters>(ALL_FILTERS);
   const [hydrated, setHydrated] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -156,6 +174,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       let changes: ParserChange[] = [];
       let sizes: SizeSnapshot[] = [];
       let hot: HotProductConfig[] = [];
+      let loadedCartMap: CartMap | null = null;
       try {
         const dataset = await loadBundledDataset();
         bundled = dataset.data;
@@ -163,6 +182,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         changes = dataset.changes;
         sizes = dataset.sizeSnapshots;
         hot = dataset.hotProducts;
+        loadedCartMap = dataset.cartMap;
         // Общие настройки из public/data/product-settings.json — базовый слой,
         // локальные правки устройства имеют приоритет
         if (dataset.settings) {
@@ -198,6 +218,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       }
 
       setBundledData(bundled ? applyBrandOverrides(bundled, overrides) : null);
+      setCartMap(loadedCartMap);
       setHistory(snapshots);
       setParserChanges(changes);
       setSizeSnapshots(sizes);
@@ -301,6 +322,40 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const setSaletennisSession = useCallback((value: string) => {
+    const clean = value.trim();
+    setSessionState(clean);
+    try {
+      if (clean) localStorage.setItem(SESSION_STORAGE_KEY, clean);
+      else localStorage.removeItem(SESSION_STORAGE_KEY);
+    } catch {
+      /* приватный режим */
+    }
+  }, []);
+
+  const setStoreMinimum = useCallback(
+    (storeName: string, key: string, value: number | null) => {
+      if (!storeName.trim() || !key.trim()) return;
+      setSettingsState((current) => {
+        const storeMins: Record<string, number> = {
+          ...(current.storeMinimums[storeName] ?? {}),
+        };
+        if (value !== null && Number.isFinite(value) && value > 0) {
+          storeMins[key] = Math.round(value);
+        } else {
+          delete storeMins[key];
+        }
+        const storeMinimums = { ...current.storeMinimums };
+        if (Object.keys(storeMins).length > 0) storeMinimums[storeName] = storeMins;
+        else delete storeMinimums[storeName];
+        const next = { ...current, storeMinimums };
+        saveSettings(next);
+        return next;
+      });
+    },
+    []
+  );
+
   const importSettings = useCallback((json: string) => {
     const parsed = parseSettings(json);
     if (!parsed) return false;
@@ -369,6 +424,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setProductHot,
       storeProfile,
       setStoreProfile,
+      setStoreMinimum,
+      cartMap,
+      saletennisSession,
+      setSaletennisSession,
       importSettings,
       delistedProducts,
       filters,
@@ -384,7 +443,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       data, hydrated, loading, error, history, parserChanges, bundledData,
       productImages, sizeSnapshots, hotProducts, brandOverrides, setBrandOverride,
       settings, setSportOverride, setProductExcluded, setProductSupplied, setProductHot,
-      storeProfile, setStoreProfile, importSettings, delistedProducts,
+      storeProfile, setStoreProfile, setStoreMinimum, cartMap, saletennisSession,
+      setSaletennisSession, importSettings, delistedProducts,
       filters, setFilters, resetFilters, setData, clearData, restoreBundled,
     ]
   );
