@@ -15003,6 +15003,157 @@
    "itemId": "18257",
    "article": "PB76-003",
    "sizes": {}
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-7-6-nika-dress-2-0-pearl-19390": {
+   "itemId": "19390",
+   "article": "ND276-1304",
+   "sizes": {
+    "XXS": "44234",
+    "XS": "44233",
+    "S": "44231",
+    "M": "44230",
+    "L": "44229",
+    "XL": "44232"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-7-6-nika-dress-black-17105": {
+   "itemId": "17105",
+   "article": "ND76-010",
+   "sizes": {
+    "XXS": "38599"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-7-6-nika-dress-bright-pink-17897": {
+   "itemId": "17897",
+   "article": "ND76-1265",
+   "sizes": {
+    "XXS": "41141",
+    "XS": "41140",
+    "S": "41139",
+    "M": "41003"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-7-6-nika-dress-lavander-haze-17925": {
+   "itemId": "17925",
+   "article": "ND276-3612",
+   "sizes": {
+    "XXS": "41146",
+    "XS": "41145",
+    "S": "41144",
+    "M": "41143",
+    "L": "41142"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-7-6-nika-dress-light-green-17926": {
+   "itemId": "17926",
+   "article": "ND76-0116",
+   "sizes": {
+    "XXS": "41151",
+    "XS": "41150",
+    "S": "41149",
+    "M": "41148",
+    "L": "41147",
+    "XL": "41268"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-7-6-nika-dress-white-17106": {
+   "itemId": "17106",
+   "article": "ND76-100",
+   "sizes": {
+    "XXS": "38604",
+    "L": "38600",
+    "XL": "38721"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-beach-spirit-darkblue-15727": {
+   "itemId": "15727",
+   "article": "W2300005-DB",
+   "sizes": {
+    "XS": "35089",
+    "S": "35088",
+    "M": "35087"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-beach-spirit-neon-yellow-15728": {
+   "itemId": "15728",
+   "article": "W2300005-NYCY",
+   "sizes": {
+    "XS": "35093",
+    "S": "35092",
+    "M": "35091"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-colortwist-turquoise-blue-14499": {
+   "itemId": "14499",
+   "article": "W1300001",
+   "sizes": {
+    "XS": "31516",
+    "S": "31515"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-jala-tech-red-blue-14350": {
+   "itemId": "14350",
+   "article": "W214102221",
+   "sizes": {
+    "XS": "31008"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-kaleido-white-mixed-17218": {
+   "itemId": "17218",
+   "article": "W1300011",
+   "sizes": {
+    "XS": "38812",
+    "S": "38811"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-spectrum-turquoise-navy-17219": {
+   "itemId": "17219",
+   "article": "W2300010",
+   "sizes": {
+    "XS": "38815",
+    "S": "38814"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-spike-lilac-pink-16363": {
+   "itemId": "16363",
+   "article": "W1300008",
+   "sizes": {
+    "XS": "36681",
+    "S": "36680",
+    "M": "36679"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-spike-navy-pink-16364": {
+   "itemId": "16364",
+   "article": "W2300008",
+   "sizes": {
+    "XS": "36684",
+    "S": "36683",
+    "M": "36682"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-tuelo-tech-blue-white-red-13930": {
+   "itemId": "13930",
+   "article": "W214102222",
+   "sizes": {
+    "S": "29992"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-tuelo-tech-dark-grey-pink-14351": {
+   "itemId": "14351",
+   "article": "W214102222",
+   "sizes": {
+    "XS": "31011"
+   }
+  },
+  "https://saletennis.com/catalog/product/plat-ie-zhienskoie-bidi-badu-twiggy-blue-mixed-16440": {
+   "itemId": "16440",
+   "article": "W1300007-DBLMX",
+   "sizes": {
+    "XS": "36949",
+    "S": "36948",
+    "M": "36947"
+   }
   }
  }
 }
