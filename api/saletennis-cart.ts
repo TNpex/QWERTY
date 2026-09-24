@@ -254,13 +254,27 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     jar = loginResult.jar;
     sessionToken = jar['PHPSESSID'];
   } else if (cookie) {
+    // Корзина saletennis.com привязана к СЕССИИ браузера (PHPSESSID), а не к
+    // аккаунту: добавление работает и для гостя, главное — чтобы cookie была
+    // из того же браузера, где пользователь смотрит корзину. Опасен только
+    // один случай: сайт выпустил вместо нашей сессии новую (браузер её уже
+    // не использует) — тогда товары уедут «в никуда».
     jar = { PHPSESSID: cookie };
-    if (!(await isJarLoggedIn(jar))) {
+    const probe = await fetch(`${SITE}/cabinet/cart/get/`, {
+      headers: {
+        ...BROWSER_HEADERS,
+        Cookie: cookieHeader(jar),
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      redirect: 'follow',
+    });
+    mergeSetCookies(jar, probe);
+    if (jar['PHPSESSID'] && jar['PHPSESSID'] !== cookie) {
       res.status(200).json({
         ok: false,
         unauthorized: true,
         error:
-          'Сохранённая PHPSESSID устарела или не авторизована (товары попали бы в невидимую гостевую корзину — добавление отменено). Войдите на saletennis.com в браузере, заново экспортируйте cookie через Cookie-Editor и обновите её в 🔑. Либо используйте способ 1 (закладка).',
+          'Сайт выдал новую сессию вместо сохранённой — браузер обновил PHPSESSID. Экспортируйте cookie заново (Cookie-Editor → Export → PHPSESSID) или используйте способ 1 (закладка).',
       });
       return;
     }

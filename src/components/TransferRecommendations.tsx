@@ -28,16 +28,9 @@ import {
   cartLinesToText,
   orderUrl,
   ORDER_BOOKMARKLET,
-  SALETENNIS_CART_URL,
   type CartItemPayload,
   type CartLine,
 } from '../utils/cart';
-import {
-  loadCredentials,
-  saveCredentials,
-  clearCredentials,
-  type SaletennisCredentials,
-} from '../utils/saletennisAuth';
 import { ProductCardModal } from './ProductCardModal';
 import type { TransferRecommendation } from '../types';
 
@@ -98,11 +91,7 @@ export function TransferRecommendations() {
     units: number;
     missingCount: number;
   } | null>(null);
-  const [orderBusy, setOrderBusy] = useState<string | null>(null);
   const [orderError, setOrderError] = useState<string | null>(null);
-  const [credLogin, setCredLogin] = useState('');
-  const [credPassword, setCredPassword] = useState('');
-  const [credRemember, setCredRemember] = useState(true);
   const [toStoreId, setToStoreId] = useState('all');
   const [fromStoreId, setFromStoreId] = useState('all');
   const [selectedSubtype, setSelectedSubtype] = useState('all');
@@ -264,111 +253,9 @@ export function TransferRecommendations() {
    * под ЕГО собственным логином. Не залогинен — сайт попросит войти, список
    * сохранится (кнопка-закладка запомнит его в localStorage страницы).
    */
-  /**
-   * Отправка заказа: серверная функция входит на saletennis.com под учёткой
-   * пользователя (или использует 🔑-сессию) и добавляет все позиции в корзину
-   * аккаунта. Затем корзина открывается в новой вкладке — уже наполненная.
-   */
-  const runOrder = async (items: CartItemPayload[], creds: SaletennisCredentials | null) => {
-    setOrderError(null);
-    setCartMessage(null);
-    setOrderBusy(creds ? 'Вхожу на saletennis.com…' : 'Добавляю в корзину…');
-    try {
-      let sessionToken = '';
-      let added = 0;
-      let failed = 0;
-      let cartLines: number | null = null;
-      const errors: string[] = [];
-      const CHUNK = 150;
-      for (let i = 0; i < items.length; i += CHUNK) {
-        const chunk = items.slice(i, i + CHUNK);
-        setOrderBusy(`Добавляю в корзину ${Math.min(i + CHUNK, items.length)}/${items.length}…`);
-        const payload: Record<string, unknown> = {
-          items: chunk.map((it) => ({
-            itemId: it.itemId,
-            count: it.count,
-            size: it.size,
-            name: it.name,
-          })),
-        };
-        if (i === 0 && creds) {
-          payload.login = creds.login;
-          payload.password = creds.password;
-        } else if (sessionToken) {
-          payload.cookie = sessionToken;
-        } else if (i === 0 && saletennisSession.trim()) {
-          payload.cookie = saletennisSession.trim();
-        } else {
-          setOrderError('Нет способа авторизации — укажите логин/пароль или 🔑-сессию');
-          return;
-        }
-        const resp = await fetch('/api/saletennis-cart', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        if (resp.status === 404) {
-          setOrderError(
-            'Автозаказ работает только на опубликованном сайте (Vercel). В локальной сборке используйте «Скопировать список».'
-          );
-          return;
-        }
-        const data = (await resp.json().catch(() => null)) as {
-          added?: number;
-          failed?: number;
-          cartLines?: number;
-          loginFailed?: boolean;
-          unauthorized?: boolean;
-          sessionToken?: string;
-          error?: string;
-          results?: { name: string; ok: boolean; error?: string }[];
-        } | null;
-        if (!data) {
-          setOrderError(`Сервер ответил ошибкой (HTTP ${resp.status})`);
-          return;
-        }
-        if (data.loginFailed) {
-          setOrderError(
-            data.error ??
-              'Не удалось войти на saletennis.com — проверьте логин и пароль (они такие же, как при входе на сайт)'
-          );
-          return;
-        }
-        if (data.unauthorized) {
-          setOrderError(
-            data.error ?? 'Сессия saletennis.com недействительна — укажите логин/пароль заново'
-          );
-          return;
-        }
-        if (data.sessionToken) sessionToken = data.sessionToken;
-        if (typeof data.cartLines === 'number') cartLines = data.cartLines;
-        added += data.added ?? 0;
-        failed += data.failed ?? 0;
-        for (const r of data.results ?? []) {
-          if (!r.ok && r.error) errors.push(`${r.name}: ${r.error}`);
-        }
-      }
-      window.open(SALETENNIS_CART_URL, '_blank', 'noopener');
-      setOrderPayload(null);
-      setSelected(new Map());
-      setCartMessage({
-        text:
-          `Добавлено в корзину: ${added} из ${items.length}` +
-          (failed > 0 ? ` (с ошибками: ${failed} — ${errors.slice(0, 2).join('; ')})` : '') +
-          (cartLines !== null ? ` · в корзине на сайте сейчас ${cartLines} поз.` : '') +
-          ' — корзина открыта, оформляйте заказ!',
-        error: failed > 0 || added === 0,
-      });
-    } catch (e) {
-      setOrderError(String(e));
-    } finally {
-      setOrderBusy(null);
-    }
-  };
-
   const goOrder = () => {
     const lines = [...selected.values()];
-    if (lines.length === 0 || orderBusy) return;
+    if (lines.length === 0 || cartBusy !== null) return;
     const { items, missing } = resolveCartItems(cartMap, lines);
     if (items.length === 0) {
       setCartMessage({
@@ -389,30 +276,8 @@ export function TransferRecommendations() {
       units: items.reduce((sum, i) => sum + i.count, 0),
       missingCount: missing.length,
     };
-    setOrderPayload(payload);
     setOrderError(null);
-    const saved = loadCredentials();
-    if (saved) {
-      // учётка запомнена — заказ одним нажатием, без окна
-      void runOrder(items, saved);
-      return;
-    }
-    setCredLogin('');
-    setCredPassword('');
-    setCredRemember(true);
-  };
-
-  const submitFromModal = () => {
-    if (!orderPayload || orderBusy) return;
-    const login = credLogin.trim();
-    if (!login || !credPassword) {
-      setOrderError('Введите логин (e-mail) и пароль от saletennis.com');
-      return;
-    }
-    const creds = { login, password: credPassword };
-    if (credRemember) saveCredentials(creds);
-    else clearCredentials();
-    void runOrder(orderPayload.items, creds);
+    setOrderPayload(payload);
   };
 
   const copyList = async () => {
@@ -425,11 +290,12 @@ export function TransferRecommendations() {
     }
   };
 
-  const sendToCart = async () => {
+  const sendToCart = async (cookieOverride?: string) => {
     const lines = [...selected.values()];
     if (lines.length === 0 || cartBusy) return;
     const { items, missing } = resolveCartItems(cartMap, lines);
-    if (!saletennisSession.trim()) {
+    const sessionCookie = (cookieOverride ?? saletennisSession).trim();
+    if (!sessionCookie) {
       setSessionDraft(saletennisSession);
       setShowSessionInput(true);
       setCartMessage({
@@ -509,6 +375,7 @@ export function TransferRecommendations() {
     if (added > 0) {
       window.open('https://www.saletennis.com/cabinet/cart/', '_blank', 'noopener');
       setSelected(new Map());
+      setOrderPayload(null);
     }
     const parts = [`Добавлено в корзину: ${added} из ${items.length}`];
     if (missing.length > 0) {
@@ -695,13 +562,13 @@ export function TransferRecommendations() {
           </h4>
           <div className="text-xs text-gray-600 space-y-2 leading-relaxed">
             <p>
-              <b>Основной способ (одним нажатием):</b> «Перейти к заказу» → введите логин и
-              пароль от saletennis.com (те же, что на сайте) и отметьте «Запомнить» → товары
-              добавятся в корзину вашего аккаунта, и она откроется сама. Со следующего раза —
-              просто «Перейти к заказу», без окна.
+              <b>Как это работает:</b> корзина saletennis.com привязана к <b>сессии вашего
+              браузера</b> (а не к аккаунту), поэтому товары добавляются из вашего браузера —
+              закладкой или через свежую cookie PHPSESSID. Вход по логину/паролю через сервер
+              наполнял бы «чужую» сессию — поэтому такой способ убран.
             </p>
             <p>
-              <b>Способ без пароля — кнопка-закладка.</b> Одноразово перетащите кнопку ниже на{' '}
+              <b>Способ 1 — кнопка-закладка.</b> Одноразово перетащите кнопку ниже на{' '}
               <b>панель закладок</b> браузера (если панели нет — нажмите Ctrl+Shift+B):
             </p>
             <p className="py-1">
@@ -952,11 +819,12 @@ export function TransferRecommendations() {
         )}
       </div>
 
-      {/* Модальное окно заказа: вход на saletennis.com и добавление в корзину */}
+      {/* Модальное окно заказа: корзина сайта привязана к сессии браузера —
+          оба способа добавляют товары именно в ВАШЕЙ сессии */}
       {orderPayload && (
         <div
           className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/50"
-          onClick={() => (orderBusy ? undefined : setOrderPayload(null))}
+          onClick={() => (cartBusy ? undefined : setOrderPayload(null))}
           role="dialog"
           aria-modal="true"
           aria-label="Заказ на saletennis.com"
@@ -969,22 +837,26 @@ export function TransferRecommendations() {
               🛒 Заказ: {orderPayload.count} поз. · {orderPayload.units} шт.
             </h3>
             <p className="text-xs text-gray-500 mb-4">
-              Товары добавятся в корзину <b>вашего аккаунта</b> saletennis.com — как если бы
-              вы нажимали «В корзину» на сайте вручную. После этого откроется корзина для
-              оформления.
+              Корзина saletennis.com привязана к <b>сессии вашего браузера</b> (а не к аккаунту),
+              поэтому товары добавляются одним из двух способов — оба работают прямо в вашей
+              сессии, и корзина откроется уже наполненной.
             </p>
 
             <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 mb-3">
               <div className="text-xs font-semibold text-emerald-800 mb-1.5">
-                Способ 1 — кнопка-закладка (без пароля, работает всегда)
+                Способ 1 — кнопка-закладка (рекомендуется, без паролей и cookie)
               </div>
-              <p className="text-[11px] text-gray-600 leading-relaxed mb-2.5">
-                <b>Один раз:</b> перетащите тёмную кнопку ниже на панель закладок браузера
-                (Ctrl+Shift+B, если панели не видно). <b>Каждый заказ:</b> нажмите «Открыть
-                корзину» → на открывшейся странице нажмите закладку «🛒 SaleTennis Заказ» →
-                товары добавятся (войдя под своим логином — в корзину аккаунта; без входа —
-                в гостевую корзину, после входа проверьте её).
-              </p>
+              <ol className="text-[11px] text-gray-600 leading-relaxed space-y-1 mb-2.5 list-decimal list-inside">
+                <li>
+                  Один раз: перетащите тёмную кнопку ниже на <b>панель закладок</b> браузера
+                  (не видно панель? Ctrl+Shift+B);
+                </li>
+                <li>Нажмите «Открыть корзину со списком» — откроется вкладка saletennis.com;</li>
+                <li>
+                  На ней нажмите закладку <b>«🛒 SaleTennis Заказ»</b> — появится плашка
+                  «Добавляю 1 из N…», товары лягут в корзину, и она обновится сама.
+                </li>
+              </ol>
               <div className="flex gap-2 flex-wrap items-center">
                 <a
                   href={ORDER_BOOKMARKLET}
@@ -1001,72 +873,58 @@ export function TransferRecommendations() {
                   Открыть корзину со списком →
                 </button>
               </div>
+              <p className="text-[10px] text-gray-400 mt-2">
+                Вход на сайт не обязателен: гостевая корзина тоже «прилипает» к вашему браузеру —
+                войдёте и оформите заказ позже.
+              </p>
             </div>
 
             <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4">
-              <div className="text-xs font-semibold text-gray-700 mb-3">
-                Способ 2 — автоматически по логину/паролю saletennis.com
+              <div className="text-xs font-semibold text-gray-700 mb-1.5">
+                Способ 2 — добавить автоматически (cookie вашего браузера)
               </div>
-              <div className="space-y-2.5">
+              <p className="text-[11px] text-gray-500 leading-relaxed mb-2">
+                На вкладке saletennis.com (в этом же браузере) откройте расширение{' '}
+                <b>Cookie-Editor</b> → Export → скопируйте значение <b>PHPSESSID</b> и вставьте
+                сюда. Товары добавятся без нажатия закладки, корзина откроется сама.
+              </p>
+              <div className="flex gap-2 flex-wrap">
                 <input
-                  type="text"
-                  value={credLogin}
-                  onChange={(e) => setCredLogin(e.target.value)}
-                  placeholder="Логин (e-mail) на saletennis.com"
-                  autoComplete="username"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 bg-white"
+                  value={sessionDraft}
+                  onChange={(e) => setSessionDraft(e.target.value)}
+                  placeholder="значение PHPSESSID"
+                  className="flex-1 min-w-[200px] px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500"
                 />
-                <input
-                  type="password"
-                  value={credPassword}
-                  onChange={(e) => setCredPassword(e.target.value)}
-                  placeholder="Пароль"
-                  autoComplete="current-password"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') submitFromModal();
-                  }}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 bg-white"
-                />
-                <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={credRemember}
-                    onChange={(e) => setCredRemember(e.target.checked)}
-                    className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
-                  />
-                  Запомнить на этом компьютере — дальше заказ будет формироваться одним
-                  нажатием «Перейти к заказу», без этого окна
-                </label>
-                {orderError && (
-                  <div className="text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                    {orderError}
-                  </div>
-                )}
                 <button
-                  onClick={submitFromModal}
-                  disabled={orderBusy !== null}
-                  className="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-wait text-white rounded-xl text-sm font-semibold transition-colors"
+                  disabled={cartBusy !== null}
+                  onClick={async () => {
+                    const c = sessionDraft.trim();
+                    if (!c) {
+                      setOrderError('Вставьте значение PHPSESSID из Cookie-Editor');
+                      return;
+                    }
+                    setOrderError(null);
+                    setSaletennisSession(c);
+                    await sendToCart(c);
+                  }}
+                  className="px-4 py-2 bg-gray-900 hover:bg-gray-700 disabled:opacity-60 disabled:cursor-wait text-white rounded-xl text-sm font-medium whitespace-nowrap transition-colors"
                 >
-                  {orderBusy ?? 'Добавить в корзину и открыть saletennis.com →'}
+                  {cartBusy ?? 'Сохранить и добавить →'}
                 </button>
-                <p className="text-[10px] text-gray-400 leading-relaxed">
-                  🔒 Пароль передаётся только сайту saletennis.com (через защищённый серверный
-                  модуль дашборда) и не сохраняется на сервере. «Запомнить» хранит его лишь
-                  в этом браузере; снять — уберите галочку или очистите настройки сайта.
-                  {orderPayload.missingCount > 0 && (
-                    <>
-                      {' '}Ещё {orderPayload.missingCount} поз. без данных карты корзины —
-                      список скопирован в буфер обмена.
-                    </>
-                  )}
-                </p>
               </div>
+              {orderError && (
+                <div className="mt-2 text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                  {orderError}
+                </div>
+              )}
             </div>
 
-            <p className="mt-3 text-[11px] text-gray-400">
-              Способ 3 (альтернатива закладке): «🔑 Корзина saletennis» рядом с фильтрами →
-              вставить значение cookie PHPSESSID → «⚡ Авто-добавление» в нижней панели.
-            </p>
+            {orderPayload.missingCount > 0 && (
+              <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                Ещё {orderPayload.missingCount} поз. не добавятся автоматически (нет данных в
+                карте корзины) — их список скопирован в буфер обмена.
+              </p>
+            )}
 
             <div className="mt-5 flex items-center gap-2 justify-end">
               <button
@@ -1077,7 +935,7 @@ export function TransferRecommendations() {
               </button>
               <button
                 onClick={() => setOrderPayload(null)}
-                disabled={orderBusy !== null}
+                disabled={cartBusy !== null}
                 className="px-4 py-2 bg-gray-900 hover:bg-gray-700 disabled:opacity-50 text-white rounded-xl text-sm font-medium"
               >
                 Закрыть
@@ -1089,7 +947,7 @@ export function TransferRecommendations() {
 
       {/* Плавающая панель корзины + ввод сессии + сообщения */}
       {(selected.size > 0 || showSessionInput || cartMessage) && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 w-full max-w-[96vw] px-2 pointer-events-none">
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[120] flex flex-col items-center gap-2 w-full max-w-[96vw] px-2 pointer-events-none">
           {cartMessage && (
             <div
               className={`pointer-events-auto px-4 py-2.5 rounded-xl shadow-lg text-xs font-medium flex items-center gap-3 max-w-full ${
@@ -1196,14 +1054,13 @@ export function TransferRecommendations() {
               <div className="flex items-center gap-2 flex-wrap">
                 <button
                   onClick={goOrder}
-                  disabled={orderBusy !== null}
-                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-wait rounded-xl text-sm font-semibold whitespace-nowrap transition-colors"
-                  title="Добавить выбранные позиции в корзину saletennis.com и открыть её"
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 rounded-xl text-sm font-semibold whitespace-nowrap transition-colors"
+                  title="Собрать заказ на saletennis.com: закладкой или автоматически по cookie"
                 >
-                  {orderBusy ?? 'Перейти к заказу →'}
+                  Перейти к заказу →
                 </button>
                 <button
-                  onClick={sendToCart}
+                  onClick={() => void sendToCart()}
                   disabled={cartBusy !== null}
                   className="px-3 py-2 bg-white/10 hover:bg-white/20 disabled:opacity-60 disabled:cursor-wait rounded-xl text-xs whitespace-nowrap transition-colors"
                   title="Добавить автоматически через сохранённую 🔑-сессию (без кнопки-закладки)"
