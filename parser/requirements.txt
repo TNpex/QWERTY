@@ -2,6 +2,9 @@
 # Установка: pip install -r parser/requirements.txt
 pandas>=2.0
 requests>=2.31
+beautifulsoup4>=4.12
+lxml>=5.0
+# Только для запасного браузерного парсера (saletennis_parser.py):
 selenium>=4.15
 # Нужен только если Selenium Manager не сможет сам найти драйвер Edge:
 webdriver-manager>=4.0

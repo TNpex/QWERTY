@@ -3,6 +3,18 @@
 Собирает каталог, остатки по 10 магазинам, фотографии и журнал изменений
 с сайта saletennis.com (нужна авторизация — остатки видны только залогиненным).
 
+**Два режима:**
+- `http_parser.py` — **основной**: чистый HTTP (requests + BeautifulSoup), без
+  браузера. Полный прогон ~30–40 минут вместо 2–3 часов; работает там, где
+  браузерный виснет (хостинг сайта душит облачные IP GitHub — таймауты
+  рендерера в Actions). Сайт отдаёт все данные в серверном HTML — браузер
+  не нужен.
+- `saletennis_parser.py` — запасной: headless-браузер Edge (Selenium). Нужен,
+  только если сайт когда-нибудь спрячет данные за JavaScript.
+
+Оба режима дают идентичные файлы (products.csv, sizes.csv, changes.csv,
+history/, cart-map.json) и принимают одинаковые аргументы.
+
 ## Быстрый старт (локально, Windows)
 
 ```powershell
@@ -15,19 +27,21 @@ pip install -r parser/requirements.txt
 Copy-Item parser/.env.example parser/.env
 notepad parser/.env
 
-# 3а. Запуск «для себя» — данные в parser/data/ (как в вашей старой версии)
-python parser/saletennis_parser.py
+# 3а. Запуск «для себя» — данные в parser/data/
+python parser/http_parser.py
 
 # 3б. Запуск «для сайта» — данные сразу в public/data/, история и manifest.json
 #     обновляются автоматически, отдельный `npm run snapshot` НЕ нужен
-python parser/saletennis_parser.py --out public/data
+python parser/http_parser.py --out public/data
 ```
 
-Полный парсинг (~2000 товаров) занимает примерно 1,5–2 часа.
-Для быстрой проверки одной категории:
+Полный парсинг (~2200 товаров): HTTP-режим ~30–40 минут, браузерный ~1,5–3 часа.
+Быстрая проверка (5 товаров одной категории; можно с готовой cookie из браузера —
+расширение Cookie-Editor, значение PHPSESSID):
 
 ```powershell
-python parser/saletennis_parser.py --out public/data --categories "Мячи для тенниса"
+python parser/http_parser.py --out parser/data-test --categories "Мячи для тенниса" --limit 5
+python parser/http_parser.py --out parser/data-test --cookie <PHPSESSID> --limit 5
 ```
 
 ## Что улучшено по сравнению с исходной версией
@@ -60,27 +74,27 @@ Workflow `.github/workflows/parse.yml` запускается **каждый д�
 3. **New repository secret**: `SALETENNIS_PASSWORD` = ваш пароль.
 4. Готово — расписание заработает само.
 
-⚠️ Нюанс: GitHub запускает браузер со своих серверов. Если сайт начнёт
-блокировать «облачные» IP или показывать капчу — используйте вариант 2.
+⚠️ Нюанс: GitHub работает со своих облачных серверов. Хостинг saletennis.com
+уже «душил» браузерные запуски оттуда (таймауты рендерера по 60 с на каждой
+странице) — поэтому workflow переведён на лёгкий HTTP-парсер. Если и он
+начнёт получать блокировки (403/429 или сплошные таймауты) — переходите на
+вариант 2: он надёжнее всего, т.к. сайт видит ваш обычный «человеческий» IP.
 
 ### Вариант 2 — Планировщик Windows (парсинг на вашем компьютере)
 
+Надёжнее варианта 1: ваш домашний/офисный IP сайт не блокирует, а готовый
+скрипт `parser/run-and-push.ps1` сам парсит (HTTP-режим), сжимает новые фото,
+коммитит и пушит данные — Vercel пересоберёт сайт автоматически.
+
 ```powershell
-# задача каждый день в 09:00 (пример)
+# задача каждый день в 09:00 (один раз, путь замените на свой)
 schtasks /Create /TN "SaleTennis Parser" /SC DAILY /ST 09:00 `
   /TR "powershell -ExecutionPolicy Bypass -File C:\путь\к\QWERTY\parser\run-and-push.ps1"
 ```
 
-Создайте `parser/run-and-push.ps1`:
-
-```powershell
-cd C:\путь\к\QWERTY
-python parser\saletennis_parser.py --out public/data
-npm run compress-images
-git add public/data
-git commit -m "data: парсинг остатков $(Get-Date -Format yyyy-MM-dd)"
-git push
-```
+Требования: `parser/.env` с логином/паролем, установленные зависимости
+(`pip install -r parser/requirements.txt`, `npm install`), включённый
+компьютер в назначенное время.
 
 ## Файлы на выходе
 

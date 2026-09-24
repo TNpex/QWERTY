@@ -39,8 +39,8 @@ jobs:
           key: product-images-${{ github.run_id }}
           restore-keys: product-images-
 
-      - name: Запуск парсера (данные сразу в public/data)
-        run: python parser/saletennis_parser.py --out public/data
+      - name: Запуск HTTP-парсера (данные сразу в public/data)
+        run: python parser/http_parser.py --out public/data
 
       - name: Загрузить лог парсера (для диагностики — и при ошибке тоже)
         if: always()

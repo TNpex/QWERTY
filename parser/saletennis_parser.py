@@ -324,6 +324,23 @@ def get_product_urls(driver, category_url):
 
 # ================= КАРТОЧКА ТОВАРА =================
 
+def brand_from_name(name: str) -> str:
+    """Определяет бренд по названию товара (fallback, когда JSON-LD пуст)."""
+    name_upper = name.upper()
+    name_lower = name.lower()
+    if 'seven six' in name_lower:
+        return '7/6'
+    if any(typo in name_lower for typo in TECNIFIBRE_TYPOS):
+        return 'Tecnifibre'
+    # Линейки струн для сквоша X-ONE и 305 SQUASH — это Tecnifibre
+    if re.search(r'\bx-one\b', name_lower) or re.search(r'\b305\s+squash\b', name_lower):
+        return 'Tecnifibre'
+    for brand in KNOWN_BRANDS:
+        if brand.upper() in name_upper:
+            return brand
+    return "Не определен"
+
+
 def extract_brand(driver, name):
     """Бренд: сначала из JSON-LD страницы (точные данные сайта), затем из названия."""
     # 1) JSON-LD / микроразметка
@@ -350,20 +367,8 @@ def extract_brand(driver, name):
     except Exception:
         pass
 
-    # 2) Из названия (как раньше)
-    name_upper = name.upper()
-    name_lower = name.lower()
-    if 'seven six' in name_lower:
-        return '7/6'
-    if any(typo in name_lower for typo in TECNIFIBRE_TYPOS):
-        return 'Tecnifibre'
-    # Линейки струн для сквоша X-ONE и 305 SQUASH — это Tecnifibre
-    if re.search(r'\bx-one\b', name_lower) or re.search(r'\b305\s+squash\b', name_lower):
-        return 'Tecnifibre'
-    for brand in KNOWN_BRANDS:
-        if brand.upper() in name_upper:
-            return brand
-    return "Не определен"
+    # 2) Из названия
+    return brand_from_name(name)
 
 
 def extract_price(driver):
