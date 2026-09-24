@@ -21,13 +21,14 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { useData } from '../context/DataContext';
-import {
+import { useLastKnownSizes,
   useMetrics,
   useSalesReport,
   useFilteredData,
   useSizeSalesReport,
 } from '../hooks/useAnalytics';
 import { MAX_SALES_DISPLAY } from '../utils/analyticsCore';
+import { sportOf } from '../utils/sport';
 import { detectGender, GENDER_LABELS } from '../utils/productMeta';
 import { normalizeLink } from '../utils/historyCore';
 import type { ProductMovement, ParserChange } from '../utils/historyCore';
@@ -195,7 +196,8 @@ function MovementRow({
 }
 
 export function SalesHistory() {
-  const { data, history, parserChanges, filters } = useData();
+  const { data, history, parserChanges, filters, settings } = useData();
+  const lastSizes = useLastKnownSizes();
   const filteredData = useFilteredData();
   const report = useSalesReport();
   const metrics = useMetrics();
@@ -220,11 +222,22 @@ export function SalesHistory() {
     else if (mv.link) window.open(mv.link, '_blank', 'noopener');
   };
 
-  // Глобальные фильтры (бренд/категория/пол) применяются и к движению товаров
-  const matchesFilters = (m: { category: string; brand: string; name: string }) =>
+  // Глобальные фильтры (бренд/категория/пол/спорт) применяются и к движению товаров
+  const matchesFilters = (m: {
+    category: string;
+    brand: string;
+    name: string;
+    article?: string;
+    link?: string;
+  }) =>
     (filters.brand === 'all' || m.brand === filters.brand) &&
     (filters.category === 'all' || m.category === filters.category) &&
-    (filters.gender === 'all' || detectGender(m.name, m.category) === filters.gender);
+    (filters.gender === 'all' || detectGender(m.name, m.category) === filters.gender) &&
+    (filters.sport === 'all' ||
+      sportOf(
+        { article: m.article ?? '', link: m.link ?? '', name: m.name, category: m.category },
+        settings.sportOverrides
+      ) === filters.sport);
 
   // Распроданные товары текущего снимка (с нулевым суммарным остатком)
   const currentSoldOut = useMemo(() => {
@@ -407,6 +420,19 @@ export function SalesHistory() {
                       Продано {mv.sold} шт. — остаток 0
                       {mv.disappeared && ' (убран из каталога)'}
                     </div>
+                    {(() => {
+                      const lks = lastSizes({
+                        article: mv.article,
+                        link: mv.link,
+                        name: mv.name,
+                      });
+                      return lks ? (
+                        <div className="text-xs text-gray-600 mt-1">
+                          Последний размер на сайте: <b>{lks.sizes.join(', ')}</b>{' '}
+                          <span className="text-gray-400">· на {formatDate(lks.date)}</span>
+                        </div>
+                      ) : null;
+                    })()}
                   </div>
                 ))}
                 {soldOutFiltered.length === 0 && (
@@ -489,6 +515,19 @@ npm run snapshot -- путь/к/2026-09-24.csv
                         {product.brand} · {product.category}
                         {product.article ? ` · ${product.article}` : ''}
                       </div>
+                      {(() => {
+                        const lks = lastSizes({
+                          article: product.article,
+                          link: product.link,
+                          name: product.name,
+                        });
+                        return lks ? (
+                          <div className="text-xs text-gray-600 mt-0.5">
+                            Последний размер на сайте: <b>{lks.sizes.join(', ')}</b>{' '}
+                            <span className="text-gray-400">· на {formatDate(lks.date)}</span>
+                          </div>
+                        ) : null;
+                      })()}
                     </div>
                     <span className="text-xs font-bold text-red-600 flex-shrink-0">0 шт.</span>
                   </div>

@@ -3,6 +3,7 @@ import { Filter, X } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useBrands, useCategories, useSubtypes } from '../hooks/useAnalytics';
 import { GENDER_LABELS, type Gender } from '../utils/productMeta';
+import { sportOf, SPORT_ICONS, SPORT_LABELS, type Sport } from '../utils/sport';
 
 /**
  * Глобальная панель фильтров (бренд / категория / пол / подтип одежды) —
@@ -10,7 +11,7 @@ import { GENDER_LABELS, type Gender } from '../utils/productMeta';
  * и продажи пересчитываются по выбранной комбинации.
  */
 export function FilterBar() {
-  const { data, filters, setFilters, resetFilters } = useData();
+  const { data, filters, setFilters, resetFilters, settings } = useData();
   const brands = useBrands();
   const categories = useCategories();
   const subtypes = useSubtypes();
@@ -22,9 +23,10 @@ export function FilterBar() {
         (filters.brand === 'all' || p.brand === filters.brand) &&
         (filters.category === 'all' || p.category === filters.category) &&
         (filters.gender === 'all' || (p.gender ?? 'unisex') === filters.gender) &&
-        (filters.subtype === 'all' || (p.subtype ?? '') === filters.subtype)
+        (filters.subtype === 'all' || (p.subtype ?? '') === filters.subtype) &&
+        (filters.sport === 'all' || sportOf(p, settings.sportOverrides) === filters.sport)
     ).length;
-  }, [data, filters]);
+  }, [data, filters, settings]);
 
   if (!data) return null;
 
@@ -32,7 +34,8 @@ export function FilterBar() {
     filters.brand !== 'all' ||
     filters.category !== 'all' ||
     filters.gender !== 'all' ||
-    filters.subtype !== 'all';
+    filters.subtype !== 'all' ||
+    filters.sport !== 'all';
 
   const selectClass =
     'px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white cursor-pointer focus:ring-2 focus:ring-blue-500 max-w-[220px]';
@@ -81,6 +84,19 @@ export function FilterBar() {
         {(Object.keys(GENDER_LABELS) as Gender[]).map((gender) => (
           <option key={gender} value={gender}>
             {GENDER_LABELS[gender]}
+          </option>
+        ))}
+      </select>
+      <select
+        value={filters.sport}
+        onChange={(e) => setFilters({ sport: e.target.value })}
+        className={selectClass}
+        title="Вид спорта: теннис / падел / прочее (ориентация правится в карточке товара)"
+      >
+        <option value="all">🎾 Все виды спорта</option>
+        {(['tennis', 'padel', 'other'] as Sport[]).map((sport) => (
+          <option key={sport} value={sport}>
+            {SPORT_ICONS[sport]} {SPORT_LABELS[sport]}
           </option>
         ))}
       </select>

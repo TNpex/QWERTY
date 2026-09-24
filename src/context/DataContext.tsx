@@ -10,7 +10,22 @@ import {
 import type { ParsedData } from '../types';
 import { saveParsedData, loadParsedData, clearSavedData } from '../utils/storage';
 import { loadBundledDataset, type HotProductConfig } from '../utils/bundledData';
-import type { HistorySnapshot, ParserChange, SizeSnapshot } from '../utils/historyCore';
+import {
+  collectDelistedProducts,
+  productIdentityKey,
+  type DelistedProduct,
+  type HistorySnapshot,
+  type ParserChange,
+  type SizeSnapshot,
+} from '../utils/historyCore';
+import {
+  loadSettings,
+  saveSettings,
+  mergeSettings,
+  parseSettings,
+  type ProductSettings,
+} from '../utils/settings';
+import type { Sport } from '../utils/sport';
 import { loadProductImages, type ProductImageMap } from '../utils/images';
 import {
   loadBrandOverrides,
@@ -30,9 +45,17 @@ export interface DataFilters {
   gender: string;
   /** 'all' или подтип одежды (Носки, Футболки и поло, Шорты, ...) */
   subtype: string;
+  /** 'all' | 'padel' | 'tennis' | 'other' — спортивная ориентация товара */
+  sport: string;
 }
 
-export const ALL_FILTERS: DataFilters = { brand: 'all', category: 'all', gender: 'all', subtype: 'all' };
+export const ALL_FILTERS: DataFilters = {
+  brand: 'all',
+  category: 'all',
+  gender: 'all',
+  subtype: 'all',
+  sport: 'all',
+};
 
 interface DataContextType {
   data: ParsedData | null;
@@ -56,7 +79,17 @@ interface DataContextType {
   brandOverrides: BrandOverrides;
   /** Задать бренд вручную (по артикулу; правка запомнится и попадёт в экспорт) */
   setBrandOverride: (article: string, brand: string) => void;
-  /** Глобальные фильтры (бренд / категория / пол) — все вкладки */
+  /** Ручные настройки товаров (ориентация Падел/Теннис, исключения-услуги) */
+  settings: ProductSettings;
+  /** Задать ориентацию товара вручную; null — вернуть автоопределение */
+  setSportOverride: (key: string, sport: Sport | null) => void;
+  /** Исключить/вернуть товар в рекомендациях (услуги и т.п.) */
+  setProductExcluded: (key: string, excluded: boolean) => void;
+  /** Импорт настроек из JSON-строки; false — файл невалиден */
+  importSettings: (json: string) => boolean;
+  /** Товары, исчезнувшие из каталога (убраны с сайта = распроданы) */
+  delistedProducts: DelistedProduct[];
+  /** Глобальные фильтры (бренд / категория / пол / вид спорта) — все вкладки */
   filters: DataFilters;
   setFilters: (patch: Partial<DataFilters>) => void;
   resetFilters: () => void;
@@ -86,6 +119,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [sizeSnapshots, setSizeSnapshots] = useState<SizeSnapshot[]>([]);
   const [hotProducts, setHotProducts] = useState<HotProductConfig[]>([]);
   const [brandOverrides, setBrandOverrides] = useState<BrandOverrides>({});
+  const [settings, setSettingsState] = useState<ProductSettings>(() => loadSettings());
   const [filters, setFiltersState] = useState<DataFilters>(ALL_FILTERS);
   const [hydrated, setHydrated] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -179,6 +213,55 @@ export function DataProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  // Ручные настройки товаров: ориентация и исключения (localStorage)
+  const setSportOverride = useCallback(
+    (key: string, sport: Sport | null) => {
+      setSettingsState((current) => {
+        const sportOverrides = { ...current.sportOverrides };
+        if (sport) sportOverrides[key] = sport;
+        else delete sportOverrides[key];
+        const next = { ...current, sportOverrides };
+        saveSettings(next);
+        return next;
+      });
+    },
+    []
+  );
+
+  const setProductExcluded = useCallback(
+    (key: string, excluded: boolean) => {
+      setSettingsState((current) => {
+        const excludedProducts = { ...current.excludedProducts };
+        if (excluded) excludedProducts[key] = 'вручную';
+        else delete excludedProducts[key];
+        const next = { ...current, excludedProducts };
+        saveSettings(next);
+        return next;
+      });
+    },
+    []
+  );
+
+  const importSettings = useCallback((json: string) => {
+    const parsed = parseSettings(json);
+    if (!parsed) return false;
+    setSettingsState((current) => {
+      const next = mergeSettings(current, parsed);
+      saveSettings(next);
+      return next;
+    });
+    return true;
+  }, []);
+
+  // Товары, исчезнувшие из каталога, но известные истории (для «Распроданных»)
+  const delistedProducts = useMemo(() => {
+    if (!data || history.length === 0) return [];
+    const currentKeys = new Set(
+      data.products.map((p) => productIdentityKey(p.link ?? '', p.article ?? '', p.name))
+    );
+    return collectDelistedProducts(history, currentKeys);
+  }, [data, history]);
+
   const resetFilters = useCallback(() => setFiltersState(ALL_FILTERS), []);
 
   const setData = useCallback((newData: ParsedData) => {
@@ -220,6 +303,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
       hotProducts,
       brandOverrides,
       setBrandOverride,
+      settings,
+      setSportOverride,
+      setProductExcluded,
+      importSettings,
+      delistedProducts,
       filters,
       setFilters,
       resetFilters,
@@ -232,6 +320,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [
       data, hydrated, loading, error, history, parserChanges, bundledData,
       productImages, sizeSnapshots, hotProducts, brandOverrides, setBrandOverride,
+      settings, setSportOverride, setProductExcluded, importSettings, delistedProducts,
       filters, setFilters, resetFilters, setData, clearData, restoreBundled,
     ]
   );

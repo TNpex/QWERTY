@@ -1,5 +1,5 @@
 import { findColumn, detectColumns, parsePrice, parseQuantity } from './xlsxParser';
-import { normalizeSize } from './sizes';
+import { normalizeSize, compareSizes } from './sizes';
 import { detectGender, type Gender } from './productMeta';
 
 /**
@@ -49,7 +49,7 @@ export function normalizeLink(link: string): string {
  *    так же поступает сам парсер.
  * 2. Нормализованная ссылка / название — фолбэк для товаров без артикула.
  */
-function productIdentityKey(link: string, article: string, name: string): string {
+export function productIdentityKey(link: string, article: string, name: string): string {
   return article || normalizeLink(link) || name;
 }
 
@@ -562,4 +562,95 @@ export function analyzeSizeSales(snapshots: SizeSnapshot[]): SizeSalesReport | n
     entries: [...soldByKey.values()].sort((a, b) => b.sold - a.sold),
     byGender,
   };
+}
+
+// ============ Последние размеры и исчезнувшие товары ============
+
+export interface LastKnownSizes {
+  /** Дата снимка, в котором товар последний раз был в наличии */
+  date: string;
+  /** Размеры с остатком > 0 на ту дату (отсортированы по размерному ряду) */
+  sizes: string[];
+}
+
+/**
+ * Последние размеры товара, которые сайт показывал в наличии — для
+ * распроданных и исчезнувших позиций («какой именно размер купили»).
+ * Ищет от самого свежего снимка размеров к старым; товар опознаётся по
+ * артикулу → ссылке → названию (как в самих снимках).
+ */
+export function lastKnownSizes(
+  snapshots: SizeSnapshot[],
+  product: { article?: string; link?: string; name?: string }
+): LastKnownSizes | null {
+  if (snapshots.length === 0) return null;
+  const keys = [
+    (product.article ?? '').trim(),
+    normalizeLink(product.link ?? ''),
+    (product.name ?? '').trim(),
+  ].filter((k) => k.length > 0);
+  if (keys.length === 0) return null;
+
+  const sorted = [...snapshots].sort((a, b) => b.date.localeCompare(a.date));
+  for (const snapshot of sorted) {
+    for (const key of keys) {
+      const entry = snapshot.products.get(key);
+      if (!entry) continue;
+      const sizes = [...entry.sizes.entries()]
+        .filter(([, qty]) => qty > 0)
+        .map(([size]) => size)
+        .sort(compareSizes);
+      if (sizes.length > 0) return { date: snapshot.date, sizes };
+    }
+  }
+  return null;
+}
+
+export interface DelistedProduct {
+  /** Ключ идентичности (артикул / ссылка / название) — как в снимках истории */
+  key: string;
+  article: string;
+  name: string;
+  brand: string;
+  category: string;
+  link: string;
+  price: number;
+  /** Остаток по сети на момент, когда товар последний раз был виден */
+  lastTotal: number;
+  /** Дата последнего снимка, где товар присутствовал */
+  lastSeen: string;
+}
+
+/**
+ * Товары, которые были в снимках истории, но исчезли из текущего каталога
+ * (сайт убрал позицию = она распродана). Вкладка «Инвентарь» показывает их
+ * в фильтре «Распроданные», чтобы sold-out товар не пропадал бесследно.
+ * Если товар снова появился в каталоге — из списка он исключается.
+ */
+export function collectDelistedProducts(
+  history: HistorySnapshot[],
+  currentKeys: Set<string>
+): DelistedProduct[] {
+  const result = new Map<string, DelistedProduct>();
+  const sorted = [...history].sort((a, b) => a.date.localeCompare(b.date));
+  for (const snapshot of sorted) {
+    for (const [key, p] of snapshot.products) {
+      if (currentKeys.has(key)) {
+        result.delete(key); // товар вернулся в каталог
+        continue;
+      }
+      result.set(key, {
+        key,
+        article: p.article,
+        name: p.name,
+        brand: p.brand,
+        category: p.category,
+        link: p.link,
+        price: p.price,
+        lastTotal: p.total,
+        lastSeen: snapshot.date,
+      });
+    }
+  }
+  return [...result.values()];
 }

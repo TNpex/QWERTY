@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseSnapshotRows, analyzeSales, type HistorySnapshot, type SnapshotProduct } from './historyCore';
+import { parseSnapshotRows, analyzeSales, lastKnownSizes, collectDelistedProducts, type HistorySnapshot, type SnapshotProduct } from './historyCore';
 
 const SPB = 'Санкт-Петербург (Спортивная)';
 const EKB = 'Екатеринбург (Основной склад)';
@@ -162,5 +162,84 @@ describe('analyzeSizeSales', () => {
 
   it('нормализует «375» → «37,5» в снимках размеров', () => {
     expect([...day1.products.get('C1')!.sizes.keys()]).toContain('37,5');
+  });
+});
+
+describe('lastKnownSizes — последние размеры распроданного товара', () => {
+  const sizeSnap = (date: string, products: [string, Record<string, number>][]) => ({
+    date,
+    products: new Map(
+      products.map(([key, sizes]) => [
+        key,
+        { article: key, name: key, brand: 'B', category: 'C', link: '', sizes: new Map(Object.entries(sizes)) },
+      ])
+    ),
+  });
+
+  const snapshots = [
+    sizeSnap('2026-09-20', [['OLD', { '40': 1 }], ['A1', { '42': 2, '43': 0 }]]),
+    sizeSnap('2026-09-23', [['A1', { '42': 0, '43': 1, '42,5': 2 }]]),
+  ];
+
+  it('берёт самый свежий снимок, нулевые остатки отбрасывает, размеры сортирует', () => {
+    expect(lastKnownSizes(snapshots, { article: 'A1' })).toEqual({
+      date: '2026-09-23',
+      sizes: ['42,5', '43'],
+    });
+  });
+
+  it('товара нет в свежем снимке — уходит в более старый', () => {
+    expect(lastKnownSizes(snapshots, { article: 'OLD' })).toEqual({
+      date: '2026-09-20',
+      sizes: ['40'],
+    });
+  });
+
+  it('нет снимков или товара нигде нет → null', () => {
+    expect(lastKnownSizes([], { article: 'A1' })).toBeNull();
+    expect(lastKnownSizes(snapshots, { article: 'NOPE', name: 'NOPE' })).toBeNull();
+  });
+
+  it('ищет по артикулу, ссылке или названию', () => {
+    expect(lastKnownSizes(snapshots, { name: 'A1' })?.sizes).toEqual(['42,5', '43']);
+  });
+});
+
+describe('collectDelistedProducts — товары, исчезнувшие с сайта', () => {
+  // в реальных снимках (parseSnapshotRows) ключ карты = артикул (productIdentityKey)
+  const snapByArticle = (date: string, products: SnapshotProduct[]): HistorySnapshot => ({
+    date,
+    stores: [SPB],
+    products: new Map(products.map((p) => [p.article || p.link, p])),
+  });
+
+  const hist: HistorySnapshot[] = [
+    snapByArticle('2026-09-20', [
+      snapProduct('https://s/1', 'Кроссовки A', { [SPB]: 2 }, { article: 'A1' }),
+      snapProduct('https://s/2', 'Кроссовки B', { [SPB]: 1 }, { article: 'B1' }),
+    ]),
+    snapByArticle('2026-09-23', [
+      snapProduct('https://s/2', 'Кроссовки B', { [SPB]: 0 }, { article: 'B1' }),
+    ]),
+  ];
+
+  it('товар из старого снимка отсутствует в каталоге → распродан/убран', () => {
+    const delisted = collectDelistedProducts(hist, new Set(['B1']));
+    expect(delisted).toHaveLength(1);
+    expect(delisted[0]).toMatchObject({
+      key: 'A1',
+      article: 'A1',
+      name: 'Кроссовки A',
+      lastTotal: 2,
+      lastSeen: '2026-09-20',
+    });
+  });
+
+  it('товар вернулся в каталог → не считается исчезнувшим', () => {
+    expect(collectDelistedProducts(hist, new Set(['A1', 'B1']))).toHaveLength(0);
+  });
+
+  it('без истории список пуст', () => {
+    expect(collectDelistedProducts([], new Set())).toHaveLength(0);
   });
 });

@@ -1,15 +1,32 @@
-import { useState, useMemo } from 'react';
-import { Search, ChevronDown, ChevronUp, PackageSearch, Flame, ExternalLink } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import {
+  Search,
+  ChevronDown,
+  ChevronUp,
+  PackageSearch,
+  Flame,
+  ExternalLink,
+  LayoutGrid,
+  List,
+} from 'lucide-react';
 import { useFilteredData, useHotArticles } from '../hooks/useAnalytics';
+import { useData } from '../context/DataContext';
 import { compareSizes } from '../utils/sizes';
 import { isWarehouse, shortStoreLabel } from '../utils/storeGroups';
-import { ProductCardModal } from './ProductCardModal';
+import { sportOf, productSettingsKey } from '../utils/sport';
+import { ProductCardModal, ProductImage } from './ProductCardModal';
+import { SportBadge } from './SportBadge';
 import type { InventoryItem } from '../types';
 
 // Единые пороги цветов (совпадают с легендой внизу таблицы)
 const SIZE_LOW = 2; // ≤ 2 шт одного размера в магазине — «мало»
 const STORE_LOW = 5; // < 5 шт суммарно в магазине — «мало»
 const PAGE_SIZE = 100; // порция отображаемых товаров («Показать ещё»)
+const GHOST_LIMIT = 60; // сколько «убранных с сайта» товаров показывать списком
+const VIEW_MODE_KEY = 'st-inventory-view';
+
+type ViewMode = 'table' | 'cards';
+type Availability = 'all' | 'inStock' | 'soldOut';
 
 function sizeCellClass(qty: number): string {
   if (qty === 0) return 'bg-red-100 text-red-700 font-bold';
@@ -26,15 +43,32 @@ function storeCellClass(qty: number): string {
 const NOT_CARRIED_CLASS = 'bg-gray-50 text-gray-400';
 
 export function InventoryTable() {
-  // Данные уже отфильтрованы глобальной панелью (бренд / категория / пол / подтип)
+  // Данные уже отфильтрованы глобальной панелью (бренд / категория / пол / подтип / спорт)
   const data = useFilteredData();
   const hotArticles = useHotArticles();
+  const { settings, delistedProducts, filters } = useData();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStore, setSelectedStore] = useState<string>('all');
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
-  const [onlySoldOut, setOnlySoldOut] = useState(false);
+  const [availability, setAvailability] = useState<Availability>('all');
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    try {
+      return localStorage.getItem(VIEW_MODE_KEY) === 'cards' ? 'cards' : 'table';
+    } catch {
+      return 'table';
+    }
+  });
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
+
+  // Выбор режима (таблица/карточки) запоминается в браузере
+  useEffect(() => {
+    try {
+      localStorage.setItem(VIEW_MODE_KEY, viewMode);
+    } catch {
+      /* приватный режим */
+    }
+  }, [viewMode]);
 
   const stores = useMemo(() => data?.stores ?? [], [data]);
   const products = useMemo(() => data?.products ?? [], [data]);
@@ -75,6 +109,8 @@ export function InventoryTable() {
     return { byKey, storeTotals, productTotals, sizesByProduct };
   }, [inventory]);
 
+  const excludedKeys = settings.excludedProducts;
+
   const filteredProducts = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     return products.filter((p) => {
@@ -83,16 +119,42 @@ export function InventoryTable() {
         p.name.toLowerCase().includes(term) ||
         p.brand.toLowerCase().includes(term) ||
         (p.article ?? '').toLowerCase().includes(term);
-      const matchesSoldOut =
-        !onlySoldOut || (indexes.productTotals.get(p.id) ?? 0) === 0;
-      return matchesSearch && matchesSoldOut;
+      const total = indexes.productTotals.get(p.id) ?? 0;
+      const matchesAvailability =
+        availability === 'all' ||
+        (availability === 'inStock' ? total > 0 : total === 0);
+      return matchesSearch && matchesAvailability;
     });
-  }, [products, searchTerm, onlySoldOut, indexes]);
+  }, [products, searchTerm, availability, indexes]);
+
+  // Товары, убранные с сайта (из истории снимков): показываются в «Все» и
+  // «Распроданные»; поиск и глобальные фильтры к ним тоже применяются.
+  const filteredDelisted = useMemo(() => {
+    if (availability === 'inStock' || delistedProducts.length === 0) return [];
+    const term = searchTerm.trim().toLowerCase();
+    return delistedProducts.filter((g) => {
+      const matchesSearch =
+        !term ||
+        g.name.toLowerCase().includes(term) ||
+        g.brand.toLowerCase().includes(term) ||
+        g.article.toLowerCase().includes(term);
+      const matchesFilters =
+        (filters.brand === 'all' || g.brand === filters.brand) &&
+        (filters.category === 'all' || g.category === filters.category) &&
+        (filters.sport === 'all' ||
+          sportOf(
+            { article: g.article, link: g.link, name: g.name, category: g.category },
+            settings.sportOverrides
+          ) === filters.sport);
+      return matchesSearch && matchesFilters;
+    });
+  }, [delistedProducts, searchTerm, availability, filters, settings]);
 
   const soldOutCount = useMemo(
     () => products.filter((p) => (indexes.productTotals.get(p.id) ?? 0) === 0).length,
     [products, indexes]
   );
+  const inStockCount = products.length - soldOutCount;
 
   const visibleProducts = useMemo(
     () => filteredProducts.slice(0, visibleCount),
@@ -143,26 +205,185 @@ export function InventoryTable() {
       <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
         <div className="text-xs text-gray-500">
           Найдено товаров:{' '}
-          <span className="font-semibold text-gray-700">{filteredProducts.length}</span> из{' '}
-          {products.length}
+          <span className="font-semibold text-gray-700">
+            {filteredProducts.length + filteredDelisted.length}
+          </span>{' '}
+          из {products.length + delistedProducts.length}
+          {filteredDelisted.length > 0 && (
+            <span className="text-gray-400"> (вкл. {filteredDelisted.length} убранных с сайта)</span>
+          )}
         </div>
-        <button
-          onClick={() => {
-            setOnlySoldOut(!onlySoldOut);
-            resetPage();
-          }}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-            onlySoldOut
-              ? 'bg-red-500 text-white hover:bg-red-600'
-              : 'bg-gray-100 text-gray-600 hover:bg-red-50 hover:text-red-600'
-          }`}
-        >
-          <Flame className="w-3.5 h-3.5" />
-          Только распроданные ({soldOutCount})
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Наличие: все / в наличии / распроданные */}
+          <div className="inline-flex rounded-full border border-gray-200 overflow-hidden text-xs">
+            {(
+              [
+                ['all', `Все (${products.length + delistedProducts.length})`, 'bg-gray-700'],
+                ['inStock', `В наличии (${inStockCount})`, 'bg-emerald-500'],
+                [
+                  'soldOut',
+                  `Распроданные (${soldOutCount + delistedProducts.length})`,
+                  'bg-red-500',
+                ],
+              ] as [Availability, string, string][]
+            ).map(([mode, label, activeBg]) => (
+              <button
+                key={mode}
+                onClick={() => {
+                  setAvailability(mode);
+                  resetPage();
+                }}
+                className={`px-3 py-1.5 font-medium transition-colors ${
+                  availability === mode
+                    ? `${activeBg} text-white`
+                    : 'bg-white text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {mode === 'soldOut' && <Flame className="w-3 h-3 inline mr-1" />}
+                {label}
+              </button>
+            ))}
+          </div>
+          {/* Вид: таблица / карточки */}
+          <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden">
+            <button
+              onClick={() => setViewMode('table')}
+              className={`px-2.5 py-1.5 ${viewMode === 'table' ? 'bg-blue-500 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+              title="Режим таблицы"
+            >
+              <List className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('cards')}
+              className={`px-2.5 py-1.5 ${viewMode === 'cards' ? 'bg-blue-500 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+              title="Режим маленьких карточек (клик — карточка товара с настройками)"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="space-y-2">
+        {viewMode === 'cards' ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+            {visibleProducts.map((product) => {
+              const totalStock = indexes.productTotals.get(product.id) ?? 0;
+              const isSoldOut = totalStock === 0;
+              const sport = sportOf(product, settings.sportOverrides);
+              const excluded = Boolean(excludedKeys[productSettingsKey(product)]);
+              const isHot = Boolean(
+                product.article && hotArticles.has(product.article.toLowerCase())
+              );
+              return (
+                <button
+                  key={product.id}
+                  onClick={() => setSelectedProduct(product.id)}
+                  className="group text-left bg-white border border-gray-100 rounded-xl overflow-hidden hover:border-blue-300 hover:shadow-md transition-all flex flex-col"
+                  title="Открыть карточку товара (наличие, ориентация, исключения)"
+                >
+                  <div className="relative h-32 bg-gradient-to-br from-gray-50 to-blue-50 flex items-center justify-center overflow-hidden">
+                    <ProductImage product={product} alt={product.name} />
+                    {isSoldOut && (
+                      <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-red-500 text-white text-[9px] font-bold uppercase tracking-wide">
+                        Распродано
+                      </span>
+                    )}
+                    {excluded && (
+                      <span
+                        className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-gray-700 text-white text-[10px] font-bold"
+                        title="Исключён из рекомендаций (услуга / не товар)"
+                      >
+                        ⛔
+                      </span>
+                    )}
+                    {isHot && (
+                      <span
+                        className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 text-[10px] font-bold"
+                        title="Ходовой товар"
+                      >
+                        🔥
+                      </span>
+                    )}
+                  </div>
+                  <div className="p-2.5 flex-1 flex flex-col gap-1">
+                    <div
+                      className="text-[11px] leading-tight text-gray-800 line-clamp-2 group-hover:text-blue-700"
+                      title={product.name}
+                    >
+                      {product.name}
+                    </div>
+                    <div className="text-[10px] text-gray-400 truncate">
+                      {product.brand}
+                      {product.article ? ` · ${product.article}` : ''}
+                    </div>
+                    <div className="flex items-center gap-1 mt-auto">
+                      <SportBadge sport={sport} />
+                      <span
+                        className={`ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                          totalStock === 0
+                            ? 'bg-red-100 text-red-700'
+                            : totalStock < 10
+                              ? 'bg-amber-100 text-amber-700'
+                              : 'bg-emerald-100 text-emerald-700'
+                        }`}
+                      >
+                        {totalStock} шт.
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+            {filteredDelisted.slice(0, GHOST_LIMIT).map((g) => {
+              const sport = sportOf(
+                { article: g.article, link: g.link, name: g.name, category: g.category },
+                settings.sportOverrides
+              );
+              return (
+                <div
+                  key={`delisted-${g.key}`}
+                  className="text-left bg-gray-50 border border-dashed border-gray-300 rounded-xl overflow-hidden flex flex-col opacity-90"
+                  title="Товар убран с сайта — считается распроданным"
+                >
+                  <div className="relative h-32 bg-gray-100 flex items-center justify-center text-gray-300">
+                    <PackageSearch className="w-10 h-10" />
+                    <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-gray-500 text-white text-[9px] font-bold uppercase">
+                      Убран с сайта
+                    </span>
+                  </div>
+                  <div className="p-2.5 flex-1 flex flex-col gap-1">
+                    {g.link ? (
+                      <a
+                        href={g.link}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] leading-tight text-gray-600 line-clamp-2 hover:text-blue-600 hover:underline"
+                        title={g.name}
+                      >
+                        {g.name}
+                      </a>
+                    ) : (
+                      <div className="text-[11px] leading-tight text-gray-600 line-clamp-2" title={g.name}>
+                        {g.name}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-1 mt-auto">
+                      <SportBadge sport={sport} />
+                      <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700">
+                        0 шт.
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-gray-400 truncate">
+                      до {g.lastSeen.slice(0, 10)} · было {g.lastTotal} шт.
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+        <>
         {/* Table Header */}
         <div
           className="grid gap-2 px-4 py-2 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg text-xs font-semibold text-gray-600 uppercase tracking-wide border border-green-100"
@@ -220,6 +441,17 @@ export function InventoryTable() {
                         >
                           <ExternalLink className="w-3 h-3 inline" />
                         </a>
+                      )}
+                      <span className="ml-1.5 inline-block align-middle">
+                        <SportBadge sport={sportOf(product, settings.sportOverrides)} />
+                      </span>
+                      {excludedKeys[productSettingsKey(product)] && (
+                        <span
+                          className="ml-1 inline-block align-middle text-[11px]"
+                          title="Исключён из рекомендаций (услуга / не товар)"
+                        >
+                          ⛔
+                        </span>
                       )}
                       {product.article && hotArticles.has(product.article.toLowerCase()) && (
                         <span
@@ -369,7 +601,61 @@ export function InventoryTable() {
           );
         })}
 
-        {filteredProducts.length === 0 && (
+        {availability !== 'inStock' &&
+          filteredDelisted.slice(0, GHOST_LIMIT).map((g) => {
+            const sport = sportOf(
+              { article: g.article, link: g.link, name: g.name, category: g.category },
+              settings.sportOverrides
+            );
+            return (
+              <div
+                key={`delisted-${g.key}`}
+                className="grid gap-2 px-4 py-3 items-center bg-gray-50/70 border border-dashed border-gray-300 rounded-lg"
+                style={{
+                  gridTemplateColumns: `2.6fr 0.7fr 0.8fr ${Math.max(displayStores.length, 1)}fr`,
+                }}
+              >
+                <div className="min-w-0">
+                  <div className="text-sm text-gray-500 line-clamp-1" title={g.name}>
+                    {g.link ? (
+                      <a
+                        href={g.link}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="hover:text-blue-600 hover:underline"
+                      >
+                        {g.name}
+                      </a>
+                    ) : (
+                      g.name
+                    )}
+                    <span className="ml-1.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-gray-200 text-gray-600 text-[10px] font-bold uppercase align-middle">
+                      Убран с сайта
+                    </span>
+                    <span className="ml-1.5 inline-block align-middle">
+                      <SportBadge sport={sport} />
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-400">
+                    {g.category}
+                    {g.article ? ` · ${g.article}` : ''} · последний раз в наличии:{' '}
+                    {g.lastSeen.slice(0, 10)} ({g.lastTotal} шт.)
+                  </div>
+                </div>
+                <div className="text-sm text-gray-400 truncate">{g.brand}</div>
+                <div className="text-center">
+                  <span className="inline-flex items-center justify-center min-w-[2rem] h-7 px-2 rounded-full text-xs bg-red-100 text-red-700">
+                    0 шт.
+                  </span>
+                </div>
+                <div />
+              </div>
+            );
+          })}
+        </>
+        )}
+
+        {filteredProducts.length + filteredDelisted.length === 0 && (
           <div className="text-center py-10 text-gray-500">
             <PackageSearch className="w-12 h-12 mx-auto mb-3 text-gray-300" />
             <p className="text-sm">Ничего не найдено</p>

@@ -9,9 +9,12 @@ import {
 import {
   analyzeSales,
   analyzeSizeSales,
+  lastKnownSizes,
+  type LastKnownSizes,
   type SalesReport,
   type SizeSalesReport,
 } from '../utils/historyCore';
+import { sportOf, productSettingsKey } from '../utils/sport';
 import type { ParsedData, TransferRecommendation, RestockRecommendation } from '../types';
 
 /**
@@ -60,11 +63,17 @@ export function useSubtypes(): string[] {
  * Используют все вкладки: KPI, графики, таблицы, рекомендации.
  */
 export function useFilteredData(): ParsedData | null {
-  const { data, filters } = useData();
+  const { data, filters, settings } = useData();
   return useMemo(() => {
     if (!data) return null;
-    const { brand, category, gender, subtype } = filters;
-    if (brand === 'all' && category === 'all' && gender === 'all' && subtype === 'all') {
+    const { brand, category, gender, subtype, sport } = filters;
+    if (
+      brand === 'all' &&
+      category === 'all' &&
+      gender === 'all' &&
+      subtype === 'all' &&
+      sport === 'all'
+    ) {
       return data;
     }
     const products = data.products.filter(
@@ -72,12 +81,33 @@ export function useFilteredData(): ParsedData | null {
         (brand === 'all' || p.brand === brand) &&
         (category === 'all' || p.category === category) &&
         (gender === 'all' || (p.gender ?? 'unisex') === gender) &&
-        (subtype === 'all' || (p.subtype ?? '') === subtype)
+        (subtype === 'all' || (p.subtype ?? '') === subtype) &&
+        (sport === 'all' || sportOf(p, settings.sportOverrides) === sport)
     );
     const productIds = new Set(products.map((p) => p.id));
     const inventory = data.inventory.filter((i) => productIds.has(i.productId));
     return { ...data, products, inventory };
-  }, [data, filters]);
+  }, [data, filters, settings]);
+}
+
+/**
+ * Данные без исключённых товаров (услуги и снятые с рекомендаций вручную).
+ * Исключения влияют ТОЛЬКО на перемещения и дозакупку — KPI, продажи и
+ * инвентарь показывают полную картину.
+ */
+function useDataWithoutExcluded(): ParsedData | null {
+  const data = useFilteredData();
+  const { settings } = useData();
+  return useMemo(() => {
+    if (!data) return null;
+    const excluded = settings.excludedProducts;
+    if (Object.keys(excluded).length === 0) return data;
+    const products = data.products.filter((p) => !excluded[productSettingsKey(p)]);
+    if (products.length === data.products.length) return data;
+    const productIds = new Set(products.map((p) => p.id));
+    const inventory = data.inventory.filter((i) => productIds.has(i.productId));
+    return { ...data, products, inventory };
+  }, [data, settings]);
 }
 
 export function useMetrics(): Metrics | null {
@@ -86,12 +116,12 @@ export function useMetrics(): Metrics | null {
 }
 
 export function useTransferRecommendations(): TransferRecommendation[] {
-  const data = useFilteredData();
+  const data = useDataWithoutExcluded();
   return useMemo(() => (data ? getTransferRecommendations(data) : []), [data]);
 }
 
 export function useRestockRecommendations(): RestockRecommendation[] {
-  const data = useFilteredData();
+  const data = useDataWithoutExcluded();
   const { hotProducts } = useData();
   return useMemo(
     () => (data ? getRestockRecommendations(data, hotProducts) : []),
@@ -109,6 +139,23 @@ export function useSalesReport(): SalesReport | null {
 export function useSizeSalesReport(): SizeSalesReport | null {
   const { sizeSnapshots } = useData();
   return useMemo(() => analyzeSizeSales(sizeSnapshots), [sizeSnapshots]);
+}
+
+/**
+ * Поиск последних размеров товара по снимкам sizes (для распроданных позиций:
+ * «какой размер был на сайте последним» = какой размер купили).
+ */
+export function useLastKnownSizes(): (product: {
+  article?: string;
+  link?: string;
+  name?: string;
+}) => LastKnownSizes | null {
+  const { sizeSnapshots } = useData();
+  return useMemo(
+    () => (product: { article?: string; link?: string; name?: string }) =>
+      lastKnownSizes(sizeSnapshots, product),
+    [sizeSnapshots]
+  );
 }
 
 /** Set артикулов ходовых товаров (для бейджей в таблицах) */

@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { DataProvider, useData } from './context/DataContext';
 import { useMetrics } from './hooks/useAnalytics';
 import { oosLevel } from './utils/analyticsCore';
 import { isWarehouse } from './utils/storeGroups';
 import { downloadBrandOverrides } from './utils/overrides';
+import { downloadSettings, settingsCounts } from './utils/settings';
 import { FileUpload } from './components/FileUpload';
 import { Dashboard } from './components/Dashboard';
 import { InventoryTable } from './components/InventoryTable';
@@ -86,10 +87,23 @@ function StoreSummary() {
 }
 
 function AppContent() {
-  const { data, hydrated, clearData, bundledData, restoreBundled, brandOverrides } = useData();
+  const {
+    data,
+    hydrated,
+    clearData,
+    bundledData,
+    restoreBundled,
+    brandOverrides,
+    settings,
+    importSettings,
+  } = useData();
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const overrideCount = Object.keys(brandOverrides).length;
+  const settingsFileRef = useRef<HTMLInputElement>(null);
+  const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
+  const counts = settingsCounts(settings);
+  const settingsTotal = counts.sports + counts.excluded;
 
   // Восстановление сохранённых данных из IndexedDB
   if (!hydrated) {
@@ -236,6 +250,41 @@ function AppContent() {
         </div>
 
         <div className="absolute bottom-0 left-0 right-0 p-6 border-t border-gray-100">
+          {settingsTotal > 0 && (
+            <button
+              onClick={() => downloadSettings(settings)}
+              className="w-full mb-2 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 transition-colors"
+              title={`Ориентации вручную: ${counts.sports}, исключено из рекомендаций: ${counts.excluded}. Скачайте JSON, чтобы перенести настройки на другой компьютер или передать коллегам.`}
+            >
+              <Upload className="w-3.5 h-3.5" />
+              Настройки товаров: {settingsTotal} — скачать JSON
+            </button>
+          )}
+          <button
+            onClick={() => settingsFileRef.current?.click()}
+            className="w-full mb-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-white text-gray-500 border border-gray-200 hover:bg-gray-50 transition-colors"
+            title="Загрузить product-settings.json (ориентации Падел/Теннис и исключения-услуги) — например, полученный от админа"
+          >
+            <Database className="w-3.5 h-3.5" />
+            Загрузить настройки товаров
+          </button>
+          <input
+            ref={settingsFileRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              e.target.value = '';
+              if (!file) return;
+              const text = await file.text();
+              setSettingsMsg(importSettings(text) ? '✓ Настройки загружены' : '⚠ Файл не похож на настройки');
+              window.setTimeout(() => setSettingsMsg(null), 4000);
+            }}
+          />
+          {settingsMsg && (
+            <div className="mb-2 text-center text-[11px] text-gray-500">{settingsMsg}</div>
+          )}
           {overrideCount > 0 && (
             <button
               onClick={() => downloadBrandOverrides(brandOverrides)}

@@ -2,6 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { X, ExternalLink, Package, Store as StoreIcon, Flame, Pencil, Check } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { toProductPath, localPhotoCandidates } from '../utils/images';
+import {
+  detectSport,
+  productSettingsKey,
+  SPORT_ICONS,
+  SPORT_LABELS,
+  type Sport,
+} from '../utils/sport';
+import { SportBadge } from './SportBadge';
 import { compareSizes } from '../utils/sizes';
 import { isWarehouse, getStoreCity, shortStoreLabel } from '../utils/storeGroups';
 import type { InventoryItem, Product } from '../types';
@@ -13,7 +21,7 @@ import type { InventoryItem, Product } from '../types';
  * 3. URL из product-images.json (собран scrape-images.mjs) — резерв;
  * 4. заглушка.
  */
-function ProductImage({ product, alt }: { product: Product; alt: string }) {
+export function ProductImage({ product, alt }: { product: Product; alt: string }) {
   const { productImages } = useData();
   const sources = useMemo(() => {
     const list: string[] = [];
@@ -115,6 +123,89 @@ function BrandEditor({ product }: { product: Product }) {
   );
 }
 
+/** Цвета кнопок ориентации (полные классы — Tailwind не видит динамические) */
+const SPORT_ACTIVE: Record<Sport, string> = {
+  tennis: 'bg-emerald-600 text-white border-emerald-600',
+  padel: 'bg-violet-600 text-white border-violet-600',
+  other: 'bg-gray-600 text-white border-gray-600',
+};
+const SPORT_INACTIVE: Record<Sport, string> = {
+  tennis: 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50',
+  padel: 'bg-white text-violet-700 border-violet-200 hover:bg-violet-50',
+  other: 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100',
+};
+
+/**
+ * Ручные настройки товара: ориентация (Падел/Теннис/Прочее) и исключение
+ * из рекомендаций. Выбор запоминается в браузере (localStorage) и
+ * экспортируется в сайдбаре («Настройки товаров — скачать JSON»).
+ */
+function ProductSettingsPanel({ product }: { product: Product }) {
+  const { settings, setSportOverride, setProductExcluded } = useData();
+  const key = productSettingsKey(product);
+  const override = settings.sportOverrides[key];
+  const current = override ?? detectSport(product.category ?? '', product.name ?? '');
+  const excluded = Boolean(settings.excludedProducts[key]);
+
+  return (
+    <div className="px-5 pb-4">
+      <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4 flex flex-col md:flex-row md:items-start gap-4">
+        <div>
+          <div className="text-xs font-semibold text-gray-600 mb-2">
+            Ориентация товара{' '}
+            {override ? (
+              <span className="font-normal text-gray-400">(выбрана вручную ✎)</span>
+            ) : (
+              <span className="font-normal text-gray-400">(определена автоматически)</span>
+            )}
+          </div>
+          <div className="flex gap-1.5 flex-wrap">
+            {(['tennis', 'padel', 'other'] as Sport[]).map((sport) => (
+              <button
+                key={sport}
+                onClick={() => setSportOverride(key, sport)}
+                className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                  current === sport ? SPORT_ACTIVE[sport] : SPORT_INACTIVE[sport]
+                }`}
+                title={`Все товары этого артикула будут помечены как «${SPORT_LABELS[sport]}»`}
+              >
+                {SPORT_ICONS[sport]} {SPORT_LABELS[sport]}
+              </button>
+            ))}
+            {override && (
+              <button
+                onClick={() => setSportOverride(key, null)}
+                className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-500 text-xs font-medium hover:bg-gray-100 transition-colors"
+                title="Вернуть автоматическое определение"
+              >
+                ↺ Авто
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="md:ml-auto">
+          <div className="text-xs font-semibold text-gray-600 mb-2">Рекомендации</div>
+          <button
+            onClick={() => setProductExcluded(key, !excluded)}
+            className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+              excluded
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                : 'bg-white text-gray-600 border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200'
+            }`}
+          >
+            {excluded ? '✓ Вернуть в рекомендации' : '⛔ Исключить (услуга / не товар)'}
+          </button>
+          {excluded && (
+            <p className="text-[10px] text-gray-400 mt-1.5 max-w-[220px]">
+              Товар не участвует в «Перемещениях» и «Дозакупке». Выбор запомнен.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Модальная карточка товара: картинка с saletennis.com, цена, артикул,
  * наличие по ВСЕМ магазинам и размерам (не возит — «—»). Склад подсвечен синим.
@@ -126,7 +217,7 @@ export function ProductCardModal({
   productId: string;
   onClose: () => void;
 }) {
-  const { data, hotProducts } = useData();
+  const { data, hotProducts, settings } = useData();
 
   // Закрытие по Escape
   useEffect(() => {
@@ -203,6 +294,20 @@ export function ProductCardModal({
                   <Flame className="w-3 h-3" /> Распродано
                 </span>
               )}
+              {settings.excludedProducts[productSettingsKey(product)] && (
+                <span
+                  className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-gray-700 text-white"
+                  title="Исключён из рекомендаций (услуга / не товар)"
+                >
+                  ⛔ Исключено
+                </span>
+              )}
+              <SportBadge
+                sport={
+                  settings.sportOverrides[productSettingsKey(product)] ??
+                  detectSport(product.category ?? '', product.name ?? '')
+                }
+              />
             </div>
             <h2 className="text-lg font-bold text-gray-800 mt-2 leading-snug break-words">
               {product.name}
@@ -290,6 +395,8 @@ export function ProductCardModal({
             </div>
           </div>
         </div>
+
+        <ProductSettingsPanel product={product} />
 
         {/* Размерная сетка — ВСЕ магазины */}
         {view.sizes.length > 0 && (
