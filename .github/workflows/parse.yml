@@ -65,5 +65,20 @@ jobs:
             echo "Данные не изменились — коммит не нужен"
           else
             git commit -m "data: автоматический парсинг остатков $(date -u +%Y-%m-%d)"
-            git push
+            if ! git push origin HEAD:"$GITHUB_REF_NAME"; then
+              # За время парсинга (~1-2 ч) в ветку могли запушить другие коммиты.
+              # Перекладываем СВЁЖИЕ данные поверх последней версии ветки:
+              # reset --mixed сохраняет рабочие файлы (наш парсинг) и берёт
+              # чужие изменения кода из origin, затем коммитим только public/data.
+              echo "[WARN] Ветка ушла вперёд — перекладываю данные поверх последней версии"
+              git fetch origin "$GITHUB_REF_NAME"
+              git reset --mixed FETCH_HEAD
+              git add public/data
+              if git diff --cached --quiet; then
+                echo "Данные уже актуальны — коммит не нужен"
+              else
+                git commit -m "data: автоматический парсинг остатков $(date -u +%Y-%m-%d)"
+                git push origin HEAD:"$GITHUB_REF_NAME"
+              fi
+            fi
           fi
