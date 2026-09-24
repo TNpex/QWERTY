@@ -172,9 +172,28 @@ const BAD_BRAND_VALUES = ['', 'не определен', 'не определё�
 /** Известные бренды сети — для извлечения из названия (порядок: длинные первыми) */
 const BRAND_TOKENS = [
   'Black Crown', 'Bidi Badu', 'Tecnifibre', 'Drop Shot', 'Seven Six', 'Bullpadel',
-  'Saletennis', 'Luxilon', 'Diadora', 'Wilson', 'Babolat', 'Solinco', 'Mizuno',
-  'Adidas', 'Nike', 'Head', 'Joma', 'Asics', 'Yonex', 'Dunlop', 'Varlion',
-  'Nox', 'Siux', 'Nata', '7/6',
+  'Royal Padel', 'Tennis Life', 'Saletennis', 'Slazenger', 'StarVie', 'Luxilon',
+  'Diadora', 'Wilson', 'Babolat', 'Solinco', 'Mizuno', 'Adidas', 'Diadem',
+  'Prince', 'Oxdog', 'Torres', 'Kuikma', 'Nike', 'Head', 'Joma', 'Asics',
+  'Yonex', 'Dunlop', 'Varlion', 'Gamma', 'Volkl', 'Fila', 'Lotto', 'Nox',
+  'Siux', 'Nata', 'Milo', '7/6',
+];
+
+/**
+ * Опечатки бренда Tecnifibre в названиях на самом сайте:
+ * «Tecnifbre Fire 285», «Tecnifiber Carboflex» → Tecnifibre.
+ */
+const BRAND_TYPO_FIXES: Array<[RegExp, string]> = [
+  [/tecnif(?:bre|iber|ibr)(?![a-zа-яё])/gi, 'tecnifibre'],
+];
+
+/**
+ * Особые правила «название → бренд» для товаров, где бренд не указан:
+ * линейки струн для сквоша X-ONE и 305 SQUASH выпускает Tecnifibre.
+ */
+const BRAND_NAME_RULES: Array<[RegExp, string]> = [
+  [/\bx-one\b/i, 'Tecnifibre'],
+  [/\b305\s+squash\b/i, 'Tecnifibre'],
 ];
 
 function isBadBrand(brand: string): boolean {
@@ -185,13 +204,22 @@ function isBadBrand(brand: string): boolean {
 /**
  * Восстанавливает бренд: код поставщика («37078») и «Не определен» заменяются
  * брендом из названия (у всех 455 товаров «37078» в названии есть «7/6»),
- * затем — по фирменному формату артикула Nike (FZ6951-110).
+ * опечатки бренда в названии нормализуются («Tecnifbre» → Tecnifibre),
+ * затем — поиск по фирменному формату артикула Nike (FZ6951-110).
  */
 export function cleanBrand(name: string, article: string, rawBrand: string): string {
   const brand = String(rawBrand ?? '').trim();
   if (!isBadBrand(brand)) return brand;
 
-  const lower = ` ${name.toLowerCase()} `;
+  const raw = name.toLowerCase();
+  for (const [pattern, result] of BRAND_NAME_RULES) {
+    if (pattern.test(raw)) return result;
+  }
+
+  let lower = ` ${raw} `;
+  for (const [pattern, replacement] of BRAND_TYPO_FIXES) {
+    lower = lower.replace(pattern, replacement);
+  }
   for (const token of BRAND_TOKENS) {
     if (lower.includes(token.toLowerCase())) return token;
   }

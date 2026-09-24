@@ -61,3 +61,40 @@ export function downloadBrandOverrides(overrides: BrandOverrides): void {
   link.click();
   URL.revokeObjectURL(url);
 }
+
+/**
+ * Убирает правки, которые больше ничего не меняют: бренд в данных уже совпадает
+ * со значением правки (правку зафиксировали в CSV через apply-edits, или парсер
+ * стал сам определять бренд — например, после добавления Diadora/Tecnifibre).
+ * Правки для товаров, которых сейчас нет в данных, СОХРАНЯЮТСЯ — они сработают,
+ * когда товар вернётся на сайт.
+ */
+export function pruneAppliedOverrides(
+  data: ParsedData | null,
+  overrides: BrandOverrides
+): { kept: BrandOverrides; removed: number } {
+  if (!data) return { kept: overrides, removed: 0 };
+
+  const brandsByArticle = new Map<string, string[]>();
+  for (const product of data.products) {
+    const article = (product.article ?? '').trim().toLowerCase();
+    if (!article) continue;
+    const list = brandsByArticle.get(article);
+    if (list) list.push(product.brand);
+    else brandsByArticle.set(article, [product.brand]);
+  }
+
+  const kept: BrandOverrides = {};
+  let removed = 0;
+  for (const [article, brand] of Object.entries(overrides)) {
+    const key = article.trim().toLowerCase();
+    const target = brand.trim();
+    const brands = brandsByArticle.get(key);
+    if (target && brands && brands.length > 0 && brands.every((b) => b === target)) {
+      removed += 1; // все товары артикула уже носят этот бренд — правка избыточна
+      continue;
+    }
+    kept[article] = brand;
+  }
+  return { kept, removed };
+}

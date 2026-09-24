@@ -72,7 +72,21 @@ KNOWN_BRANDS = [
     'Dropshot', 'Varlion', 'Palmer', 'Asics', 'Nike', 'Joma', 'Fila', 'Lotto',
     'Yonex', 'Volkl', 'Dunlop', 'Gamma', 'Luxilon', 'Bidi Badu', 'Mizuno',
     'Saletennis', 'Diadora', 'Diadem', 'Prince', 'Nata',
+    # добор по фактическим «Не определен» из каталога (аксессуары/сквош/падел)
+    'Tennis Life', 'Slazenger', 'Oxdog', 'Torres', 'Milo',
 ]
+
+# Опечатки бренда Tecnifibre прямо в названиях на сайте:
+# «Tecnifbre Fire 285», «Tecnifiber Carboflex» → Tecnifibre
+TECNIFIBRE_TYPOS = ('tecnifbre', 'tecnifiber', 'tecnifibr')
+
+
+def _normalize_brand_name(brand: str) -> str:
+    """Приводит опечатки брендов в названиях/JSON-LD к каноническому виду."""
+    low = brand.strip().lower()
+    if low in TECNIFIBRE_TYPOS:
+        return 'Tecnifibre'
+    return brand.strip()
 
 STORES_FULL = {
     'Санкт-Петербург (Ярослава Гашека)': ['ярослава гашека', 'ярослава'],
@@ -101,17 +115,19 @@ IMAGES_DIR = ""
 PRODUCTS_CSV = ""
 SIZES_CSV = ""
 CHANGES_CSV = ""
+CART_MAP_JSON = ""
 LOG_FILE = ""
 
 
 def configure_paths(out_dir: str):
-    global DATA_DIR, HISTORY_DIR, IMAGES_DIR, PRODUCTS_CSV, SIZES_CSV, CHANGES_CSV, LOG_FILE
+    global DATA_DIR, HISTORY_DIR, IMAGES_DIR, PRODUCTS_CSV, SIZES_CSV, CHANGES_CSV, CART_MAP_JSON, LOG_FILE
     DATA_DIR = out_dir
     HISTORY_DIR = os.path.join(DATA_DIR, "history")
     IMAGES_DIR = os.path.join(DATA_DIR, "product_images")
     PRODUCTS_CSV = os.path.join(DATA_DIR, "products.csv")
     SIZES_CSV = os.path.join(DATA_DIR, "sizes.csv")
     CHANGES_CSV = os.path.join(DATA_DIR, "changes.csv")
+    CART_MAP_JSON = os.path.join(DATA_DIR, "cart-map.json")
     LOG_FILE = os.path.join(DATA_DIR, "parse.log")
     os.makedirs(DATA_DIR, exist_ok=True)
     os.makedirs(HISTORY_DIR, exist_ok=True)
@@ -285,7 +301,7 @@ def extract_brand(driver, name):
                 if isinstance(brand, dict):
                     brand = brand.get('name')
                 if isinstance(brand, str) and brand.strip() and not brand.strip().isdigit():
-                    return brand.strip()
+                    return _normalize_brand_name(brand)
     except Exception:
         pass
 
@@ -294,6 +310,11 @@ def extract_brand(driver, name):
     name_lower = name.lower()
     if 'seven six' in name_lower:
         return '7/6'
+    if any(typo in name_lower for typo in TECNIFIBRE_TYPOS):
+        return 'Tecnifibre'
+    # Линейки струн для сквоша X-ONE и 305 SQUASH — это Tecnifibre
+    if re.search(r'\bx-one\b', name_lower) or re.search(r'\b305\s+squash\b', name_lower):
+        return 'Tecnifibre'
     for brand in KNOWN_BRANDS:
         if brand.upper() in name_upper:
             return brand
@@ -487,6 +508,41 @@ def parse_stock_from_table(driver):
     return store_totals, sizes_data, details_text
 
 
+def parse_cart_info(driver):
+    """
+    Данные для корзины saletennis.com (фича «Перенести в корзину» на сайте):
+      itemId — внутренний ID товара (атрибут data-item-id кнопки «В корзину»,
+               совпадает с числом в конце slug ссылки);
+      sizes  — карта «текст размера → внутренний ID размера» (значения radio
+               .card__sizes input[name=size]; API корзины принимает именно ID).
+    Для безразмерных товаров sizes пуст — в корзину идёт size=0.
+    """
+    try:
+        btn = driver.find_element(By.CSS_SELECTOR, "[data-item-id]")
+        item_id = (btn.get_attribute("data-item-id") or "").strip()
+        if not item_id:
+            return None
+        sizes = {}
+        radios = driver.find_elements(
+            By.CSS_SELECTOR, ".card__sizes input[type=radio][name=size]"
+        )
+        for radio in radios:
+            value = (radio.get_attribute("value") or "").strip()
+            radio_id = (radio.get_attribute("id") or "").strip()
+            if not value or not radio_id:
+                continue
+            label = driver.execute_script(
+                "var l = document.querySelector('label[for=\"' + arguments[0] + '\"]');"
+                "return l ? l.textContent.trim() : '';",
+                radio_id,
+            )
+            if label:
+                sizes[label] = value
+        return {"itemId": item_id, "sizes": sizes}
+    except Exception:
+        return None
+
+
 def parse_product(driver, url, category):
     last_error = None
     for attempt in range(PRODUCT_RETRIES + 1):
@@ -519,6 +575,7 @@ def parse_product(driver, url, category):
             store_totals, sizes_data, details_text = parse_stock_from_table(driver)
             image_url = extract_image_url(driver)
             image_path = download_image(image_url)
+            cart_info = parse_cart_info(driver)
 
             total_qty = sum(store_totals.values())
 
@@ -534,6 +591,7 @@ def parse_product(driver, url, category):
                 'Фото': image_path,
                 **store_totals,
                 'sizes_data': sizes_data,
+                'cart_info': cart_info,
             }
         except Exception as e:
             last_error = e
@@ -700,7 +758,41 @@ def save_sizes_data(all_sizes_data):
     return sizes_df
 
 
+def save_cart_map(cart_map):
+    """
+    Карта для корзины saletennis.com: ссылка → {itemId, sizes: {размер → id}}.
+    Сайт использует её во вкладке «Перемещения» (кнопка «Перенести в корзину»).
+    """
+    if not cart_map:
+        log("[WARN] Данные корзины не собраны — cart-map.json не обновлён")
+        return
+    payload = {
+        'generatedAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'items': cart_map,
+    }
+    with open(CART_MAP_JSON, 'w', encoding='utf-8') as f:
+        json.dump(payload, f, ensure_ascii=False, indent=1)
+    log(f"[OK] Сохранена карта корзины для {len(cart_map)} товаров в {CART_MAP_JSON}")
+
+
 # ================= ГЛАВНЫЙ ЦИКЛ =================
+
+def restart_driver(driver, email, password):
+    """Перезапуск браузера и сессии при потере соединения/логина. None — если не вышло."""
+    log("[WARN] Перезапускаю браузер и сессию...")
+    try:
+        driver.quit()
+    except Exception:
+        pass
+    try:
+        new_driver = init_driver()
+        if not login(new_driver, email, password):
+            return None
+        return new_driver
+    except Exception as e:
+        log(f"[ERROR] Перезапуск не удался: {e}")
+        return None
+
 
 def main():
     ap = argparse.ArgumentParser(description="Парсер остатков SaleTennis для BI-сайта")
@@ -732,23 +824,63 @@ def main():
     driver = init_driver()
     all_products = []
     all_sizes_data = []
+    all_cart_map = {}
+    fatal_error = None
+    skipped_categories = []
+    # Сколько товаров подряд могут не парситься, прежде чем перезапустим сессию
+    MAX_CONSECUTIVE_FAILURES = 15
 
     try:
         if not login(driver, email, password):
             log("[ERROR] Не удалось войти. Завершение.")
             sys.exit(1)
 
+        consecutive_failures = 0
         for cat_name, cat_url in categories.items():
             log(f"\n[INFO] Категория: {cat_name}")
-            urls = get_product_urls(driver, cat_url)
+            try:
+                urls = get_product_urls(driver, cat_url)
+            except Exception as e:
+                log(f"[WARN] Список товаров не открылся ({e}) — пробую перелогиниться")
+                restarted = restart_driver(driver, email, password)
+                if restarted is None:
+                    fatal_error = f"Потеряна сессия на категории «{cat_name}»"
+                    break
+                driver = restarted
+                try:
+                    urls = get_product_urls(driver, cat_url)
+                except Exception as e2:
+                    log(f"[ERROR] Категория «{cat_name}» пропущена: {e2}")
+                    skipped_categories.append(cat_name)
+                    continue
+            if not urls:
+                log(f"[WARN] В категории «{cat_name}» не найдено ни одного товара")
+                skipped_categories.append(cat_name)
+                continue
             log(f"   [INFO] Товаров для обработки: {len(urls)}")
 
             for i, url in enumerate(urls):
                 if (i + 1) % 25 == 0 or i == 0:
                     log(f"   [{i + 1}/{len(urls)}] {url}")
-                product = parse_product(driver, url, cat_name)
+                try:
+                    product = parse_product(driver, url, cat_name)
+                except Exception as e:
+                    # parse_product обычно гасит ошибки сам; сюда попадают
+                    # «смертельные» сбои драйвера (браузер упал / сессия истекла)
+                    log(f"   [ERROR] Сбой на {url}: {e}")
+                    product = None
+
                 if product:
+                    consecutive_failures = 0
                     sizes_data = product.pop('sizes_data', [])
+                    cart_info = product.pop('cart_info', None)
+                    if cart_info:
+                        # ключ — ссылка без хвостового слэша (уникальна у варианта товара)
+                        all_cart_map[url.rstrip('/')] = {
+                            'itemId': cart_info['itemId'],
+                            'article': product['Артикул'],
+                            'sizes': cart_info['sizes'],
+                        }
                     for size_info in sizes_data:
                         size_info['Артикул'] = product['Артикул']
                         size_info['Категория'] = product['Категория']
@@ -758,7 +890,25 @@ def main():
                         size_info['Ссылка'] = product['Ссылка']
                     all_sizes_data.extend(sizes_data)
                     all_products.append(product)
+                else:
+                    consecutive_failures += 1
+                    if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                        log(f"[WARN] {consecutive_failures} товаров подряд не распарсились — "
+                            f"похоже, браузер или сессия умерли")
+                        restarted = restart_driver(driver, email, password)
+                        if restarted is None:
+                            fatal_error = "Сессия потеряна, повторный вход не удался"
+                            break
+                        driver = restarted
+                        consecutive_failures = 0
                 time.sleep(PAGE_DELAY)
+            if fatal_error:
+                break
+    except Exception as e:
+        import traceback
+        fatal_error = f"Непредвиденная ошибка: {e}"
+        log(f"[ERROR] {fatal_error}")
+        log(traceback.format_exc())
     finally:
         log("\n[INFO] Закрываю браузер...")
         try:
@@ -766,6 +916,14 @@ def main():
         except Exception:
             pass
 
+    log(f"[INFO] Собрано товаров: {len(all_products)}")
+    if fatal_error or skipped_categories:
+        log("[ERROR] Парсинг неполный: "
+            + (f"пропущены категории {skipped_categories}; " if skipped_categories else "")
+            + (fatal_error or ""))
+        log("[ERROR] Основные файлы НЕ обновлены — данные сайта остаются прежними, "
+            "чтобы неполный снимок не испортил аналитику и журнал изменений.")
+        sys.exit(1)
     if not all_products:
         log("[ERROR] Не удалось собрать данные — файлы не тронуты.")
         sys.exit(1)
@@ -782,8 +940,19 @@ def main():
     df.to_csv(PRODUCTS_CSV, index=False, encoding='utf-8-sig')
     log(f"[OK] Каталог сохранён: {PRODUCTS_CSV}")
 
-    sizes_df = save_sizes_data(all_sizes_data)
-    save_history_snapshot(df, sizes_df)
+    sizes_df = None
+    try:
+        sizes_df = save_sizes_data(all_sizes_data)
+    except Exception as e:
+        log(f"[ERROR] Не удалось сохранить sizes.csv: {e}")
+    try:
+        save_cart_map(all_cart_map)
+    except Exception as e:
+        log(f"[ERROR] Не удалось сохранить cart-map.json: {e}")
+    try:
+        save_history_snapshot(df, sizes_df)
+    except Exception as e:
+        log(f"[ERROR] Не удалось сохранить снимок истории: {e}")
 
     # ---- Журнал изменений: сравниваем с предыдущим снимком ----
     all_snapshots = sorted(

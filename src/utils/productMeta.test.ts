@@ -143,6 +143,27 @@ describe('cleanBrand', () => {
     expect(cleanBrand('Футболка унисекс LOVE', 'X1', 'Не определен')).toBe('Не определен');
   });
 
+  it('опечатки Tecnifibre в названиях сайта нормализуются', () => {
+    expect(cleanBrand('Теннисная ракетка Tecnifbre Fire 285 2026', '14FIR2856', 'Не определен')).toBe('Tecnifibre');
+    expect(cleanBrand('Ракетка для сквоша Tecnifiber Corbonflex X-TOP 135', '12CAR135XT', 'Не определен')).toBe('Tecnifibre');
+    expect(cleanBrand('Струна Tecnifibre Black Code', 'TB1', 'Не определен')).toBe('Tecnifibre');
+  });
+
+  it('струны для сквоша X-ONE и 305 SQUASH — Tecnifibre', () => {
+    expect(cleanBrand('Струна для сквоша X-ONE Orange 1,24 12 метров', '06GXON124O', 'Не определен')).toBe('Tecnifibre');
+    expect(cleanBrand('Струна для сквоша 305 SQUASH 1,20 9 метров', '06G305120G', 'Не определен')).toBe('Tecnifibre');
+  });
+
+  it('бренды аксессуаров, сквоша и падела определяются из названия', () => {
+    expect(cleanBrand('Теннисная ракетка Diadem Nova FS 100', 'RK-FS-NVA', 'Не определен')).toBe('Diadem');
+    expect(cleanBrand('Ракетка для падела Oxdog Ultimate Pro', '8261511', 'Не определен')).toBe('Oxdog');
+    expect(cleanBrand('Теннисные мячи Slazenger Wimbledon 2026 4B', '340982', 'Не определен')).toBe('Slazenger');
+    expect(cleanBrand('Виброгаситель Tennis Life - Cake', 'TL-Donut', 'Не определен')).toBe('Tennis Life');
+    expect(cleanBrand('Суппорт голеностопа TORRES Nylon - Grey', 'PRL11014XL', 'Не определен')).toBe('Torres');
+    expect(cleanBrand('Магнит Milo "NICE SHOT"', '101-002', 'Не определен')).toBe('Milo');
+    expect(cleanBrand('Теннисная ракетка Prince x Hydrogen Skulls 290', '7T58G095', 'Не определен')).toBe('Prince');
+  });
+
   it('валидный бренд не трогает', () => {
     expect(cleanBrand('Ракетка Head Speed', 'H1', 'Head')).toBe('Head');
     expect(cleanBrand('Что угодно', 'B1', 'Babolat')).toBe('Babolat');

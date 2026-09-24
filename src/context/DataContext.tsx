@@ -16,6 +16,7 @@ import {
   loadBrandOverrides,
   saveBrandOverrides,
   applyBrandOverrides,
+  pruneAppliedOverrides,
   type BrandOverrides,
 } from '../utils/overrides';
 
@@ -119,8 +120,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       if (cancelled) return;
 
-      // Ручные правки брендов применяются и к встроенным данным, и к загруженным
-      const overrides = loadBrandOverrides();
+      // Ручные правки брендов применяются и к встроенным данным, и к загруженным.
+      // Правки, уже отражённые в данных (apply-edits в CSV или автоочистка бренда
+      // парсером/сайтом), убираются — счётчик «Правки брендов» в сайдбаре не висит.
+      let overrides = loadBrandOverrides();
+      const pruned = pruneAppliedOverrides(bundled, overrides);
+      if (pruned.removed > 0) {
+        overrides = pruned.kept;
+        saveBrandOverrides(overrides);
+      }
 
       // Выбираем более свежие данные: загруженный файл против встроенного снимка
       let chosen = bundled;
