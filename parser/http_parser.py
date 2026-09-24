@@ -63,12 +63,12 @@ def build_session() -> requests.Session:
     return s
 
 
-def fetch(session, url, retries=FETCH_RETRIES, timeout=PAGE_TIMEOUT):
+def fetch(session, url, retries=FETCH_RETRIES, timeout=PAGE_TIMEOUT, headers=None):
     """GET с повторами и «вежливым» откатом при 429/503. None — если не вышло."""
     last_error = None
     for attempt in range(retries):
         try:
-            r = session.get(url, timeout=timeout, allow_redirects=True)
+            r = session.get(url, timeout=timeout, allow_redirects=True, headers=headers)
             if r.status_code == 200:
                 return r
             last_error = f"HTTP {r.status_code}"
@@ -398,6 +398,19 @@ def parse_cart_info_http(soup):
     return {"itemId": item_id, "sizes": sizes}
 
 
+def _stock_table_anomaly(soup) -> bool:
+    """
+    Признак «облегчённой» страницы (сбой кэша/CDN): селектор размеров
+    присутствует, а таблицы наличия table.admin-sizes нет. У полностью
+    распроданного товара сайта не показывает ни таблицы, ни размеров.
+    Такие страницы перезапрашиваем со сбросом кэша — иначе товар ложно
+    получает «Нет информации о наличии» и нули (кейс 17 платьев 2026-09-24).
+    """
+    if soup.select_one("table.admin-sizes"):
+        return False
+    return bool(soup.select(".card__sizes input[type=radio][name=size]"))
+
+
 def parse_product(session, url: str, category: str):
     """Возвращает словарь товара (тот же формат, что браузерный parse_product)."""
     last_error = None
@@ -406,7 +419,13 @@ def parse_product(session, url: str, category: str):
             if attempt > 0:
                 sp.log(f"      [RETRY {attempt}] {url}")
                 time.sleep(1.5 * attempt)
-            r = fetch(session, url)
+            request_url = url
+            headers = None
+            if attempt > 0:
+                # обходим возможный кэш CDN: случайный параметр + no-cache
+                request_url = url + ('&' if '?' in url else '?') + f"_nc={int(time.time() * 1000)}"
+                headers = {"Cache-Control": "no-cache", "Pragma": "no-cache"}
+            r = fetch(session, request_url, headers=headers)
             if r is None:
                 last_error = "страница не загрузилась"
                 continue
@@ -414,6 +433,10 @@ def parse_product(session, url: str, category: str):
             h1 = soup.find("h1")
             if h1 is None:
                 last_error = "нет h1 (возможно, страница заблокирована)"
+                continue
+            if _stock_table_anomaly(soup) and attempt < sp.PRODUCT_RETRIES:
+                last_error = "есть размеры, но нет таблицы наличия (сбой кэша) — повторяю"
+                sp.log(f"      [WARN] {url}: {last_error}")
                 continue
 
             name = h1.get_text(strip=True) or "Не найдено"

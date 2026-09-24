@@ -600,7 +600,11 @@ def parse_product(driver, url, category):
             if attempt > 0:
                 log(f"      [RETRY {attempt}] {url}")
                 time.sleep(1.5 * attempt)
-            driver.get(url)
+            # повторные попытки — со сбросом возможного кэша CDN (случайный параметр)
+            target_url = url
+            if attempt > 0:
+                target_url = url + ('&' if '?' in url else '?') + f"_nc={int(time.time() * 1000)}"
+            driver.get(target_url)
             try:
                 WebDriverWait(driver, 5).until(
                     EC.presence_of_element_located((By.TAG_NAME, "h1"))
@@ -623,6 +627,18 @@ def parse_product(driver, url, category):
             article = extract_article(driver)
             price = extract_price(driver)
             store_totals, sizes_data, details_text = parse_stock_from_table(driver)
+            if details_text == 'Нет информации о наличии' and attempt < PRODUCT_RETRIES:
+                # Есть выбор размеров, но нет таблицы — «облегчённая» страница
+                # (сбой кэша): перезапрашиваем, иначе товар получит ложные нули
+                try:
+                    radios = driver.find_elements(
+                        By.CSS_SELECTOR, ".card__sizes input[type=radio][name=size]")
+                except Exception:
+                    radios = []
+                if radios:
+                    last_error = "есть размеры, но нет таблицы наличия (сбой кэша)"
+                    log(f"      [WARN] {url}: {last_error} — повторяю")
+                    continue
             image_url = extract_image_url(driver)
             image_path = download_image(image_url)
             cart_info = parse_cart_info(driver)

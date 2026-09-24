@@ -373,7 +373,7 @@ export function parseBundledRows(
   }
   if (noInfoArticles.length > 0) {
     warnings.push(
-      `Парсер не нашёл таблицу наличия у ${noInfoArticles.length} товаров (возможно, там единицы «банка»/«кор»/«сет»/«бобина»): ` +
+      `Нет таблицы наличия у ${noInfoArticles.length} товаров — они полностью распроданы, либо сайт отдал страницу без таблицы (сбой кэша; парсер повторяет запрос автоматически): ` +
         `${noInfoArticles.slice(0, 10).join(', ')}${noInfoArticles.length > 10 ? ' …' : ''}`
     );
   }
