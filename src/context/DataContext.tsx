@@ -34,6 +34,7 @@ const PROFILE_STORAGE_KEY = 'saletennis-store-profile';
 const SESSION_STORAGE_KEY = 'saletennis-session';
 import type { Sport } from '../utils/sport';
 import type { CartMap } from '../utils/cart';
+import type { DiscountMap } from '../utils/discounts';
 import { loadProductImages, type ProductImageMap } from '../utils/images';
 import {
   loadBrandOverrides,
@@ -108,6 +109,8 @@ interface DataContextType {
   updateStoreProfile: (storeName: string, patch: Partial<StoreProfile>) => void;
   /** Данные корзины saletennis.com (cart-map.json от парсера) */
   cartMap: CartMap | null;
+  /** Скидки из раздела «Распродажа» (discounts.json от парсера) */
+  discounts: DiscountMap | null;
   /** Сессия saletennis.com (значение PHPSESSID) — хранится только в этом браузере */
   saletennisSession: string;
   setSaletennisSession: (value: string) => void;
@@ -160,6 +163,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   });
   const [cartMap, setCartMap] = useState<CartMap | null>(null);
+  const [discounts, setDiscounts] = useState<DiscountMap | null>(null);
   const [saletennisSession, setSessionState] = useState<string>(() => {
     try {
       return localStorage.getItem(SESSION_STORAGE_KEY) ?? '';
@@ -189,6 +193,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       let sizes: SizeSnapshot[] = [];
       let hot: HotProductConfig[] = [];
       let loadedCartMap: CartMap | null = null;
+      let loadedDiscounts: DiscountMap | null = null;
       let failure: string | null = null;
       try {
         const dataset = await loadBundledDataset();
@@ -198,6 +203,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         sizes = dataset.sizeSnapshots;
         hot = dataset.hotProducts;
         loadedCartMap = dataset.cartMap;
+        loadedDiscounts = dataset.discounts;
         // Общие настройки из public/data/product-settings.json — базовый слой,
         // локальные правки устройства имеют приоритет
         if (dataset.settings) {
@@ -238,6 +244,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       setBundledData(bundled ? applyBrandOverrides(bundled, overrides) : null);
       setCartMap(loadedCartMap);
+      setDiscounts(loadedDiscounts);
       setHistory(snapshots);
       setParserChanges(changes);
       setSizeSnapshots(sizes);
@@ -526,6 +533,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setProductBanned,
       updateStoreProfile,
       cartMap,
+      discounts,
       saletennisSession,
       setSaletennisSession,
       importSettings,
@@ -547,7 +555,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       productImages, sizeSnapshots, hotProducts, brandOverrides, setBrandOverride,
       settings, setSportOverride, setProductExcluded, setProductSupplied, setProductHot,
       storeProfile, setStoreProfile, setStoreMinimum, setProductBanned, updateStoreProfile,
-      cartMap, saletennisSession,
+      cartMap, discounts, saletennisSession,
       setSaletennisSession, importSettings, loadError, retryLoad, resetLocalSettings,
       delistedProducts,
       filters, setFilters, resetFilters, setData, clearData, restoreBundled,

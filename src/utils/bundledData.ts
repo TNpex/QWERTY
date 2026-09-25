@@ -15,6 +15,7 @@ import { sortStoresForDisplay } from './storeGroups';
 import { photoFileName } from './images';
 import { parseSettings, type ProductSettings } from './settings';
 import { parseCartMap, type CartMap } from './cart';
+import { applyDiscounts, parseDiscounts, type DiscountMap } from './discounts';
 import { productMeta, cleanBrand } from './productMeta';
 
 /**
@@ -68,6 +69,8 @@ export interface BundledDataset {
   settings: ProductSettings | null;
   /** Данные корзины saletennis.com (public/data/cart-map.json, собирает парсер) */
   cartMap: CartMap | null;
+  /** Скидки из раздела «Распродажа» (public/data/discounts.json, собирает парсер) */
+  discounts: DiscountMap | null;
 }
 
 const isBadBrandValue = (brand: string): boolean =>
@@ -455,7 +458,7 @@ async function fetchSnapshotRows(url: string): Promise<Record<string, unknown>[]
 export async function loadBundledDataset(): Promise<BundledDataset> {
   const base = `${import.meta.env.BASE_URL ?? '/'}data/`;
 
-  const [productsText, sizesText, changesText, hotText, settingsText, cartMapText] =
+  const [productsText, sizesText, changesText, hotText, settingsText, cartMapText, discountsText] =
     await Promise.all([
       fetchText(`${base}products.csv`),
       fetchText(`${base}sizes.csv`).catch(() => ''),
@@ -463,6 +466,7 @@ export async function loadBundledDataset(): Promise<BundledDataset> {
       fetchText(`${base}hot-products.json`).catch(() => ''),
       fetchText(`${base}product-settings.json`).catch(() => ''),
       fetchText(`${base}cart-map.json`).catch(() => ''),
+      fetchText(`${base}discounts.json`).catch(() => ''),
     ]);
 
   const productsRows = parseCSVText(productsText);
@@ -529,8 +533,11 @@ export async function loadBundledDataset(): Promise<BundledDataset> {
   }
 
   const asOf = history.length > 0 ? history[history.length - 1].date : undefined;
-  const data = parseBundledRows(productsRows, sizesRows, { asOf });
+  const discounts = discountsText ? parseDiscounts(discountsText) : null;
+  // Скидки проставляются товарам сразу: price в каталоге уже «со скидкой»,
+  // поэтому добавляем только старую цену и процент
+  const data = applyDiscounts(parseBundledRows(productsRows, sizesRows, { asOf }), discounts);
   const settings = settingsText ? parseSettings(settingsText) : null;
   const cartMap = cartMapText ? parseCartMap(cartMapText) : null;
-  return { data, history, changes, sizeSnapshots, hotProducts, settings, cartMap };
+  return { data, history, changes, sizeSnapshots, hotProducts, settings, cartMap, discounts };
 }

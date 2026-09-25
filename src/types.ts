@@ -22,6 +22,13 @@ export interface Product {
   gender?: Gender;
   /** Подтип одежды (Носки, Футболки и поло, Шорты, ...) — для фильтра перемещений */
   subtype?: string;
+  /**
+   * Скидка из раздела «Распродажа» saletennis.com (public/data/discounts.json).
+   * `price` при этом уже содержит ЦЕНУ СО СКИДКОЙ — сайт отдаёт её как основную.
+   */
+  oldPrice?: number;
+  /** Процент скидки (1..99) */
+  discountPercent?: number;
 }
 
 export interface InventoryItem {

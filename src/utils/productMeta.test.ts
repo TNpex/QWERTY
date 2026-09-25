@@ -46,7 +46,7 @@ describe('detectClothingSubtype', () => {
     expect(detectClothingSubtype('Юбка женская Nike')).toBe('Юбки и платья');
     expect(detectClothingSubtype('Капри для девочек Bidi Badu')).toBe('Брюки, капри, леггинсы');
     expect(detectClothingSubtype('Худи женское Asics')).toBe('Худи и свитшоты');
-    expect(detectClothingSubtype('Куртка мужская Nike')).toBe('Куртки и ветровки');
+    expect(detectClothingSubtype('Куртка мужская Nike')).toBe('Верхняя одежда');
     expect(detectClothingSubtype('Кепка Wilson')).toBe('Головные уборы');
     expect(detectClothingSubtype('Повязка на голову Nike')).toBe('Головные уборы');
     expect(detectClothingSubtype('Чехол для ракетки')).toBe('Прочее');
@@ -127,6 +127,57 @@ describe('productMeta', () => {
     expect(productMeta('Струна Solinco', 'Теннисные струны')).toEqual({
       gender: 'unisex',
     });
+  });
+});
+
+describe('detectClothingSubtype: разбор «Прочее» по смыслу', () => {
+  it('аксессуары для ракеток: grips, виброгасители, утяжелители, защита', () => {
+    expect(detectClothingSubtype('Овергрип Head Sonic Pro')).toBe('Грипы и овергрипы');
+    expect(detectClothingSubtype('Грип Wilson Leather')).toBe('Грипы и овергрипы');
+    expect(detectClothingSubtype('Виброгаситель Head Djokovic')).toBe('Виброгасители');
+    expect(detectClothingSubtype('Заглушка ручки ракетки 7/6')).toBe('Аксессуары для ракеток');
+    expect(detectClothingSubtype('Лента утяжелитель 7/6')).toBe('Аксессуары для ракеток');
+    expect(detectClothingSubtype('Трафарет Logo W Stencil для тенниса')).toBe('Аксессуары для ракеток');
+    expect(detectClothingSubtype('Протектор Wilson на ракетку')).toBe('Защитные ленты и протекторы');
+    expect(detectClothingSubtype('Защитная лента Babolat')).toBe('Защитные ленты и протекторы');
+  });
+
+  it('одежда: лонгслив — верхняя одежда, костюм — комплект', () => {
+    expect(detectClothingSubtype('Лонгслив женский Nike')).toBe('Верхняя одежда');
+    expect(detectClothingSubtype('Куртка мужская Wilson')).toBe('Верхняя одежда');
+    expect(detectClothingSubtype('Ветровка женская 7/6')).toBe('Верхняя одежда');
+    expect(detectClothingSubtype('Спортивный костюм Diadora - Black')).toBe('Комплекты');
+  });
+
+  it('аксессуары: напульсники, суппорты, бутылки, сувениры, книги', () => {
+    expect(detectClothingSubtype('Пара напульсников Nike')).toBe('Напульсники');
+    expect(detectClothingSubtype('Напульсник 7/6')).toBe('Напульсники');
+    expect(detectClothingSubtype('Суппорт бедра TORRES Grey (нейлон)')).toBe('Суппорты и бандажи');
+    expect(detectClothingSubtype('Бутылка для воды 7/6 UV Water Bottle - Black')).toBe('Бутылки для воды');
+    expect(detectClothingSubtype('Магнит Milo')).toBe('Сувениры и подарки');
+    expect(detectClothingSubtype('Брелок мячик')).toBe('Сувениры и подарки');
+    expect(detectClothingSubtype('Подарочная коробка для падел ракетки')).toBe('Сувениры и подарки');
+    expect(detectClothingSubtype('Сувенирная ракетка Wilson Ultra Roland Garros')).toBe('Сувениры и подарки');
+    expect(detectClothingSubtype('Теннис. Иллюстрированная библия великой игры')).toBe('Книги');
+    expect(detectClothingSubtype('Блистательная Серена. Джеральд Марзорати')).toBe('Книги');
+    expect(detectClothingSubtype('Точка опоры - Честная книга о теннисе как игре и профессии')).toBe('Книги');
+  });
+
+  it('порядок правил: «лента с утяжелением» — утяжелитель, а не защитная лента', () => {
+    expect(detectClothingSubtype('Лента с утяжелением Bullpadel для падел-ракетки 3pk')).toBe(
+      'Аксессуары для ракеток'
+    );
+    expect(detectClothingSubtype('Утяжелитель Bullpadel в ручку для падел-ракетки')).toBe(
+      'Аксессуары для ракеток'
+    );
+  });
+
+  it('старые группы не сломались', () => {
+    expect(detectClothingSubtype('Носки 7/6 Socks Pro')).toBe('Носки');
+    expect(detectClothingSubtype('Юбка женская 7/6 Kris Skirt')).toBe('Юбки и платья');
+    expect(detectClothingSubtype('Кепка Nike Heritage')).toBe('Головные уборы');
+    expect(detectClothingSubtype('Худи мужское Wilson')).toBe('Худи и свитшоты');
+    expect(detectClothingSubtype('Что-то совсем непонятное')).toBe('Прочее');
   });
 });
 

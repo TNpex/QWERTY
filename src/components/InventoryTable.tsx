@@ -19,6 +19,8 @@ import {
   STOCK_STATUS_HINTS,
   type AvailabilityFilter,
 } from '../utils/availability';
+import { newProductArticles, NEW_PRODUCT_DAYS } from '../utils/newProducts';
+import type { Product } from '../types';
 import { ALL_SCOPE } from '../utils/storeScope';
 import { compareSizes } from '../utils/sizes';
 import { isWarehouse, shortStoreLabel } from '../utils/storeGroups';
@@ -35,8 +37,38 @@ const PAGE_SIZES = [50, 100, 250]; // варианты «на странице»
 const DEFAULT_PAGE_SIZE = 50;
 const GHOST_LIMIT = 60; // сколько «убранных с сайта» товаров показывать списком
 const VIEW_MODE_KEY = 'st-inventory-view';
+const SORT_KEY = 'st-inventory-sort';
 
 type ViewMode = 'table' | 'cards';
+
+/** Сортировка списка товаров (выбор запоминается в браузере) */
+export type InventorySort =
+  | 'new'
+  | 'name-asc'
+  | 'name-desc'
+  | 'brand'
+  | 'stock-desc'
+  | 'stock-asc'
+  | 'discount';
+
+const SORT_LABELS: Record<InventorySort, string> = {
+  new: '🆕 Сначала новинки, затем А→Я',
+  'name-asc': 'Название (А→Я)',
+  'name-desc': 'Название (Я→А)',
+  brand: 'Бренд, затем название',
+  'stock-desc': 'Остаток: больше сначала',
+  'stock-asc': 'Остаток: меньше сначала',
+  discount: '💰 По размеру скидки',
+};
+
+function loadSort(): InventorySort {
+  try {
+    const saved = localStorage.getItem(SORT_KEY) as InventorySort | null;
+    return saved && saved in SORT_LABELS ? saved : 'new';
+  } catch {
+    return 'new';
+  }
+}
 
 /** Номера страниц для пагинации: 1 … 4 [5] 6 … 22 */
 function pageList(current: number, total: number): (number | '…')[] {
@@ -71,7 +103,7 @@ export function InventoryTable() {
   // Данные уже отфильтрованы глобальной панелью (бренд / категория / пол / подтип / спорт)
   const data = useFilteredData();
   const isHot = useIsHot();
-  const { settings, delistedProducts, filters } = useData();
+  const { settings, delistedProducts, filters, parserChanges } = useData();
   // Магазин — ОБЩАЯ область для всех вкладок (живёт в адресе ?scope=…):
   // выбрали точку в «Обзоре» → «Инвентарь» открыт на ней же, и наоборот
   const { storeId: scopeStoreId, setScope } = useStoreScope();
@@ -79,6 +111,9 @@ export function InventoryTable() {
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
   const [availability, setAvailability] = useState<AvailabilityFilter>('all');
+  const [sort, setSort] = useState<InventorySort>(loadSort);
+  const [onlyNew, setOnlyNew] = useState(false);
+  const [onlyDiscount, setOnlyDiscount] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     try {
       return localStorage.getItem(VIEW_MODE_KEY) === 'cards' ? 'cards' : 'table';
@@ -96,7 +131,7 @@ export function InventoryTable() {
     closeProduct: closeProductCard,
   } = useProductRoute('inventory');
 
-  // Выбор режима (таблица/карточки) запоминается в браузере
+  // Выбор режима (таблица/карточки) и сортировки запоминается в браузере
   useEffect(() => {
     try {
       localStorage.setItem(VIEW_MODE_KEY, viewMode);
@@ -104,6 +139,28 @@ export function InventoryTable() {
       /* приватный режим */
     }
   }, [viewMode]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SORT_KEY, sort);
+    } catch {
+      /* приватный режим */
+    }
+  }, [sort]);
+
+  /**
+   * 🆕 Новинки — товары, впервые появившиеся в каталоге за последние
+   * NEW_PRODUCT_DAYS дней от даты снимка (по журналу парсера changes.csv).
+   * Первый парсинг журнала считается базовым срезом и в новинки не попадает.
+   */
+  const newArticles = useMemo(
+    () => newProductArticles(parserChanges, data?.asOf ?? data?.uploadedAt),
+    [parserChanges, data]
+  );
+  const isNew = useCallback(
+    (product: Product) => newArticles.has((product.article ?? '').trim().toLowerCase()),
+    [newArticles]
+  );
 
   const stores = useMemo(() => data?.stores ?? [], [data]);
   const products = useMemo(() => data?.products ?? [], [data]);
@@ -174,9 +231,41 @@ export function InventoryTable() {
         (p.article ?? '').toLowerCase().includes(term);
       // Выбран магазин — показываем только ЕГО инвентарь (товары, которые он возит)
       if (storeScoped && !indexes.storeTotals.has(`${p.id}|${selectedStore}`)) return false;
+      if (onlyNew && !isNew(p)) return false;
+      if (onlyDiscount && !(p.discountPercent && p.discountPercent > 0)) return false;
       return matchesSearch && matchesAvailability(statusOf(p.id).status, availability);
     });
-  }, [products, searchTerm, availability, indexes, selectedStore, statusOf]);
+  }, [products, searchTerm, availability, indexes, selectedStore, statusOf, onlyNew, onlyDiscount, isNew]);
+
+  /** Отсортированный список (сортировка — до пагинации) */
+  const sortedProducts = useMemo(() => {
+    const totalOf = (p: Product) =>
+      selectedStore === 'all'
+        ? indexes.productTotals.get(p.id) ?? 0
+        : indexes.storeTotals.get(`${p.id}|${selectedStore}`)?.total ?? 0;
+    const byName = (a: Product, b: Product) => a.name.localeCompare(b.name, 'ru');
+    const list = [...filteredProducts];
+    switch (sort) {
+      case 'name-asc':
+        return list.sort(byName);
+      case 'name-desc':
+        return list.sort((a, b) => byName(b, a));
+      case 'brand':
+        return list.sort((a, b) => a.brand.localeCompare(b.brand, 'ru') || byName(a, b));
+      case 'stock-desc':
+        return list.sort((a, b) => totalOf(b) - totalOf(a) || byName(a, b));
+      case 'stock-asc':
+        return list.sort((a, b) => totalOf(a) - totalOf(b) || byName(a, b));
+      case 'discount':
+        return list.sort(
+          (a, b) => (b.discountPercent ?? 0) - (a.discountPercent ?? 0) || byName(a, b)
+        );
+      case 'new':
+      default:
+        // новинки первыми, внутри групп — по названию (чтобы не «в разнобой»)
+        return list.sort((a, b) => Number(isNew(b)) - Number(isNew(a)) || byName(a, b));
+    }
+  }, [filteredProducts, sort, selectedStore, indexes, isNew]);
 
   // Товары, убранные с сайта (из истории снимков): показываются в «Все» и
   // «Распроданные»; поиск и глобальные фильтры к ним тоже применяются.
@@ -217,13 +306,22 @@ export function InventoryTable() {
     return countAvailability(list.map((p) => statusOf(p.id).status));
   }, [products, indexes, selectedStore, statusOf]);
   const selectedStoreName = stores.find((st) => st.id === selectedStore)?.name ?? '';
+  /** Сколько товаров со скидкой в текущей области (для подписи переключателя) */
+  const discountCount = useMemo(() => {
+    const storeScoped = selectedStore !== 'all';
+    return products.filter(
+      (p) =>
+        (p.discountPercent ?? 0) > 0 &&
+        (!storeScoped || indexes.storeTotals.has(`${p.id}|${selectedStore}`))
+    ).length;
+  }, [products, indexes, selectedStore]);
 
   const totalPages = Math.max(1, Math.ceil(filteredProducts.length / pageSize));
   const currentPage = Math.min(page, totalPages);
 
   const visibleProducts = useMemo(
-    () => filteredProducts.slice((currentPage - 1) * pageSize, currentPage * pageSize),
-    [filteredProducts, currentPage, pageSize]
+    () => sortedProducts.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    [sortedProducts, currentPage, pageSize]
   );
 
   const listTopRef = useRef<HTMLDivElement>(null);
@@ -273,6 +371,21 @@ export function InventoryTable() {
               <option key={store.id} value={store.id}>
                 {isWarehouse(store.name) ? '📦 ' : ''}
                 {store.name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={sort}
+            onChange={(e) => {
+              setSort(e.target.value as InventorySort);
+              setPage(1);
+            }}
+            className="px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm appearance-none bg-white cursor-pointer"
+            title="Порядок товаров в списке (выбор запоминается)"
+          >
+            {(Object.keys(SORT_LABELS) as InventorySort[]).map((mode) => (
+              <option key={mode} value={mode}>
+                Сортировка: {SORT_LABELS[mode]}
               </option>
             ))}
           </select>
@@ -337,6 +450,33 @@ export function InventoryTable() {
                 {label}
               </button>
             ))}
+          </div>
+          {/* Новинки и скидки — быстрые переключатели */}
+          <div className="inline-flex rounded-full border border-gray-200 overflow-hidden text-xs">
+            <button
+              onClick={() => {
+                setOnlyNew((v) => !v);
+                resetPage();
+              }}
+              className={`px-3 py-1.5 font-medium transition-colors ${
+                onlyNew ? 'bg-emerald-600 text-white' : 'bg-white text-gray-600 hover:bg-emerald-50'
+              }`}
+              title={`Товары, впервые появившиеся в каталоге за последние ${NEW_PRODUCT_DAYS} дней (по журналу парсера). Первый парсинг журнала считается базовым срезом и в новинки не попадает.`}
+            >
+              🆕 Новинки{newArticles.size > 0 ? ` (${newArticles.size})` : ''}
+            </button>
+            <button
+              onClick={() => {
+                setOnlyDiscount((v) => !v);
+                resetPage();
+              }}
+              className={`px-3 py-1.5 font-medium transition-colors border-l border-gray-200 ${
+                onlyDiscount ? 'bg-rose-600 text-white' : 'bg-white text-gray-600 hover:bg-rose-50'
+              }`}
+              title="Товары из раздела «Распродажа» saletennis.com: цена в каталоге уже указана со скидкой, рядом показана старая цена и процент"
+            >
+              💰 Со скидкой{discountCount > 0 ? ` (${discountCount})` : ''}
+            </button>
           </div>
           {/* Вид: таблица / карточки */}
           <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden">
@@ -433,6 +573,30 @@ export function InventoryTable() {
                       {product.brand}
                       {product.article ? ` · ${product.article}` : ''}
                     </div>
+                    {(isNew(product) || (product.discountPercent ?? 0) > 0) && (
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {isNew(product) && (
+                          <span
+                            className="px-1 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[9px] font-bold"
+                            title={`🆕 Новинка: впервые в каталоге за последние ${NEW_PRODUCT_DAYS} дней (по журналу парсера)`}
+                          >
+                            🆕 Новинка
+                          </span>
+                        )}
+                        {(product.discountPercent ?? 0) > 0 && (
+                          <span
+                            className="px-1 py-0.5 rounded bg-rose-100 text-rose-700 text-[9px] font-bold"
+                            title={
+                              product.oldPrice
+                                ? `Скидка ${product.discountPercent}%: старая цена ${product.oldPrice.toLocaleString('ru-RU')} ₽, сейчас ${product.price.toLocaleString('ru-RU')} ₽ (раздел «Распродажа» saletennis.com)`
+                                : `Скидка ${product.discountPercent}% (раздел «Распродажа» saletennis.com)`
+                            }
+                          >
+                            −{product.discountPercent}%
+                          </span>
+                        )}
+                      </div>
+                    )}
                     <div className="flex items-center gap-1 mt-auto">
                       <SportBadge sport={sport} />
                       <span
@@ -599,6 +763,31 @@ export function InventoryTable() {
                           title={`${STOCK_STATUS_HINTS.missing} — в сети ${network} шт.`}
                         >
                           <PackageSearch className="w-2.5 h-2.5" /> Отсутствует
+                        </span>
+                      )}
+                      {isNew(product) && (
+                        <span
+                          className="ml-1.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase tracking-wide align-middle"
+                          title={`🆕 Новинка: впервые в каталоге за последние ${NEW_PRODUCT_DAYS} дней (по журналу парсера)`}
+                        >
+                          🆕 Новинка
+                        </span>
+                      )}
+                      {(product.discountPercent ?? 0) > 0 && (
+                        <span
+                          className="ml-1.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 text-[10px] font-bold align-middle"
+                          title={
+                            product.oldPrice
+                              ? `Скидка ${product.discountPercent}%: старая цена ${product.oldPrice.toLocaleString('ru-RU')} ₽, сейчас ${product.price.toLocaleString('ru-RU')} ₽`
+                              : `Скидка ${product.discountPercent}%`
+                          }
+                        >
+                          −{product.discountPercent}%
+                          {product.oldPrice ? (
+                            <span className="line-through opacity-60 ml-1 font-normal">
+                              {product.oldPrice.toLocaleString('ru-RU')} ₽
+                            </span>
+                          ) : null}
                         </span>
                       )}
                     </div>

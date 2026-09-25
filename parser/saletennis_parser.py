@@ -130,11 +130,12 @@ PRODUCTS_CSV = ""
 SIZES_CSV = ""
 CHANGES_CSV = ""
 CART_MAP_JSON = ""
+DISCOUNTS_JSON = ""
 LOG_FILE = ""
 
 
 def configure_paths(out_dir: str):
-    global DATA_DIR, HISTORY_DIR, IMAGES_DIR, PRODUCTS_CSV, SIZES_CSV, CHANGES_CSV, CART_MAP_JSON, LOG_FILE
+    global DATA_DIR, HISTORY_DIR, IMAGES_DIR, PRODUCTS_CSV, SIZES_CSV, CHANGES_CSV, CART_MAP_JSON, DISCOUNTS_JSON, LOG_FILE
     DATA_DIR = out_dir
     HISTORY_DIR = os.path.join(DATA_DIR, "history")
     IMAGES_DIR = os.path.join(DATA_DIR, "product_images")
@@ -142,6 +143,7 @@ def configure_paths(out_dir: str):
     SIZES_CSV = os.path.join(DATA_DIR, "sizes.csv")
     CHANGES_CSV = os.path.join(DATA_DIR, "changes.csv")
     CART_MAP_JSON = os.path.join(DATA_DIR, "cart-map.json")
+    DISCOUNTS_JSON = os.path.join(DATA_DIR, "discounts.json")
     LOG_FILE = os.path.join(DATA_DIR, "parse.log")
     os.makedirs(DATA_DIR, exist_ok=True)
     os.makedirs(HISTORY_DIR, exist_ok=True)
@@ -846,6 +848,25 @@ def save_sizes_data(all_sizes_data):
     sizes_df.to_csv(SIZES_CSV, index=False, encoding='utf-8-sig')
     log(f"[OK] Сохранено {len(sizes_df)} записей о размерах в {SIZES_CSV}")
     return sizes_df
+
+
+def save_discounts(discounts):
+    """
+    Скидки из раздела «Распродажа» (/catalog/sale/): itemId → {percent, price,
+    oldPrice, name, link}. Сайт показывает их в карточке товара и в «Инвентаре»
+    (бейдж −N%, зачёркнутая старая цена), а также позволяет сортировать по скидке.
+    """
+    if not discounts:
+        log("[WARN] Скидки не собраны — discounts.json не обновлён")
+        return
+    payload = {
+        'generatedAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'source': 'https://saletennis.com/catalog/sale/',
+        'items': discounts,
+    }
+    with open(DISCOUNTS_JSON, 'w', encoding='utf-8') as f:
+        json.dump(payload, f, ensure_ascii=False, separators=(',', ':'))
+    log(f"[OK] Сохранены скидки для {len(discounts)} товаров в {DISCOUNTS_JSON}")
 
 
 def save_cart_map(cart_map):

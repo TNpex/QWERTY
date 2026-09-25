@@ -28,6 +28,7 @@ sizes.csv, changes.csv, history/, cart-map.json) — сайт разницы н�
 """
 
 import argparse
+import json
 import os
 import re
 import sys
@@ -376,6 +377,110 @@ def extract_brand_http(soup, name: str) -> str:
     return sp.brand_from_name(name)
 
 
+# ================= СКИДКИ (раздел «Распродажа») =================
+
+SALE_URL = BASE_URL + "/catalog/sale/"
+SALE_MAX_PAGES = 80          # защита от бесконечной пагинации
+
+
+def _price_number(text) -> float:
+    """«11 990₽» / «11990 ₽» → 11990.0"""
+    if text is None:
+        return 0.0
+    digits = re.sub(r"[^\d.,]", "", str(text)).replace(",", ".")
+    try:
+        return float(digits) if digits else 0.0
+    except ValueError:
+        return 0.0
+
+
+def parse_discounts_soup(soup):
+    """
+    Карточки раздела «Распродажа». В data-ecommerce лежит JSON
+    (id, name, price, brand, category), рядом — старая/текущая цена и бейдж процента:
+
+        <div class="c-item c-item--expanded" data-ecommerce="{...}">
+          <span class="c-item__label c-item__label--sale ...">25%</span>
+          <a class="c-item__title" href="/catalog/product/…-19166/">…</a>
+          <span class="c-item__price-old">11990₽</span>
+          <span class="c-item__price-current">8993₽</span>
+    """
+    found = {}
+    for card in soup.select("div.c-item[data-ecommerce]"):
+        raw = (card.get("data-ecommerce") or "").strip()
+        meta = {}
+        if raw:
+            try:
+                meta = json.loads(raw)
+            except (ValueError, TypeError):
+                meta = {}
+        item_id = str(meta.get("id") or "").strip()
+
+        link_el = card.select_one("a.c-item__title") or card.select_one('a[href*="/catalog/product/"]')
+        link = ""
+        if link_el and link_el.get("href"):
+            href = link_el["href"].strip()
+            link = href if href.startswith("http") else BASE_URL + href
+        if not item_id:
+            # запасной вариант: числовой хвост ссылки товара
+            m = re.search(r"-(\d{2,})/?$", link)
+            if not m:
+                continue
+            item_id = m.group(1)
+
+        cur_el = card.select_one(".c-item__price-current")
+        old_el = card.select_one(".c-item__price-old")
+        price = _price_number(cur_el.get_text()) if cur_el else 0.0
+        old_price = _price_number(old_el.get_text()) if old_el else 0.0
+        if not price:
+            price = float(meta.get("price") or 0.0)
+
+        percent = 0
+        pct_el = card.select_one(".c-item__label--sale")
+        if pct_el:
+            m = re.search(r"(\d+)", pct_el.get_text())
+            if m:
+                percent = int(m.group(1))
+        if not percent and old_price and price and price < old_price:
+            percent = int(round((1 - price / old_price) * 100))
+        if not percent or percent >= 100:
+            continue
+
+        name = str(meta.get("name") or (link_el.get_text(strip=True) if link_el else "") or "")
+        found[item_id] = {
+            "percent": percent,
+            "price": int(price) if price else None,
+            "oldPrice": int(old_price) if old_price else None,
+            "name": name,
+            "link": link,
+        }
+    # None-значения не пишем
+    for entry in found.values():
+        for key in ("price", "oldPrice"):
+            if entry.get(key) is None:
+                entry.pop(key, None)
+    return found
+
+
+def collect_discounts(session):
+    """Обходит страницы /catalog/sale/ и собирает itemId → скидка."""
+    all_items = {}
+    for page in range(1, SALE_MAX_PAGES + 1):
+        url = SALE_URL + (f"?page={page}" if page > 1 else "")
+        r = fetch(session, url)
+        if r is None:
+            sp.log(f"[WARN] Распродажа: страница {page} не загрузилась — останавливаюсь")
+            break
+        soup = BeautifulSoup(r.text, "html.parser")
+        items = parse_discounts_soup(soup)
+        if not items:
+            break
+        all_items.update(items)
+        sp.log(f"[INFO] Распродажа: страница {page} — {len(items)} товаров (всего {len(all_items)})")
+        time.sleep(PAGE_DELAY)
+    return all_items
+
+
 def parse_cart_info_http(soup):
     """itemId кнопки «В корзину» + карта «текст размера → внутренний ID размера»."""
     btn = soup.select_one("[data-item-id]")
@@ -597,6 +702,13 @@ def main():
         sp.save_cart_map(all_cart_map)
     except Exception as e:
         sp.log(f"[ERROR] Не удалось сохранить cart-map.json: {e}")
+    # Скидки — раздел публичный, авторизация не нужна; сбой не должен ронять парсинг
+    try:
+        sp.log("\n[INFO] Собираю скидки из раздела «Распродажа»…")
+        discounts = collect_discounts(build_session())
+        sp.save_discounts(discounts)
+    except Exception as e:
+        sp.log(f"[WARN] Не удалось собрать скидки: {e}")
     try:
         sp.save_history_snapshot(df, sizes_df)
     except Exception as e:

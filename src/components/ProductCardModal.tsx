@@ -529,6 +529,18 @@ export function ProductCardModal({
                   <Flame className="w-3 h-3" /> Распродано
                 </span>
               )}
+              {(product.discountPercent ?? 0) > 0 && (
+                <span
+                  className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700"
+                  title={
+                    product.oldPrice
+                      ? `Старая цена ${product.oldPrice.toLocaleString('ru-RU')} ₽ — скидка из раздела «Распродажа» saletennis.com`
+                      : 'Скидка из раздела «Распродажа» saletennis.com'
+                  }
+                >
+                  💰 Скидка {product.discountPercent}%
+                </span>
+              )}
               {!hotRule && settings.hotProducts[productSettingsKey(product)] && (
                 <span
                   className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700"
@@ -565,7 +577,30 @@ export function ProductCardModal({
             </h2>
             <div className="text-xs text-gray-500 mt-1">
               {product.article ? <>Артикул: {product.article} · </> : null}
-              {product.price > 0 && <>Цена: {product.price.toLocaleString('ru-RU')} ₽ · </>}
+              {product.price > 0 && (
+                <>
+                  Цена:{' '}
+                  {(product.discountPercent ?? 0) > 0 ? (
+                    <>
+                      <b className="text-rose-600">{product.price.toLocaleString('ru-RU')} ₽</b>
+                      {product.oldPrice ? (
+                        <span className="line-through text-gray-400 ml-1">
+                          {product.oldPrice.toLocaleString('ru-RU')} ₽
+                        </span>
+                      ) : null}
+                      <span
+                        className="ml-1 text-rose-600 font-bold"
+                        title="Скидка из раздела «Распродажа» saletennis.com"
+                      >
+                        −{product.discountPercent}%
+                      </span>
+                    </>
+                  ) : (
+                    <>{product.price.toLocaleString('ru-RU')} ₽</>
+                  )}{' '}
+                  ·{' '}
+                </>
+              )}
               Остаток:{' '}
               <b className={soldOut ? 'text-red-600' : 'text-emerald-600'}>{view.total} шт.</b>
             </div>
