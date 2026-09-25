@@ -1,6 +1,214 @@
 {
-  "sportOverrides": {},
-  "excludedProducts": {},
-  "suppliedProducts": {},
-  "hotProducts": {}
+  "sportOverrides": {
+    "285303": "other",
+    "wj76-whbk": "other",
+    "tl-donut": "other",
+    "tj76-bk": "other",
+    "ts76-bkwh": "other",
+    "ts76-whbk": "other",
+    "ts76-4939": "other",
+    "ts76-0201": "other",
+    "ts76-0116": "other",
+    "ts76-4300": "other",
+    "ts76-1264": "other",
+    "ts101001-bkwh": "other",
+    "pb76-004": "other",
+    "pb76-003": "other",
+    "eg12-nl": "other",
+    "ln12-bk": "other",
+    "oc12-sl": "other",
+    "rh12-bk": "other",
+    "rh12-bl": "other",
+    "sh12-rd": "other",
+    "tb-005": "other",
+    "tb-004": "other",
+    "tb-001": "other",
+    "tb-003": "other",
+    "tb76-007": "other",
+    "tb76-006": "other",
+    "mts76-010": "other",
+    "ks76-2520": "other",
+    "j618-7/6pk": "other",
+    "twj76-bk": "other",
+    "wj76-bk": "other",
+    "wjt76-nvbl": "other",
+    "mj76-bk": "other",
+    "mj76-whbk": "other",
+    "76vc-bk": "other",
+    "prt76-wh": "other",
+    "prt76-1mx": "other",
+    "prt76-mx": "other",
+    "ac-76bk": "other",
+    "ac-76wh": "other",
+    "kc-76wh": "other",
+    "vs-76bk": "other",
+    "vs76-bk": "other",
+    "vs76-wh": "other",
+    "t002/350": "other",
+    "b-180": "other",
+    "kjj76-4056": "other",
+    "kjj76-0116": "other",
+    "kj76-bk": "other",
+    "wjj76-4104": "other",
+    "wjj76-4109": "other",
+    "wjj76-4802": "other",
+    "wjj76-4405": "other",
+    "wjj76-4718": "other",
+    "wjj76-1264": "other",
+    "wjj76-1215": "other",
+    "mjj76-4104": "other",
+    "mjj76-4109": "other",
+    "mjj76-4056": "other",
+    "mjj76-4405": "other",
+    "mjj76-4718": "other",
+    "mjj76-0116": "other",
+    "mjj76-1215": "other",
+    "ksb-201": "other",
+    "ksb-001": "other",
+    "ksl-313": "other",
+    "ksl-205": "other",
+    "ts76-03rd": "other",
+    "ts76-2124": "other",
+    "ts101001-whbk": "other",
+    "tsw101001-bkwh": "other",
+    "tsw101001-whbk": "other",
+    "wl76-bk": "other",
+    "ml76-4104": "other",
+    "ml76-4109": "other"
+  },
+  "excludedProducts": {
+    "md276-1360": "вручную",
+    "ad76-1265": "вручную",
+    "ts101001-bkwh": "вручную",
+    "tb-003": "вручную",
+    "sklft001-18": "вручную",
+    "wjt76-nvbl": "вручную",
+    "ts76-03rd": "вручную"
+  },
+  "suppliedProducts": {
+    "pr76-hur": true,
+    "ts76-4300": true,
+    "ts76-0201": true,
+    "prt76-wh": true,
+    "prt76-1mx": true,
+    "mjj76-1215": true,
+    "mjj76-4718": true,
+    "wjj76-1215": true
+  },
+  "hotProducts": {
+    "tl-donut": true,
+    "ts76-4300": true,
+    "ts76-0201": true
+  },
+  "storeMinimums": {
+    "Екатеринбург (Елизаветинское шоссе)": {
+      "pr76-hur": 5
+    }
+  },
+  "storeProfiles": {
+    "Екатеринбург (Парина)": {
+      "sport": "tennis",
+      "hiddenCategories": [
+        "Падел - Сумки и чехлы",
+        "Падел - Ракетки",
+        "Падел - Мячи",
+        "Падел - Аксессуары"
+      ],
+      "transfersDisabled": false,
+      "defaultMinimum": 0,
+      "bannedProducts": {},
+      "note": ""
+    },
+    "Екатеринбург (Елизаветинское шоссе)": {
+      "sport": "padel",
+      "hiddenCategories": [
+        "Теннисные струны",
+        "Ракетки для тенниса",
+        "Мячи для тенниса"
+      ],
+      "transfersDisabled": false,
+      "defaultMinimum": 0,
+      "bannedProducts": {
+        "4c32-522": true,
+        "mts76-010": true,
+        "j618-7/6pk": true,
+        "j618-7/6yw": true,
+        "76vc-bk": true,
+        "76vc-wh": true,
+        "vd76-as": true,
+        "ksb-201": true,
+        "ksb-001": true,
+        "ksl-313": true,
+        "ksl-205": true,
+        "tsw101001-bkwh": true,
+        "ts101001-whbk": true,
+        "tsw101001-whbk": true
+      },
+      "note": ""
+    },
+    "Санкт-Петербург (Спортивная)": {
+      "sport": "other",
+      "hiddenCategories": [],
+      "transfersDisabled": false,
+      "defaultMinimum": 0,
+      "bannedProducts": {},
+      "note": ""
+    },
+    "Санкт-Петербург (Ярослава Гашека)": {
+      "sport": "tennis",
+      "hiddenCategories": [
+        "Падел - Мячи",
+        "Падел - Ракетки",
+        "Падел - Сумки и чехлы"
+      ],
+      "transfersDisabled": false,
+      "defaultMinimum": 0,
+      "bannedProducts": {},
+      "note": ""
+    },
+    "Екатеринбург (Бисертская)": {
+      "sport": "tennis",
+      "hiddenCategories": [
+        "Падел - Сумки и чехлы",
+        "Падел - Ракетки",
+        "Падел - Мячи"
+      ],
+      "transfersDisabled": false,
+      "defaultMinimum": 0,
+      "bannedProducts": {},
+      "note": ""
+    },
+    "Екатеринбург (Соболева)": {
+      "sport": "other",
+      "hiddenCategories": [],
+      "transfersDisabled": false,
+      "defaultMinimum": 0,
+      "bannedProducts": {},
+      "note": ""
+    },
+    "Тюмень (Народная)": {
+      "sport": "other",
+      "hiddenCategories": [],
+      "transfersDisabled": false,
+      "defaultMinimum": 0,
+      "bannedProducts": {},
+      "note": ""
+    },
+    "Уфа": {
+      "sport": "other",
+      "hiddenCategories": [],
+      "transfersDisabled": false,
+      "defaultMinimum": 0,
+      "bannedProducts": {},
+      "note": ""
+    },
+    "Ижевск": {
+      "sport": "other",
+      "hiddenCategories": [],
+      "transfersDisabled": false,
+      "defaultMinimum": 0,
+      "bannedProducts": {},
+      "note": ""
+    }
+  }
 }
