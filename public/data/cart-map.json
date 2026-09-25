@@ -1,5 +1,5 @@
 {
- "generatedAt": "2026-09-24 21:16:35",
+ "generatedAt": "2026-09-25 15:18:00",
  "items": {
   "https://saletennis.com/catalog/product/chiekhol-dlia-rakietki-7-6-one-racket-black-19469": {
    "itemId": "19469",
@@ -24,6 +24,11 @@
   "https://saletennis.com/catalog/product/dietskii-riukzak-7-6-kids-backpack-2-0-pink-18815": {
    "itemId": "18815",
    "article": "KB276-PK",
+   "sizes": {}
+  },
+  "https://saletennis.com/catalog/product/mieshok-dlia-obuvi-head-tour-shoe-bag-black-white-17177": {
+   "itemId": "17177",
+   "article": "260704-BKWH",
    "sizes": {}
   },
   "https://saletennis.com/catalog/product/mieshok-dlia-obuvi-saletennis-14405": {
@@ -81,6 +86,11 @@
    "article": "262605-BL",
    "sizes": {}
   },
+  "https://saletennis.com/catalog/product/riukzak-head-paw-patrol-purple-18555": {
+   "itemId": "18555",
+   "article": "262615-PU",
+   "sizes": {}
+  },
   "https://saletennis.com/catalog/product/riukzak-head-pro-backpack-28l-navy-19445": {
    "itemId": "19445",
    "article": "260156-NV",
@@ -129,6 +139,11 @@
   "https://saletennis.com/catalog/product/riukzak-head-tour-backpack-14l-monster-16851": {
    "itemId": "16851",
    "article": "260774-MONSTER",
+   "sizes": {}
+  },
+  "https://saletennis.com/catalog/product/riukzak-head-tour-backpack-14l-owl-16852": {
+   "itemId": "16852",
+   "article": "260784-OWL",
    "sizes": {}
   },
   "https://saletennis.com/catalog/product/riukzak-head-tour-backpack-20l-black-white-16853": {
@@ -909,8 +924,8 @@
    "itemId": "17119",
    "article": "MTL76-010",
    "sizes": {
-    "S": "38665",
     "M": "38664",
+    "S": "38665",
     "XXL": "38667"
    }
   },
@@ -918,9 +933,9 @@
    "itemId": "17872",
    "article": "MTL76-1360",
    "sizes": {
-    "S": "40879",
     "M": "40878",
-    "XL": "40880"
+    "XL": "40880",
+    "S": "40879"
    }
   },
   "https://saletennis.com/catalog/product/futbolka-muzhskaia-7-6-loddy-t-shirt-2-0-ebony-antarctica-18619": {
@@ -1687,8 +1702,7 @@
    "itemId": "19220",
    "article": "HQ2994-641",
    "sizes": {
-    "XS": "43796",
-    "M": "43794"
+    "XS": "43796"
    }
   },
   "https://saletennis.com/catalog/product/futbolka-zhienskaia-court-advantage-pro-t-shirt-steam-white-19221": {
@@ -2049,11 +2063,11 @@
    "itemId": "17940",
    "article": "NS76-0628",
    "sizes": {
-    "L": "41217",
-    "M": "41218",
-    "S": "41219",
+    "XXS": "41221",
     "XS": "41220",
-    "XXS": "41221"
+    "S": "41219",
+    "M": "41218",
+    "L": "41217"
    }
   },
   "https://saletennis.com/catalog/product/iubka-zhienskaia-7-6-nata-skirt-light-green-green-17941": {
@@ -2345,7 +2359,6 @@
    "article": "II3469-503",
    "sizes": {
     "XS": "43987",
-    "S": "43986",
     "M": "43985"
    }
   },
@@ -2443,7 +2456,6 @@
    "itemId": "17268",
    "article": "G1200001",
    "sizes": {
-    "140": "38983",
     "152": "38984",
     "164": "38985"
    }
@@ -4131,9 +4143,9 @@
    "itemId": "17118",
    "article": "PL7060-100",
    "sizes": {
-    "L": "38658",
-    "M": "38659",
     "S": "38660",
+    "M": "38659",
+    "L": "38658",
     "XL": "38661",
     "XXL": "38662"
    }
@@ -4313,6 +4325,7 @@
    "article": "IB0772-410",
    "sizes": {
     "XS": "43642",
+    "S": "43641",
     "M": "43640"
    }
   },
@@ -4648,13 +4661,6 @@
     "XXL": "44206"
    }
   },
-  "https://saletennis.com/catalog/product/shorty-muzhskiie-7-6-miran-shorts-red-alert-14323": {
-   "itemId": "14323",
-   "article": "SH76-1559",
-   "sizes": {
-    "XL": "30930"
-   }
-  },
   "https://saletennis.com/catalog/product/shorty-muzhskiie-bidi-badu-crew-7-grey-1-17260": {
    "itemId": "17260",
    "article": "M1470002",
@@ -4899,7 +4905,6 @@
    "itemId": "19250",
    "article": "IB1043-100",
    "sizes": {
-    "L": "43934",
     "XL": "43936"
    }
   },
@@ -5185,11 +5190,11 @@
    "itemId": "17127",
    "article": "WSA76-100",
    "sizes": {
-    "XXS": "38707",
-    "XS": "38706",
-    "S": "38705",
-    "M": "38704",
     "L": "38703",
+    "M": "38704",
+    "S": "38705",
+    "XS": "38706",
+    "XXS": "38707",
     "XL": "38730"
    }
   },
@@ -5197,24 +5202,24 @@
    "itemId": "19396",
    "article": "WSL76-4718",
    "sizes": {
-    "XXS": "44293",
-    "XS": "44292",
-    "S": "44290",
-    "M": "44289",
     "L": "44288",
-    "XL": "44291"
+    "M": "44289",
+    "S": "44290",
+    "XL": "44291",
+    "XS": "44292",
+    "XXS": "44293"
    }
   },
   "https://saletennis.com/catalog/product/shorty-zhienskiie-7-6-lexie-shorts-shell-pink-19397": {
    "itemId": "19397",
    "article": "WSL76-1632",
    "sizes": {
+    "L": "44294",
+    "XL": "44297",
     "XXS": "44299",
     "XS": "44298",
     "S": "44296",
-    "M": "44295",
-    "L": "44294",
-    "XL": "44297"
+    "M": "44295"
    }
   },
   "https://saletennis.com/catalog/product/shorty-zhienskiie-diadora-l-tights-white-15336": {
@@ -5313,6 +5318,13 @@
    "article": "FD5664-100",
    "sizes": {
     "XS": "38118"
+   }
+  },
+  "https://saletennis.com/catalog/product/shorty-zhienskiie-nike-court-collection-high-waist-short-midnight-navy-19181": {
+   "itemId": "19181",
+   "article": "IB0769-410",
+   "sizes": {
+    "S": "43648"
    }
   },
   "https://saletennis.com/catalog/product/shorty-zhienskiie-nike-court-collection-high-waist-short-sail-19182": {
@@ -6212,8 +6224,7 @@
    "itemId": "18575",
    "article": "275236-RDDR",
    "sizes": {
-    "33": "42640",
-    "36,5": "42646"
+    "33": "42640"
    }
   },
   "https://saletennis.com/catalog/product/krossovki-dietskiie-head-revolt-pro-5-0-red-dark-red-18562": {
@@ -6225,6 +6236,15 @@
     "33": "42552",
     "36,5": "42558",
     "39": "42636"
+   }
+  },
+  "https://saletennis.com/catalog/product/krossovki-dietskiie-head-sprint-3-0-dark-midnight-navy-neon-red-12490": {
+   "itemId": "12490",
+   "article": "275300-MNNR",
+   "sizes": {
+    "33": "26683",
+    "34,5": "26686",
+    "36": "26688"
    }
   },
   "https://saletennis.com/catalog/product/krossovki-dietskiie-head-sprint-3-5-junior-banana-black-15595": {
@@ -6242,7 +6262,8 @@
     "32": "41573",
     "33": "41574",
     "33,5": "41575",
-    "34,5": "41577"
+    "34,5": "41577",
+    "35": "41578"
    }
   },
   "https://saletennis.com/catalog/product/krossovki-dietskiie-head-sprint-court-4-0-junior-lime-navy-17410": {
@@ -6268,7 +6289,6 @@
    "article": "275305-DBRD",
    "sizes": {
     "33,5": "39439",
-    "36": "42038",
     "38,5": "39858"
    }
   },
@@ -6391,7 +6411,6 @@
    "article": "AR8851-302",
    "sizes": {
     "32": "20790",
-    "33,5": "20792",
     "38": "20799",
     "38,5": "20800"
    }
@@ -6509,6 +6528,32 @@
     "43": "38233"
    }
   },
+  "https://saletennis.com/catalog/product/krossovki-muzhskiie-head-revolt-pro-4-0-clay-light-green-14695": {
+   "itemId": "14695",
+   "article": "273273-LNWH",
+   "sizes": {
+    "40": "32347",
+    "40,5": "36271",
+    "41": "32057",
+    "42": "32058",
+    "43": "32019",
+    "44": "32020",
+    "45": "32059",
+    "46": "32060",
+    "46,5": "36272"
+   }
+  },
+  "https://saletennis.com/catalog/product/krossovki-muzhskiie-head-revolt-pro-4-0-clay-white-black-14560": {
+   "itemId": "14560",
+   "article": "273293-WHBK",
+   "sizes": {
+    "42,5": "44497",
+    "43": "32861",
+    "44": "32862",
+    "44,5": "32863",
+    "45": "44498"
+   }
+  },
   "https://saletennis.com/catalog/product/krossovki-muzhskiie-head-revolt-pro-4-5-clay-navy-lime-17426": {
    "itemId": "17426",
    "article": "273235-NVLI",
@@ -6569,13 +6614,16 @@
    "itemId": "14706",
    "article": "273163-FCBB",
    "sizes": {
-    "44,5": "32068"
+    "44,5": "32068",
+    "46,5": "37215"
    }
   },
   "https://saletennis.com/catalog/product/krossovki-muzhskiie-head-spint-pro-3-5-clay-forest-green-light-green-14411": {
    "itemId": "14411",
    "article": "273143-FGLN",
    "sizes": {
+    "41": "31401",
+    "42": "31129",
     "44,5": "31132"
    }
   },
@@ -6700,6 +6748,17 @@
     "42,5": "34892",
     "43": "34893",
     "44": "34894"
+   }
+  },
+  "https://saletennis.com/catalog/product/krossovki-muzhskiie-head-sprint-team-3-5-clay-bluestone-light-green-14415": {
+   "itemId": "14415",
+   "article": "273413-BSLN",
+   "sizes": {
+    "40": "34657",
+    "40,5": "34589",
+    "41": "31402",
+    "42": "31156",
+    "42,5": "31157"
    }
   },
   "https://saletennis.com/catalog/product/krossovki-muzhskiie-head-sprint-team-4-0-clay-dark-blue-red-17432": {
@@ -6873,8 +6932,7 @@
    "article": "TSPINS2632OM",
    "sizes": {
     "42,5": "43076",
-    "43": "43077",
-    "44": "43078"
+    "43": "43077"
    }
   },
   "https://saletennis.com/catalog/product/krossovki-muzhskiie-joma-spin-padel-white-yellow-18731": {
@@ -6992,7 +7050,6 @@
     "42,5": "44435",
     "43": "44436",
     "44": "44437",
-    "44,5": "44438",
     "45": "44439",
     "46": "44440"
    }
@@ -7057,7 +7114,9 @@
     "43": "44477",
     "44": "44478",
     "44,5": "44479",
-    "45": "44480"
+    "45": "44480",
+    "46": "44519",
+    "47": "44520"
    }
   },
   "https://saletennis.com/catalog/product/krossovki-muzhskiie-mizuno-wave-exceed-tour-7-cc-blue-white-orange-19555": {
@@ -7229,8 +7288,7 @@
    "sizes": {
     "42": "40263",
     "42,5": "40264",
-    "43": "40265",
-    "44,5": "40267"
+    "43": "40265"
    }
   },
   "https://saletennis.com/catalog/product/krossovki-muzhskiie-nike-court-vapor-lite-3-hc-black-white-17353": {
@@ -7453,9 +7511,7 @@
    "article": "FZ2161-108",
    "sizes": {
     "42": "43450",
-    "42,5": "43451",
-    "44": "43453",
-    "45": "43455"
+    "42,5": "43451"
    }
   },
   "https://saletennis.com/catalog/product/krossovki-muzhskiie-nike-vapor-pro-3-premium-hc-sail-turf-orange-blue-ribbon-heather-black-19028": {
@@ -7622,7 +7678,30 @@
    "itemId": "18563",
    "article": "274246-LBDB",
    "sizes": {
+    "36": "44491",
     "38,5": "42561"
+   }
+  },
+  "https://saletennis.com/catalog/product/krossovki-zhienskiie-head-sprint-pro-3-5-clay-white-aqua-14832": {
+   "itemId": "14832",
+   "article": "274173-WHAQ",
+   "sizes": {
+    "36": "44494",
+    "36,5": "44495",
+    "43": "44496"
+   }
+  },
+  "https://saletennis.com/catalog/product/krossovki-zhienskiie-head-sprint-pro-3-5-macadamia-lime-14408": {
+   "itemId": "14408",
+   "article": "274143-MCLI",
+   "sizes": {
+    "36,5": "44492",
+    "37": "31114",
+    "38": "31115",
+    "38,5": "31116",
+    "39": "31117",
+    "40,5": "31119",
+    "42": "44493"
    }
   },
   "https://saletennis.com/catalog/product/krossovki-zhienskiie-head-sprint-pro-4-0-apricot-vanilla-18564": {
@@ -7639,7 +7718,8 @@
    "itemId": "18566",
    "article": "274176-APVA",
    "sizes": {
-    "38,5": "42579"
+    "38,5": "42579",
+    "40,5": "42582"
    }
   },
   "https://saletennis.com/catalog/product/krossovki-zhienskiie-head-sprint-pro-4-0-coral-white-16975": {
@@ -7654,6 +7734,21 @@
    "article": "274146-LBDB",
    "sizes": {
     "38,5": "42573"
+   }
+  },
+  "https://saletennis.com/catalog/product/krossovki-zhienskiie-head-sprint-team-3-5-bluestone-teal-14425": {
+   "itemId": "14425",
+   "article": "274403-BSTE",
+   "sizes": {
+    "36,5": "42043",
+    "37": "31295",
+    "38": "31296",
+    "38,5": "31266",
+    "39": "31267",
+    "40": "31268",
+    "40,5": "31297",
+    "41": "31298",
+    "42": "42044"
    }
   },
   "https://saletennis.com/catalog/product/krossovki-zhienskiie-head-sprint-team-4-0-clay-twilight-blue-chalk-white-17422": {
@@ -7692,13 +7787,6 @@
     "38": "40098",
     "39": "40099",
     "40,5": "40101"
-   }
-  },
-  "https://saletennis.com/catalog/product/krossovki-zhienskiie-joma-ace-lady-white-blue-17615": {
-   "itemId": "17615",
-   "article": "TACLS2502AC",
-   "sizes": {
-    "38": "40109"
    }
   },
   "https://saletennis.com/catalog/product/krossovki-zhienskiie-joma-roland-lady-black-mint-17618": {
@@ -7770,6 +7858,7 @@
    "sizes": {
     "38": "43812",
     "38,5": "43813",
+    "39": "43814",
     "40,5": "43816"
    }
   },
@@ -7895,13 +7984,6 @@
    "article": "IQ5176-700",
    "sizes": {
     "39": "43540"
-   }
-  },
-  "https://saletennis.com/catalog/product/krossovki-zhienskiie-nike-zoom-gp-challenge-pro-clay-pearl-pink-pink-foam-chalk-light-magenta-19253": {
-   "itemId": "19253",
-   "article": "IM4332-601",
-   "sizes": {
-    "38": "43948"
    }
   },
   "https://saletennis.com/catalog/product/krossovki-zhienskiie-nike-zoom-gp-challenge-pro-hc-volt-tint-lab-green-white-sapphire-19025": {
@@ -9859,25 +9941,11 @@
     "3": "38767"
    }
   },
-  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-babolat-pure-drive-super-lite-2025-18397": {
-   "itemId": "18397",
-   "article": "101556",
-   "sizes": {
-    "0": "42074"
-   }
-  },
   "https://saletennis.com/catalog/product/tiennisnaia-rakietka-babolat-pure-strike-100-16x20-2024-16325": {
    "itemId": "16325",
    "article": "101534",
    "sizes": {
     "3": "36551"
-   }
-  },
-  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-babolat-pure-strike-16-19-2024-16025": {
-   "itemId": "16025",
-   "article": "101524",
-   "sizes": {
-    "4": "35994"
    }
   },
   "https://saletennis.com/catalog/product/tiennisnaia-rakietka-babolat-pure-strike-18x20-2024-16321": {
@@ -10073,8 +10141,7 @@
    "itemId": "15850",
    "article": "230144",
    "sizes": {
-    "1": "37479",
-    "2": "35325"
+    "1": "37479"
    }
   },
   "https://saletennis.com/catalog/product/tiennisnaia-rakietka-head-challenge-mp-2024-blue-15948": {
@@ -10338,11 +10405,28 @@
     "2": "43354"
    }
   },
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-head-graphene-touch-instinct-xtr-15929": {
+   "itemId": "15929",
+   "article": "231224",
+   "sizes": {
+    "1": "36030",
+    "3": "36274"
+   }
+  },
   "https://saletennis.com/catalog/product/tiennisnaia-rakietka-head-graphene-touch-radical-xtr-15930": {
    "itemId": "15930",
    "article": "231234",
    "sizes": {
-    "3": "35598"
+    "2": "35592",
+    "3": "35598",
+    "4": "35599"
+   }
+  },
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-head-graphene-touch-speed-xtr-15933": {
+   "itemId": "15933",
+   "article": "231244",
+   "sizes": {
+    "1": "44506"
    }
   },
   "https://saletennis.com/catalog/product/tiennisnaia-rakietka-head-gravity-mp-2025-16876": {
@@ -10399,6 +10483,7 @@
    "itemId": "19317",
    "article": "231216",
    "sizes": {
+    "1": "44507",
     "2": "44083"
    }
   },
@@ -10575,11 +10660,39 @@
     "0": "29016"
    }
   },
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-head-paw-17-18557": {
+   "itemId": "18557",
+   "article": "232325-WH",
+   "sizes": {
+    "0": "42545"
+   }
+  },
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-head-paw-17-blue-18556": {
+   "itemId": "18556",
+   "article": "232225-BL",
+   "sizes": {
+    "0": "42544"
+   }
+  },
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-head-paw-19-18559": {
+   "itemId": "18559",
+   "article": "232315-WH",
+   "sizes": {
+    "0": "42547"
+   }
+  },
   "https://saletennis.com/catalog/product/tiennisnaia-rakietka-head-paw-19-blue-18558": {
    "itemId": "18558",
    "article": "232215-BL",
    "sizes": {
     "0": "42546"
+   }
+  },
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-head-paw-21-18561": {
+   "itemId": "18561",
+   "article": "232305-WH",
+   "sizes": {
+    "0": "42549"
    }
   },
   "https://saletennis.com/catalog/product/tiennisnaia-rakietka-head-paw-21-blue-18560": {
@@ -10755,6 +10868,7 @@
    "article": "232076",
    "sizes": {
     "2": "40514",
+    "3": "40094",
     "4": "40095"
    }
   },
@@ -11160,6 +11274,44 @@
     "1": "43012"
    }
   },
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-blade-100-v10-18975": {
+   "itemId": "18975",
+   "article": "WR208211",
+   "sizes": {
+    "3": "43356",
+    "4": "43357"
+   }
+  },
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-blade-100l-v10-18976": {
+   "itemId": "18976",
+   "article": "WR208311",
+   "sizes": {
+    "2": "43358"
+   }
+  },
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-blade-100ul-v10-18977": {
+   "itemId": "18977",
+   "article": "WR208410",
+   "sizes": {
+    "1": "43360",
+    "2": "43361"
+   }
+  },
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-blade-101-team-v10-18978": {
+   "itemId": "18978",
+   "article": "WR208810",
+   "sizes": {
+    "2": "43363"
+   }
+  },
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-blade-104-v10-18979": {
+   "itemId": "18979",
+   "article": "WR208511",
+   "sizes": {
+    "2": "43364",
+    "3": "43365"
+   }
+  },
   "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-blade-25-v10-18980": {
    "itemId": "18980",
    "article": "WR208610",
@@ -11174,10 +11326,19 @@
     "0": "35300"
    }
   },
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-blade-26-v10-18981": {
+   "itemId": "18981",
+   "article": "WR208710",
+   "sizes": {
+    "0": "43367"
+   }
+  },
   "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-blade-98-16x19-v10-18982": {
    "itemId": "18982",
    "article": "WR207811",
    "sizes": {
+    "2": "43368",
+    "3": "43369",
     "4": "43370"
    }
   },
@@ -11192,7 +11353,17 @@
    "itemId": "18983",
    "article": "WR207911",
    "sizes": {
+    "2": "43371",
+    "3": "43372",
     "4": "43373"
+   }
+  },
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-blade-98s-v10-18984": {
+   "itemId": "18984",
+   "article": "WR208011",
+   "sizes": {
+    "3": "43375",
+    "4": "43376"
    }
   },
   "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-blade-98s-v9-0-15820": {
@@ -11200,6 +11371,20 @@
    "article": "WR152411",
    "sizes": {
     "4": "38796"
+   }
+  },
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-burn-spin-junior-24-17144": {
+   "itemId": "17144",
+   "article": "WR187110",
+   "sizes": {
+    "0": "38736"
+   }
+  },
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-burn-spin-junior-25-17145": {
+   "itemId": "17145",
+   "article": "WR171610",
+   "sizes": {
+    "0": "38737"
    }
   },
   "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-burn-spin-junior-26-17146": {
@@ -11221,6 +11406,7 @@
    "itemId": "18692",
    "article": "WR199610",
    "sizes": {
+    "2": "43016",
     "3": "43301"
    }
   },
@@ -11233,122 +11419,34 @@
     "4": "43303"
    }
   },
-  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-clash-100ul-v3-0-17210": {
-   "itemId": "17210",
-   "article": "WR173011",
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-burn-v6-105s-18985": {
+   "itemId": "18985",
+   "article": "WR199810",
    "sizes": {
-    "1": "38797"
+    "1": "43377"
    }
   },
-  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-clash-25-v3-0-17150": {
-   "itemId": "17150",
-   "article": "WR173310",
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-clash-100-pro-reverse-v3-0-18870": {
+   "itemId": "18870",
+   "article": "WR210611",
    "sizes": {
-    "0": "38746"
+    "3": "43304"
    }
   },
-  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-defyer-100-v1-19355": {
-   "itemId": "19355",
-   "article": "WR215411",
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-clash-100-pro-v3-0-17147": {
+   "itemId": "17147",
+   "article": "WR172711",
    "sizes": {
-    "2": "44096",
-    "3": "44097",
-    "4": "44098"
+    "3": "38739"
    }
   },
-  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-defyer-98-pro-v1-19356": {
-   "itemId": "19356",
-   "article": "WR215311",
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-clash-100-reverse-v3-0-18871": {
+   "itemId": "18871",
+   "article": "WR210711",
    "sizes": {
-    "2": "44099",
-    "3": "44100",
-    "4": "44101"
-   }
-  },
-  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-envy-se-18987": {
-   "itemId": "18987",
-   "article": "WR198010",
-   "sizes": {
-    "1": "43380"
-   }
-  },
-  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-intrigue-girls-junior-21-17489": {
-   "itemId": "17489",
-   "article": "WR180510",
-   "sizes": {
-    "0": "39877"
-   }
-  },
-  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-intrigue-girls-junior-25-17491": {
-   "itemId": "17491",
-   "article": "WR180310",
-   "sizes": {
-    "0": "39879"
-   }
-  },
-  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-minions-3-0-jr-19-16109": {
-   "itemId": "16109",
-   "article": "WR124410H",
-   "sizes": {
-    "0": "36071"
-   }
-  },
-  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-pro-staff-25-v14-0-14606": {
-   "itemId": "14606",
-   "article": "WR126210",
-   "sizes": {
-    "0": "31791"
-   }
-  },
-  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-pro-staff-97-classic-18687": {
-   "itemId": "18687",
-   "article": "WR201311",
-   "sizes": {
-    "3": "43007"
-   }
-  },
-  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-pro-staff-97-v14-14720": {
-   "itemId": "14720",
-   "article": "WR125711",
-   "sizes": {
-    "3": "32124"
-   }
-  },
-  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-pro-staff-97l-classic-18688": {
-   "itemId": "18688",
-   "article": "WR201411",
-   "sizes": {
-    "2": "43009",
-    "3": "43010"
-   }
-  },
-  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-pro-staff-97l-v14-14461": {
-   "itemId": "14461",
-   "article": "WR1259111",
-   "sizes": {
-    "2": "31404",
-    "3": "31405"
-   }
-  },
-  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-pro-staff-97ul-classic-18689": {
-   "itemId": "18689",
-   "article": "WR201510",
-   "sizes": {
-    "2": "43011"
-   }
-  },
-  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-pro-staff-precision-jr-21-15906": {
-   "itemId": "15906",
-   "article": "WR118110H",
-   "sizes": {
-    "0": "35492"
-   }
-  },
-  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-pro-staff-precision-jr-23-15822": {
-   "itemId": "15822",
-   "article": "WR118010H",
-   "sizes": {
-    "0": "35307"
+    "2": "43305",
+    "3": "43306",
+    "4": "43307"
    }
   },
   "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-pro-staff-precision-jr-25-15907": {
@@ -11365,11 +11463,12 @@
     "0": "43021"
    }
   },
-  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-pro-staff-x-v14-15823": {
-   "itemId": "15823",
-   "article": "WR125811",
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-pro-staff-team-classic-18872": {
+   "itemId": "18872",
+   "article": "WR201610",
    "sizes": {
-    "3": "35308"
+    "2": "43309",
+    "3": "43310"
    }
   },
   "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-rf-01-16468": {
@@ -11381,10 +11480,19 @@
     "4": "37010"
    }
   },
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-rf-01-future-16467": {
+   "itemId": "16467",
+   "article": "WR166811",
+   "sizes": {
+    "2": "37007",
+    "3": "37008"
+   }
+  },
   "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-rf-01-future-lite-17570": {
    "itemId": "17570",
    "article": "WR175711",
    "sizes": {
+    "1": "40067",
     "2": "40068"
    }
   },
@@ -11393,6 +11501,20 @@
    "article": "WR193610H",
    "sizes": {
     "0": "43022"
+   }
+  },
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-roland-garros-2026-elite-23-18699": {
+   "itemId": "18699",
+   "article": "WR193510H",
+   "sizes": {
+    "0": "43024"
+   }
+  },
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-roland-garros-2026-elite-25-18700": {
+   "itemId": "18700",
+   "article": "WR193410H",
+   "sizes": {
+    "0": "43025"
    }
   },
   "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-roland-garros-2026-elite-comp-jr-26-18701": {
@@ -11406,7 +11528,8 @@
    "itemId": "15825",
    "article": "WR145311",
    "sizes": {
-    "3": "35310"
+    "3": "35310",
+    "4": "39055"
    }
   },
   "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-shift-99-v1-0-rg-17571": {
@@ -11414,6 +11537,14 @@
    "article": "WR174311",
    "sizes": {
     "3": "40069"
+   }
+  },
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-shift-99l-v1-0-15826": {
+   "itemId": "15826",
+   "article": "WR145511",
+   "sizes": {
+    "2": "35311",
+    "3": "35312"
    }
   },
   "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-slam-boys-junior-19-17318": {
@@ -11444,11 +11575,64 @@
     "0": "39882"
    }
   },
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-ultra-100-v5-0-18041": {
+   "itemId": "18041",
+   "article": "WR178811",
+   "sizes": {
+    "2": "41339",
+    "3": "41340",
+    "4": "41341"
+   }
+  },
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-ultra-100l-v5-0-18042": {
+   "itemId": "18042",
+   "article": "WR178911",
+   "sizes": {
+    "2": "41342",
+    "3": "41343"
+   }
+  },
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-ultra-100l-v5-0-roland-garros-2026-18989": {
+   "itemId": "18989",
+   "article": "WR204311",
+   "sizes": {
+    "2": "43382"
+   }
+  },
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-ultra-100ul-v5-0-18043": {
+   "itemId": "18043",
+   "article": "WR179010",
+   "sizes": {
+    "1": "41344",
+    "2": "41345"
+   }
+  },
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-ultra-25-v5-0-18044": {
+   "itemId": "18044",
+   "article": "WR179210",
+   "sizes": {
+    "0": "41346"
+   }
+  },
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-ultra-26-v5-0-18045": {
+   "itemId": "18045",
+   "article": "WR179310",
+   "sizes": {
+    "0": "41347"
+   }
+  },
   "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-ultra-99-pro-v5-0-18046": {
    "itemId": "18046",
    "article": "WR178711",
    "sizes": {
     "3": "41348"
+   }
+  },
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-ultra-power-100-1-16469": {
+   "itemId": "16469",
+   "article": "WR146810",
+   "sizes": {
+    "2": "37011"
    }
   },
   "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-ultra-power-jr-21-18058": {
@@ -11463,6 +11647,13 @@
    "article": "WR118810H",
    "sizes": {
     "0": "41354"
+   }
+  },
+  "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-us-open-gs-105-18990": {
+   "itemId": "18990",
+   "article": "WR198310",
+   "sizes": {
+    "2": "43384"
    }
   },
   "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-us-open-pro-100-18991": {
@@ -11550,11 +11741,6 @@
   "https://saletennis.com/catalog/product/tiennisnyie-miachi-dunlop-fort-clay-court-4b-19083": {
    "itemId": "19083",
    "article": "601613",
-   "sizes": {}
-  },
-  "https://saletennis.com/catalog/product/tiennisnyie-miachi-dunlop-indoor-foam-12-balls-18396": {
-   "itemId": "18396",
-   "article": "603758",
    "sizes": {}
   },
   "https://saletennis.com/catalog/product/tiennisnyie-miachi-head-3b-championship-2022-13477": {
@@ -12156,6 +12342,15 @@
     "23-26": "17251"
    }
   },
+  "https://saletennis.com/catalog/product/noski-head-kids-3p-all-sports-sneaker-18127": {
+   "itemId": "18127",
+   "article": "816955-WH",
+   "sizes": {
+    "23-26": "44484",
+    "27-30": "41539",
+    "31-34": "41540"
+   }
+  },
   "https://saletennis.com/catalog/product/noski-head-performance-black-white-3-pary-14924": {
    "itemId": "14924",
    "article": "811904-BKW",
@@ -12433,31 +12628,6 @@
    "article": "653040-101",
    "sizes": {}
   },
-  "https://saletennis.com/catalog/product/ovierghrip-dlia-padiel-rakietok-bullpadel-adherent-purple-16522": {
-   "itemId": "16522",
-   "article": "GB-1202",
-   "sizes": {}
-  },
-  "https://saletennis.com/catalog/product/ovierghrip-dlia-padiel-rakietok-bullpadel-comfort-absorvent-yellow-16528": {
-   "itemId": "16528",
-   "article": "GB-1201",
-   "sizes": {}
-  },
-  "https://saletennis.com/catalog/product/ovierghrip-dlia-padiel-rakietok-bullpadel-comfort-neon-orange-16523": {
-   "itemId": "16523",
-   "article": "GB-1200",
-   "sizes": {}
-  },
-  "https://saletennis.com/catalog/product/ovierghrip-dlia-padiel-rakietok-bullpadel-comfort-white-16525": {
-   "itemId": "16525",
-   "article": "GB-1200",
-   "sizes": {}
-  },
-  "https://saletennis.com/catalog/product/ovierghrip-dlia-padiel-rakietok-bullpadel-thin-white-16529": {
-   "itemId": "16529",
-   "article": "GB-1603",
-   "sizes": {}
-  },
   "https://saletennis.com/catalog/product/ovierghrip-head-prime-tour-1-sht-black-14020": {
    "itemId": "14020",
    "article": "285661",
@@ -12503,6 +12673,11 @@
    "article": "285661",
    "sizes": {}
   },
+  "https://saletennis.com/catalog/product/ovierghrip-head-prime-tour-12-pack-black-13971": {
+   "itemId": "13971",
+   "article": "285631",
+   "sizes": {}
+  },
   "https://saletennis.com/catalog/product/ovierghrip-head-prime-tour-12-pack-blue-13972": {
    "itemId": "13972",
    "article": "285631",
@@ -12538,9 +12713,19 @@
    "article": "285631",
    "sizes": {}
   },
+  "https://saletennis.com/catalog/product/ovierghrip-head-prime-tour-12-pack-white-13976": {
+   "itemId": "13976",
+   "article": "285631",
+   "sizes": {}
+  },
   "https://saletennis.com/catalog/product/ovierghrip-head-prime-tour-12-pack-yellow-13977": {
    "itemId": "13977",
    "article": "285631",
+   "sizes": {}
+  },
+  "https://saletennis.com/catalog/product/ovierghrip-head-prime-tour-30-pack-black-17976": {
+   "itemId": "17976",
+   "article": "285641",
    "sizes": {}
   },
   "https://saletennis.com/catalog/product/ovierghrip-head-prime-tour-60-pack-mint-18551": {
@@ -14036,6 +14221,11 @@
    "article": "150187",
    "sizes": {}
   },
+  "https://saletennis.com/catalog/product/rakietka-dlia-padiela-babolat-viper-soft-juan-lebron-3-0-18912": {
+   "itemId": "18912",
+   "article": "150178-100",
+   "sizes": {}
+  },
   "https://saletennis.com/catalog/product/rakietka-dlia-padiela-black-crown-piton-14-global-19144": {
    "itemId": "19144",
    "article": "BCWNPT14GL",
@@ -14339,11 +14529,6 @@
   "https://saletennis.com/catalog/product/rakietka-dlia-padiela-head-radical-motion-2026-18505": {
    "itemId": "18505",
    "article": "222046",
-   "sizes": {}
-  },
-  "https://saletennis.com/catalog/product/rakietka-dlia-padiela-head-radical-pro-2026-18506": {
-   "itemId": "18506",
-   "article": "222036",
    "sizes": {}
   },
   "https://saletennis.com/catalog/product/rakietka-dlia-padiela-head-speed-jr-18017": {
@@ -14776,11 +14961,6 @@
    "article": "LB76-490",
    "sizes": {}
   },
-  "https://saletennis.com/catalog/product/sumka-dlia-padiel-adidas-protour-3-4-black-18358": {
-   "itemId": "18358",
-   "article": "JK5606",
-   "sizes": {}
-  },
   "https://saletennis.com/catalog/product/sumka-dlia-padiel-adidas-racket-bag-multigame-black-red-19062": {
    "itemId": "19062",
    "article": "KL2639",
@@ -14844,11 +15024,6 @@
   "https://saletennis.com/catalog/product/sumka-dlia-padiel-head-pro-x-padel-duffle-l-black-dark-grey-18228": {
    "itemId": "18228",
    "article": "260135-BKDG",
-   "sizes": {}
-  },
-  "https://saletennis.com/catalog/product/sumka-dlia-padiel-head-team-padel-bag-l-black-ceramic-19314": {
-   "itemId": "19314",
-   "article": "262254-BKCC",
    "sizes": {}
   },
   "https://saletennis.com/catalog/product/sumka-dlia-padiel-wilson-bela-super-tour-black-red-18082": {
@@ -14944,6 +15119,31 @@
   "https://saletennis.com/catalog/product/ovierghrip-adidas-perforated-3pk-yellow-19052": {
    "itemId": "19052",
    "article": "AC2BA1-YE",
+   "sizes": {}
+  },
+  "https://saletennis.com/catalog/product/ovierghrip-dlia-padiel-rakietok-bullpadel-adherent-purple-16522": {
+   "itemId": "16522",
+   "article": "GB-1202",
+   "sizes": {}
+  },
+  "https://saletennis.com/catalog/product/ovierghrip-dlia-padiel-rakietok-bullpadel-comfort-absorvent-yellow-16528": {
+   "itemId": "16528",
+   "article": "GB-1201",
+   "sizes": {}
+  },
+  "https://saletennis.com/catalog/product/ovierghrip-dlia-padiel-rakietok-bullpadel-comfort-neon-orange-16523": {
+   "itemId": "16523",
+   "article": "GB-1200",
+   "sizes": {}
+  },
+  "https://saletennis.com/catalog/product/ovierghrip-dlia-padiel-rakietok-bullpadel-comfort-white-16525": {
+   "itemId": "16525",
+   "article": "GB-1200",
+   "sizes": {}
+  },
+  "https://saletennis.com/catalog/product/ovierghrip-dlia-padiel-rakietok-bullpadel-thin-white-16529": {
+   "itemId": "16529",
+   "article": "GB-1603",
    "sizes": {}
   },
   "https://saletennis.com/catalog/product/ovierghrip-head-padel-pro-black-19086": {
