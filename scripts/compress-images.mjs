@@ -61,6 +61,7 @@ console.log('');
 
 let converted = 0;
 let skippedExisting = 0;
+let deletedExisting = 0;
 let failed = 0;
 let bytesBefore = 0;
 let bytesAfter = 0;
@@ -74,6 +75,17 @@ for (const file of files) {
     skippedExisting++;
     bytesBefore += statSync(srcPath).size;
     bytesAfter += statSync(outPath).size;
+    // WebP уже есть — но оригинал всё равно убираем. Иначе парсер на следующем
+    // прогоне не найдёт свой кэш (<hash>.png), скачает фото заново, а git
+    // закоммитит ~0,5 МБ на товар: за один парсинг так приехало 2035 PNG ≈ 1 ГБ.
+    if (!KEEP_ORIGINALS) {
+      try {
+        unlinkSync(srcPath);
+        deletedExisting++;
+      } catch {
+        /* уже удалён — не критично */
+      }
+    }
     continue;
   }
 
@@ -106,7 +118,10 @@ for (const file of files) {
 
 const mb = (b) => `${(b / 1024 / 1024).toFixed(1)} МБ`;
 console.log('');
-console.log(`✅ Сжато: ${converted}, уже было: ${skippedExisting}, ошибок: ${failed}`);
+console.log(
+  `✅ Сжато: ${converted}, уже было: ${skippedExisting}` +
+    ` (из них удалено оригиналов: ${deletedExisting}), ошибок: ${failed}`
+);
 console.log(`Объём: ${mb(bytesBefore)} → ${mb(bytesAfter)} (−${
   bytesBefore > 0 ? Math.round((1 - bytesAfter / bytesBefore) * 100) : 0
 }%)`);

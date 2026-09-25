@@ -14,3 +14,11 @@ parser/.env
 parser/data/
 __pycache__/
 *.pyc
+
+# Оригиналы фото (PNG/JPG) в git НЕ храним: сайт использует WebP-версии,
+# а оригинал — это ~0,5 МБ на товар. За один парсинг так приехало 2035 PNG ≈ 1 ГБ,
+# после чего клон репозитория перестал проходить по обычному каналу.
+# Каскад в src/utils/images.ts: WebP → PNG → фото с сайта, поэтому WebP достаточно.
+public/data/product_images/*.png
+public/data/product_images/*.jpg
+public/data/product_images/*.jpeg

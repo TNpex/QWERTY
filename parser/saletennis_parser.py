@@ -461,8 +461,19 @@ def download_image(image_url):
         filename = f"{url_hash}{ext}"
         filepath = os.path.join(IMAGES_DIR, filename)
 
-        if os.path.exists(filepath) and os.path.getsize(filepath) > 500:
-            return filepath
+        # Попаданием в кэш считаем ЛЮБОЙ вариант файла с тем же хэшем URL:
+        # оригинал (<hash>.png) удаляется после сжатия в WebP
+        # (scripts/compress-images.mjs), и если искать только его, парсер каждую
+        # ночь заново качает весь каталог фото (~1 ГБ PNG), который потом
+        # уезжает в git. Порядок: сначала «родное» расширение, затем webp.
+        seen_exts = set()
+        for candidate_ext in (ext, '.webp', '.png', '.jpg', '.jpeg'):
+            if candidate_ext in seen_exts:
+                continue
+            seen_exts.add(candidate_ext)
+            candidate = os.path.join(IMAGES_DIR, f"{url_hash}{candidate_ext}")
+            if os.path.exists(candidate) and os.path.getsize(candidate) > 500:
+                return candidate
 
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
         response = requests.get(image_url, timeout=15, headers=headers)

@@ -56,6 +56,21 @@ jobs:
           npm ci
           npm run compress-images
 
+      - name: Убрать оригиналы фото (в git публикуем только WebP)
+        # Страховка: compress-images удаляет оригинал только после успешного
+        # сжатия, а уже существующий WebP пропускает. Без этого шага парсер
+        # каждую ночь заново качает PNG, и они уезжают в git (~1 ГБ за прогон).
+        # Удаляем только те оригиналы, у которых ЕСТЬ WebP-пара — фото не теряются.
+        run: |
+          deleted=0
+          for f in public/data/product_images/*.png public/data/product_images/*.jpg public/data/product_images/*.jpeg; do
+            [ -e "$f" ] || continue
+            base="${f%.*}"
+            if [ -f "$base.webp" ]; then rm -f "$f"; deleted=$((deleted + 1)); fi
+          done
+          echo "Удалено оригиналов с готовым WebP: $deleted"
+          du -sh public/data/product_images
+
       - name: Закоммитить обновлённые данные
         run: |
           git config user.name "saletennis-parser[bot]"
