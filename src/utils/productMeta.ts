@@ -196,6 +196,22 @@ const BRAND_NAME_RULES: Array<[RegExp, string]> = [
   [/\b305\s+squash\b/i, 'Tecnifibre'],
 ];
 
+/**
+ * Бренды-линейки: сайт отдаёт их как отдельный бренд, хотя это линия другого
+ * производителя. «Nata» — линейка одежды 7/6 (артикулы NT76-4104, NT76-1265… —
+ * тот же шаблон XX76-…, что у TS76-BKWH / TB76-BL / KB276-BL); отдельного бренда
+ * Nata в сети нет. Правило дублирует BRAND_REMAP парсера, чтобы бренд был
+ * одинаковым и в данных сайта, и в загруженном вручную файле.
+ */
+const BRAND_REMAP: Record<string, string> = {
+  nata: '7/6',
+};
+
+/** Бренд-линейка приводится к настоящему бренду (Nata → 7/6) */
+export function remapBrand(brand: string): string {
+  return BRAND_REMAP[brand.trim().toLowerCase()] ?? brand;
+}
+
 function isBadBrand(brand: string): boolean {
   const b = brand.trim().toLowerCase();
   return BAD_BRAND_VALUES.includes(b) || /^\d+$/.test(b); // «37078» — код поставщика, не бренд
@@ -206,9 +222,11 @@ function isBadBrand(brand: string): boolean {
  * брендом из названия (у всех 455 товаров «37078» в названии есть «7/6»),
  * опечатки бренда в названии нормализуются («Tecnifbre» → Tecnifibre),
  * затем — поиск по фирменному формату артикула Nike (FZ6951-110).
+ * Бренды-линейки приводятся к настоящему бренду («Nata» → «7/6») — всегда,
+ * независимо от того, задан бренд на сайте или нет.
  */
 export function cleanBrand(name: string, article: string, rawBrand: string): string {
-  const brand = String(rawBrand ?? '').trim();
+  const brand = remapBrand(String(rawBrand ?? ''));
   if (!isBadBrand(brand)) return brand;
 
   const raw = name.toLowerCase();
@@ -221,7 +239,7 @@ export function cleanBrand(name: string, article: string, rawBrand: string): str
     lower = lower.replace(pattern, replacement);
   }
   for (const token of BRAND_TOKENS) {
-    if (lower.includes(token.toLowerCase())) return token;
+    if (lower.includes(token.toLowerCase())) return remapBrand(token);
   }
   // Фирменный артикул Nike: 2 буквы + 4-6 цифр (+ «-XXX»), напр. FZ6951-110, HQ6027-501
   if (/^[A-Z]{2}\d{4,6}(-\d{3})?$/i.test(article.trim())) return 'Nike';

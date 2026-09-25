@@ -6,6 +6,7 @@ import {
   isPrioritySize,
   productMeta,
   cleanBrand,
+  remapBrand,
 } from './productMeta';
 
 describe('detectGender', () => {
@@ -138,9 +139,21 @@ describe('cleanBrand', () => {
 
   it('«Не определен» → бренд из названия или по артикулу Nike', () => {
     expect(cleanBrand('Толстовка мужская Diadora Hoodie Core', 'D1', 'Не определен')).toBe('Diadora');
-    expect(cleanBrand('Майка женская Nata Sleeveless', 'N1', 'Не определен')).toBe('Nata');
+    // «Nata» — линейка одежды 7/6 (артикулы NT76-*), отдельного бренда в сети нет
+    expect(cleanBrand('Майка женская Nata Sleeveless', 'N1', 'Не определен')).toBe('7/6');
     expect(cleanBrand('Шорты мужские Court Heritage 6in Shorts', 'FZ6951-110', 'Не определен')).toBe('Nike');
     expect(cleanBrand('Футболка унисекс LOVE', 'X1', 'Не определен')).toBe('Не определен');
+  });
+
+  it('бренд-линейка «Nata» приводится к 7/6 (артикулы NT76-*)', () => {
+    // сайт отдаёт «Nata» как отдельный бренд, но это линейка одежды 7/6
+    expect(cleanBrand('Майка женская Nata Sleeveless T-shirt - Antarctica', 'NT76-4104', 'Nata')).toBe('7/6');
+    expect(cleanBrand('Майка женская Nata Sleeveless', 'NT76-1265', ' nata ')).toBe('7/6');
+    expect(remapBrand('Nata')).toBe('7/6');
+    expect(remapBrand('Head')).toBe('Head');
+    // остальные бренды правило не задевает
+    expect(cleanBrand('Ракетка Babolat Pure Aero', 'B1', 'Babolat')).toBe('Babolat');
+    expect(cleanBrand('Овергрип Solinco Wonder', 'SL1', 'Solinco')).toBe('Solinco');
   });
 
   it('опечатки Tecnifibre в названиях сайта нормализуются', () => {

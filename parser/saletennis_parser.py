@@ -71,7 +71,8 @@ KNOWN_BRANDS = [
     'Tecnifibre', '7/6', 'Solinco', 'Nox', 'Royal Padel', 'StarVie', 'Kuikma',
     'Dropshot', 'Varlion', 'Palmer', 'Asics', 'Nike', 'Joma', 'Fila', 'Lotto',
     'Yonex', 'Volkl', 'Dunlop', 'Gamma', 'Luxilon', 'Bidi Badu', 'Mizuno',
-    'Saletennis', 'Diadora', 'Diadem', 'Prince', 'Nata',
+    'Saletennis', 'Diadora', 'Diadem', 'Prince',
+    'Nata',  # линейка одежды 7/6 (артикулы NT76-*) — приводится к '7/6', см. BRAND_REMAP
     # добор по фактическим «Не определен» из каталога (аксессуары/сквош/падел)
     'Tennis Life', 'Slazenger', 'Oxdog', 'Torres', 'Milo',
 ]
@@ -80,12 +81,23 @@ KNOWN_BRANDS = [
 # «Tecnifbre Fire 285», «Tecnifiber Carboflex» → Tecnifibre
 TECNIFIBRE_TYPOS = ('tecnifbre', 'tecnifiber', 'tecnifibr')
 
+# Бренды-линейки: сайт отдаёт их как отдельный бренд (в JSON-LD и в названии),
+# хотя на самом деле это линия другого производителя.
+#   «Nata» — линейка одежды 7/6: артикулы NT76-4104, NT76-1265, … то есть тот же
+#   шаблон XX76-…, что у TS76-BKWH / TB76-BL / KB276-BL; отдельного бренда Nata
+#   в сети нет. Без этого правила бренд возвращался бы при каждом парсинге.
+BRAND_REMAP = {
+    'nata': '7/6',
+}
+
 
 def _normalize_brand_name(brand: str) -> str:
-    """Приводит опечатки брендов в названиях/JSON-LD к каноническому виду."""
+    """Приводит опечатки и бренды-линейки в названиях/JSON-LD к каноническому виду."""
     low = brand.strip().lower()
     if low in TECNIFIBRE_TYPOS:
         return 'Tecnifibre'
+    if low in BRAND_REMAP:
+        return BRAND_REMAP[low]
     return brand.strip()
 
 STORES_FULL = {
@@ -337,7 +349,8 @@ def brand_from_name(name: str) -> str:
         return 'Tecnifibre'
     for brand in KNOWN_BRANDS:
         if brand.upper() in name_upper:
-            return brand
+            # «Nata Sleeveless T-shirt» → Nata → 7/6 (BRAND_REMAP)
+            return _normalize_brand_name(brand)
     return "Не определен"
 
 
