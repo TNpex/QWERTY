@@ -64,6 +64,20 @@ CATEGORY_COOLDOWNS = (60, 240)      # паузы между попытками, 
 FINAL_PASS_COOLDOWN = 300           # пауза перед финальным заходом, сек
 CATALOG_PAGE_MIN_BYTES = 40_000     # реальная категория (меню+фильтры) ≈ 100-250 КБ
 
+# Таблица наличия table.admin-sizes отдаётся ТОЛЬКО авторизованной сессии.
+# Когда PHPSESSID «протухает» посреди долгого прогона (или сайт включает
+# мягкий антибот), карточка товара приходит в публичном виде: размеры и цена
+# на месте, а таблицы остатков по магазинам нет. Раньше такой товар молча
+# получал «Нет информации о наличии» и нули, а сессия НЕ пересоздавалась —
+# ведь товар «распарсился» (h1/артикул/цена есть), счётчик сбоев не рос.
+# Так 2026-09-25 вечером 22 товара (в т.ч. WR212810) ложно стали распроданными,
+# хотя на сайте они в наличии. Лечение: при стойком отсутствии таблицы
+# перелогиниваемся и перечитываем товар, а в конце прогона делаем «финальный
+# заход» по всем отставшим товарам свежей сессией.
+MAX_STOCK_RELOGINS = 6              # перелогинов из-за пропавшей таблицы наличия за прогон
+STOCK_FINAL_COOLDOWN = 180          # пауза перед финальным заходом по товарам, сек
+STOCK_ANOMALY_FATAL = 15            # столько товаров без таблицы после всех повторов → прогон неполный
+
 
 # ================= СЕССИЯ И ЗАПРОСЫ =================
 
@@ -383,7 +397,7 @@ def parse_category_products(session, cat_name, urls, args, acc, state):
     for i, url in enumerate(urls):
         if (i + 1) % 25 == 0 or i == 0:
             sp.log(f"   [{i + 1}/{len(urls)}] {url}")
-        product = parse_product(session, url, cat_name)
+        product, session = parse_product(session, url, cat_name, args, state)
         if product:
             state['consecutive_failures'] = 0
             sizes_data = product.pop('sizes_data', [])
@@ -690,72 +704,200 @@ def parse_cart_info_http(soup):
 
 def _stock_table_anomaly(soup) -> bool:
     """
-    Признак «облегчённой» страницы (сбой кэша/CDN): селектор размеров
-    присутствует, а таблицы наличия table.admin-sizes нет. У полностью
-    распроданного товара сайта не показывает ни таблицы, ни размеров.
-    Такие страницы перезапрашиваем со сбросом кэша — иначе товар ложно
-    получает «Нет информации о наличии» и нули (кейс 17 платьев 2026-09-24).
+    Признак «облегчённой» страницы: селектор размеров присутствует, а таблицы
+    наличия table.admin-sizes нет. Таблица отдаётся только авторизованной
+    сессии, поэтому её отсутствие при живых размерах — это «протухшая» сессия
+    или мягкий антибот/сбой кэша, но НЕ распродажа. У полностью распроданного
+    товара сайт не показывает ни таблицы, ни размеров (→ False).
     """
     if soup.select_one("table.admin-sizes"):
         return False
     return bool(soup.select(".card__sizes input[type=radio][name=size]"))
 
 
-def parse_product(session, url: str, category: str):
-    """Возвращает словарь товара (тот же формат, что браузерный parse_product)."""
+def _fetch_product_soup(session, url: str, cache_bust: bool = False):
+    """Один запрос карточки товара → (soup, None) либо (None, причина)."""
+    request_url = url
+    headers = None
+    if cache_bust:
+        # обходим возможный кэш CDN: случайный параметр + no-cache
+        request_url = url + ('&' if '?' in url else '?') + f"_nc={int(time.time() * 1000)}"
+        headers = {"Cache-Control": "no-cache", "Pragma": "no-cache"}
+    r = fetch(session, request_url, headers=headers)
+    if r is None:
+        return None, "страница не загрузилась"
+    soup = BeautifulSoup(r.text, "lxml")
+    if soup.find("h1") is None:
+        return None, "нет h1 (возможно, страница заблокирована)"
+    return soup, None
+
+
+def _product_from_soup(soup, url: str, category: str) -> dict:
+    """Собрать словарь товара из уже загруженного soup (тот же формат, что браузерный)."""
+    h1 = soup.find("h1")
+    name = (h1.get_text(strip=True) if h1 else "") or "Не найдено"
+    article = extract_article_http(soup)
+    price = extract_price_http(soup)
+    brand = extract_brand_http(soup, name)
+    store_totals, sizes_data, details_text = parse_stock_from_soup(soup)
+    image_url = extract_image_url_http(soup)
+    image_path = sp.download_image(image_url)
+    cart_info = parse_cart_info_http(soup)
+    return {
+        'Категория': category,
+        'Артикул': article,
+        'Название': name,
+        'Бренд': brand,
+        'Цена': price,
+        'Ссылка': url,
+        'Размеры и наличие': details_text,
+        'Всего': sum(store_totals.values()),
+        'Фото': image_path,
+        **store_totals,
+        'sizes_data': sizes_data,
+        'cart_info': cart_info,
+    }
+
+
+def _stock_relogin_allowed(state) -> bool:
+    """Не исчерпан ли бюджет перелогинов из-за пропавшей таблицы наличия."""
+    if state is None:
+        return True   # одиночные вызовы/тесты без общего состояния — не ограничиваем
+    return state.get('stock_relogins', 0) < MAX_STOCK_RELOGINS
+
+
+def _note_stock_relogin(state):
+    if state is not None:
+        state['stock_relogins'] = state.get('stock_relogins', 0) + 1
+
+
+def _remember_stock_anomaly(state, url: str, category: str, article: str):
+    """Товар пришёл без таблицы наличия — запоминаем для финального захода."""
+    if state is None:
+        return
+    anomalies = state.setdefault('stock_anomalies', [])
+    if not any(a['url'] == url for a in anomalies):
+        anomalies.append({'url': url, 'category': category, 'article': article})
+
+
+def parse_product(session, url: str, category: str, args=None, state=None):
+    """
+    Возвращает (product|None, session).
+
+    Сессия может быть пересоздана: таблица наличия table.admin-sizes отдаётся
+    только авторизованной сессией, поэтому её отсутствие при живых размерах —
+    признак «протухшей» сессии/антибота, а не распродажи. В этом случае
+    перелогиниваемся (если есть args и не исчерпан бюджет) и перечитываем товар
+    уже авторизованной сессией, а новую сессию возвращаем наружу — следующие
+    товары пойдут через неё.
+    """
+    product = None
+    anomalous = False
     last_error = None
     for attempt in range(sp.PRODUCT_RETRIES + 1):
         try:
             if attempt > 0:
                 sp.log(f"      [RETRY {attempt}] {url}")
                 time.sleep(1.5 * attempt)
-            request_url = url
-            headers = None
-            if attempt > 0:
-                # обходим возможный кэш CDN: случайный параметр + no-cache
-                request_url = url + ('&' if '?' in url else '?') + f"_nc={int(time.time() * 1000)}"
-                headers = {"Cache-Control": "no-cache", "Pragma": "no-cache"}
-            r = fetch(session, request_url, headers=headers)
-            if r is None:
-                last_error = "страница не загрузилась"
+            soup, err = _fetch_product_soup(session, url, cache_bust=attempt > 0)
+            if soup is None:
+                last_error = err
                 continue
-            soup = BeautifulSoup(r.text, "lxml")
-            h1 = soup.find("h1")
-            if h1 is None:
-                last_error = "нет h1 (возможно, страница заблокирована)"
-                continue
-            if _stock_table_anomaly(soup) and attempt < sp.PRODUCT_RETRIES:
-                last_error = "есть размеры, но нет таблицы наличия (сбой кэша) — повторяю"
+            anomalous = _stock_table_anomaly(soup)
+            if anomalous and attempt < sp.PRODUCT_RETRIES:
+                last_error = "есть размеры, но нет таблицы наличия (сбой кэша/сессии) — повторяю"
                 sp.log(f"      [WARN] {url}: {last_error}")
                 continue
-
-            name = h1.get_text(strip=True) or "Не найдено"
-            article = extract_article_http(soup)
-            price = extract_price_http(soup)
-            brand = extract_brand_http(soup, name)
-            store_totals, sizes_data, details_text = parse_stock_from_soup(soup)
-            image_url = extract_image_url_http(soup)
-            image_path = sp.download_image(image_url)
-            cart_info = parse_cart_info_http(soup)
-
-            return {
-                'Категория': category,
-                'Артикул': article,
-                'Название': name,
-                'Бренд': brand,
-                'Цена': price,
-                'Ссылка': url,
-                'Размеры и наличие': details_text,
-                'Всего': sum(store_totals.values()),
-                'Фото': image_path,
-                **store_totals,
-                'sizes_data': sizes_data,
-                'cart_info': cart_info,
-            }
+            product = _product_from_soup(soup, url, category)
+            break
         except Exception as e:
             last_error = e
-    sp.log(f"   [ERROR] Не удалось распарсить {url}: {last_error}")
-    return None
+
+    if product is None:
+        sp.log(f"   [ERROR] Не удалось распарсить {url}: {last_error}")
+        return None, session
+
+    # Стойкая аномалия: размеры есть, таблицы наличия нет даже после повторов.
+    # Перелогиниваемся и читаем товар ещё раз — уже авторизованной сессией.
+    if anomalous and args is not None and _stock_relogin_allowed(state):
+        logged_in = is_logged_in(session)
+        sp.log(f"      [WARN] {url}: нет таблицы наличия при живых размерах "
+               f"(сессия {'авторизована — вероятно антибот/кэш' if logged_in else 'РАЗЛОГИНЕНА'}) "
+               f"— перелогиниваюсь")
+        new_session = create_authorized_session(args)
+        if new_session is not None:
+            session = new_session
+            _note_stock_relogin(state)
+            try:
+                soup2, err2 = _fetch_product_soup(session, url, cache_bust=True)
+                if soup2 is not None:
+                    product = _product_from_soup(soup2, url, category)
+                    anomalous = _stock_table_anomaly(soup2)
+                else:
+                    sp.log(f"      [WARN] {url}: повтор после перелогина не удался: {err2}")
+            except Exception as e:
+                sp.log(f"      [WARN] {url}: повтор после перелогина упал: {e}")
+        else:
+            sp.log(f"      [WARN] {url}: перелогиниться не удалось — товар без таблицы наличия")
+
+    if anomalous:
+        # Так и не получили таблицу. Товар НЕ распродан (размеры есть) — данные
+        # не отдали сессия/антибот. Из каталога не теряем, но помечаем для
+        # финального захода в конце прогона.
+        _remember_stock_anomaly(state, url, category, product.get('Артикул', ''))
+        sp.log(f"      [WARN] {url}: таблица наличия так и не получена — помечен для финального захода")
+
+    return product, session
+
+
+def _replace_product_in_acc(acc, url: str, product: dict):
+    """Подменяет товар (и его размеры/карту корзины) в накопителях прогона."""
+    key = url.rstrip('/')
+    sizes_data = product.pop('sizes_data', [])
+    cart_info = product.pop('cart_info', None)
+    for i, p in enumerate(acc['products']):
+        if p.get('Ссылка', '').rstrip('/') == key:
+            acc['products'][i] = product
+            break
+    else:
+        acc['products'].append(product)
+    # размеры: у товара без таблицы их не было; убираем возможные старые и пишем новые
+    acc['sizes'] = [s for s in acc['sizes'] if s.get('Ссылка', '').rstrip('/') != key]
+    for size_info in sizes_data:
+        size_info['Артикул'] = product['Артикул']
+        size_info['Категория'] = product['Категория']
+        size_info['Название'] = product['Название']
+        size_info['Бренд'] = product['Бренд']
+        size_info['Цена'] = product['Цена']
+        size_info['Ссылка'] = product['Ссылка']
+    acc['sizes'].extend(sizes_data)
+    if cart_info:
+        acc['cart_map'][key] = {
+            'itemId': cart_info['itemId'],
+            'article': product['Артикул'],
+            'sizes': cart_info['sizes'],
+        }
+
+
+def retry_stock_anomalies(session, anomalies, acc):
+    """
+    Финальный заход: перечитывает товары, пришедшие без таблицы наличия, свежей
+    сессией и подменяет их в накопителях. Возвращает список тех, что так и не
+    получили таблицу. args не передаём — сессия уже авторизована, перелогин
+    внутри parse_product не нужен.
+    """
+    still_bad = []
+    for a in anomalies:
+        url = a['url']
+        product, session = parse_product(session, url, a.get('category', ''), args=None, state=None)
+        if product is not None and product.get('Размеры и наличие') != 'Нет информации о наличии':
+            _replace_product_in_acc(acc, url, product)
+            sp.log(f"      [OK] {url}: таблица наличия получена после финального захода")
+        else:
+            still_bad.append(a)
+        time.sleep(PAGE_DELAY * random.uniform(*PAGE_DELAY_JITTER))
+    return still_bad
+
 
 
 # ================= ГЛАВНЫЙ ЦИКЛ =================
@@ -797,7 +939,8 @@ def main():
     all_sizes_data = []
     all_cart_map = {}
     acc = {'products': all_products, 'sizes': all_sizes_data, 'cart_map': all_cart_map}
-    state = {'consecutive_failures': 0, 'session_rebuilt': False, 'fatal_error': None}
+    state = {'consecutive_failures': 0, 'session_rebuilt': False, 'fatal_error': None,
+             'stock_relogins': 0, 'stock_anomalies': []}
     skipped_categories = []   # категории, где товаров нет (в т.ч. действительно пустые)
     retry_queue = []          # категории-«заглушки» — для финального захода
 
@@ -840,6 +983,35 @@ def main():
             if not run_category(cat_name, cat_url, is_retry=True):
                 break
             time.sleep(random.uniform(*CATEGORY_PAUSE))
+
+    # ---- Финальный заход: товары, пришедшие без таблицы наличия ----
+    # Таблица admin-sizes auth-gated: если сессия «протухла» или сайт отдавал
+    # публичные страницы (мягкий антибот), товар приходил без остатков и нулями.
+    # К концу прогона сайт обычно «отходит», а свежая сессия возвращает таблицу —
+    # перечитываем отставшие товары и подменяем их в данных.
+    anomalies = state.get('stock_anomalies', [])
+    if anomalies and not state['fatal_error']:
+        sp.log(f"\n[WARN] {len(anomalies)} товаров пришли без таблицы наличия "
+               f"(протухшая сессия/антибот): "
+               + ", ".join(a['article'] or a['url'] for a in anomalies[:10])
+               + (" …" if len(anomalies) > 10 else ""))
+        sp.log(f"[WARN] Финальный заход: пауза {STOCK_FINAL_COOLDOWN} с → новая сессия → перечитываем.")
+        time.sleep(STOCK_FINAL_COOLDOWN)
+        new_session = create_authorized_session(args)
+        if new_session is not None:
+            session = new_session
+        still_bad = retry_stock_anomalies(session, anomalies, acc)
+        state['stock_anomalies'] = still_bad
+        if still_bad:
+            sp.log(f"[WARN] После финального захода осталось {len(still_bad)} товаров без таблицы наличия: "
+                   + ", ".join(a['article'] or a['url'] for a in still_bad[:15])
+                   + (" …" if len(still_bad) > 15 else ""))
+            if len(still_bad) >= STOCK_ANOMALY_FATAL:
+                state['fatal_error'] = (f"{len(still_bad)} товаров без таблицы наличия даже после "
+                                        f"перелогина и финального захода — сайт не отдаёт остатки "
+                                        f"(сессия/антибот)")
+        else:
+            sp.log("[OK] Финальный заход вернул таблицу наличия всем отставшим товарам")
 
     fatal_error = state['fatal_error']
 
