@@ -398,12 +398,31 @@ export function parseBundledRows(
 
 // ============ Загрузка из public/data/ (fetch) ============
 
-async function fetchText(url: string): Promise<string> {
-  const response = await fetch(url, { cache: 'no-cache' });
-  if (!response.ok) {
-    throw new Error(`Не удалось загрузить ${url}: HTTP ${response.status}`);
+/**
+ * Загрузка текста с повторами: сайт отдаёт данные с Vercel, и на нестабильном
+ * канале (или при подмене ответа провайдером) файл может не доехать — тогда
+ * вместо «пустого дашборда» делаем ещё две попытки. 404 не повторяем: файла
+ * действительно нет (например, product-settings.json ещё не заведён).
+ */
+async function fetchText(url: string, attempts = 3): Promise<string> {
+  let lastError = '';
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const response = await fetch(url, { cache: 'no-cache' });
+      if (response.status === 404) {
+        throw new Error(`HTTP 404 (файла нет)`);
+      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const text = await response.text();
+      if (!text.trim()) throw new Error('пустой ответ');
+      return text;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+      if (attempt === attempts || lastError.includes('404')) break;
+      await new Promise((resolve) => setTimeout(resolve, 300 * attempt));
+    }
   }
-  return response.text();
+  throw new Error(`Не удалось загрузить ${url}: ${lastError}`);
 }
 
 interface ManifestEntry {

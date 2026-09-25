@@ -23,6 +23,7 @@ import {
   saveSettings,
   mergeSettings,
   parseSettings,
+  EMPTY_SETTINGS,
   type ProductSettings,
 } from '../utils/settings';
 import { EMPTY_STORE_PROFILE, type StoreProfile } from '../utils/storeRules';
@@ -112,6 +113,12 @@ interface DataContextType {
   setSaletennisSession: (value: string) => void;
   /** Импорт настроек из JSON-строки; false — файл невалиден */
   importSettings: (json: string) => boolean;
+  /** Почему не загрузились встроенные данные (сеть/сбой хостинга); null — всё хорошо */
+  loadError: string | null;
+  /** Повторить загрузку встроенных данных (кнопка «Повторить» на экране ошибки) */
+  retryLoad: () => void;
+  /** Сбросить локальные настройки устройства и вернуться к общим (из product-settings.json) */
+  resetLocalSettings: () => void;
   /** Товары, исчезнувшие из каталога (убраны с сайта = распроданы) */
   delistedProducts: DelistedProduct[];
   /** Глобальные фильтры (бренд / категория / пол / вид спорта) — все вкладки */
@@ -164,6 +171,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   // Стартовая загрузка: встроенные данные + история + журнал изменений + картинки,
   // затем — сохранённый в IndexedDB файл пользователя (если он свежее).
@@ -180,6 +189,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       let sizes: SizeSnapshot[] = [];
       let hot: HotProductConfig[] = [];
       let loadedCartMap: CartMap | null = null;
+      let failure: string | null = null;
       try {
         const dataset = await loadBundledDataset();
         bundled = dataset.data;
@@ -198,13 +208,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
             return merged;
           });
         }
-      } catch {
-        // Встроенных данных нет (например, сборка без public/data) — не критично
+      } catch (e) {
+        // Встроенных данных нет (сборка без public/data) ИЛИ они не доехали по сети.
+        // Во втором случае показываем ошибку с кнопкой «Повторить» — иначе
+        // пользователь видит пустой экран загрузки файлов и не понимает, что случилось.
+        failure = e instanceof Error ? e.message : String(e);
       }
 
       const saved = await loadParsedData().catch(() => null);
 
       if (cancelled) return;
+      setLoadError(failure);
 
       // Ручные правки брендов применяются и к встроенным данным, и к загруженным.
       // Правки, уже отражённые в данных (apply-edits в CSV или автоочистка бренда
@@ -231,10 +245,40 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setBrandOverrides(overrides);
       if (chosen) setDataState(applyBrandOverrides(chosen, overrides));
       setHydrated(true);
-    })();
+    })().catch((e) => {
+      // сюда попадаем только при неожиданной ошибке — экран не должен висеть в «Загрузка…»
+      if (!cancelled) {
+        setLoadError(e instanceof Error ? e.message : String(e));
+        setHydrated(true);
+      }
+    });
     return () => {
       cancelled = true;
     };
+  }, [reloadKey]);
+
+  const retryLoad = useCallback(() => {
+    setLoadError(null);
+    setHydrated(false);
+    setReloadKey((key) => key + 1);
+  }, []);
+
+  /** Сброс локальных правок устройства: остаются только общие настройки сайта */
+  const resetLocalSettings = useCallback(() => {
+    try {
+      localStorage.removeItem('saletennis-product-settings');
+    } catch {
+      /* приватный режим */
+    }
+    setSettingsState(EMPTY_SETTINGS);
+    void (async () => {
+      try {
+        const dataset = await loadBundledDataset();
+        if (dataset.settings) setSettingsState(dataset.settings);
+      } catch {
+        /* общие настройки недоступны — работаем с пустыми */
+      }
+    })();
   }, []);
 
   const setFilters = useCallback((patch: Partial<DataFilters>) => {
@@ -485,6 +529,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       saletennisSession,
       setSaletennisSession,
       importSettings,
+      loadError,
+      retryLoad,
+      resetLocalSettings,
       delistedProducts,
       filters,
       setFilters,
@@ -501,7 +548,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       settings, setSportOverride, setProductExcluded, setProductSupplied, setProductHot,
       storeProfile, setStoreProfile, setStoreMinimum, setProductBanned, updateStoreProfile,
       cartMap, saletennisSession,
-      setSaletennisSession, importSettings, delistedProducts,
+      setSaletennisSession, importSettings, loadError, retryLoad, resetLocalSettings,
+      delistedProducts,
       filters, setFilters, resetFilters, setData, clearData, restoreBundled,
     ]
   );

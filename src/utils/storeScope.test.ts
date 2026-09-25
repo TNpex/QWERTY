@@ -187,6 +187,18 @@ describe('доли и подписи', () => {
     expect(shareLabel(86, 100)).toBe('86 из 100');
   });
 
+  it('РЕГРЕССИЯ: пустая область («Вся сеть (не выбран)») — это вся сеть, а не нули', () => {
+    // '' приходило из сайдбара, когда «Мой магазин» не выбран: область считалась
+    // магазином с пустым названием, и весь «Обзор» показывал нули
+    const empty = computeOverview(DATA, { scope: '' });
+    const all = computeOverview(DATA);
+    expect(empty.positions).toEqual(all.positions);
+    expect(empty.stock).toBe(all.stock);
+    expect(empty.products).toBe(all.products);
+    expect(empty.scopeLabel).toBe('🌐 Вся сеть');
+    expect(computeOverview(DATA, { scope: undefined }).positions).toEqual(all.positions);
+  });
+
   it('ALL_SCOPE — это «вся сеть»', () => {
     expect(ALL_SCOPE).toBe('all');
     expect(computeOverview(DATA, { scope: ALL_SCOPE }).scopeLabel).toBe('🌐 Вся сеть');

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import {
   Search,
   ChevronDown,
@@ -10,7 +10,16 @@ import {
   List,
 } from 'lucide-react';
 import { useFilteredData, useIsHot } from '../hooks/useAnalytics';
+import { useStoreScope } from '../hooks/useStoreScope';
 import { useData } from '../context/DataContext';
+import {
+  countAvailability,
+  matchesAvailability,
+  stockStatus,
+  STOCK_STATUS_HINTS,
+  type AvailabilityFilter,
+} from '../utils/availability';
+import { ALL_SCOPE } from '../utils/storeScope';
 import { compareSizes } from '../utils/sizes';
 import { isWarehouse, shortStoreLabel } from '../utils/storeGroups';
 import { sportOf, productSettingsKey } from '../utils/sport';
@@ -28,7 +37,6 @@ const GHOST_LIMIT = 60; // сколько «убранных с сайта» т�
 const VIEW_MODE_KEY = 'st-inventory-view';
 
 type ViewMode = 'table' | 'cards';
-type Availability = 'all' | 'inStock' | 'soldOut';
 
 /** Номера страниц для пагинации: 1 … 4 [5] 6 … 22 */
 function pageList(current: number, total: number): (number | '…')[] {
@@ -63,11 +71,14 @@ export function InventoryTable() {
   // Данные уже отфильтрованы глобальной панелью (бренд / категория / пол / подтип / спорт)
   const data = useFilteredData();
   const isHot = useIsHot();
-  const { settings, delistedProducts, filters, storeProfile } = useData();
+  const { settings, delistedProducts, filters } = useData();
+  // Магазин — ОБЩАЯ область для всех вкладок (живёт в адресе ?scope=…):
+  // выбрали точку в «Обзоре» → «Инвентарь» открыт на ней же, и наоборот
+  const { storeId: scopeStoreId, setScope } = useStoreScope();
+  const selectedStore = scopeStoreId ?? 'all';
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedStore, setSelectedStore] = useState<string>('all');
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
-  const [availability, setAvailability] = useState<Availability>('all');
+  const [availability, setAvailability] = useState<AvailabilityFilter>('all');
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     try {
       return localStorage.getItem(VIEW_MODE_KEY) === 'cards' ? 'cards' : 'table';
@@ -93,16 +104,6 @@ export function InventoryTable() {
       /* приватный режим */
     }
   }, [viewMode]);
-
-  // Профиль «Мой магазин»: при выборе предустанавливаем фильтр магазина
-  const lastProfile = useRef<string | null>(null);
-  useEffect(() => {
-    if (lastProfile.current === storeProfile) return;
-    lastProfile.current = storeProfile;
-    if (!storeProfile || !data) return;
-    const store = data.stores.find((st) => st.name === storeProfile);
-    if (store) setSelectedStore(store.id);
-  }, [storeProfile, data]);
 
   const stores = useMemo(() => data?.stores ?? [], [data]);
   const products = useMemo(() => data?.products ?? [], [data]);
@@ -145,6 +146,23 @@ export function InventoryTable() {
 
   const excludedKeys = settings.excludedProducts;
 
+  /**
+   * Статус наличия товара в текущей области:
+   * soldOut — нет ни одной штуки в сети, missing — нет только в выбранном
+   * магазине (на других точках есть), inStock — есть.
+   */
+  const statusOf = useCallback(
+    (productId: string) => {
+      const network = indexes.productTotals.get(productId) ?? 0;
+      const store =
+        selectedStore === 'all'
+          ? null
+          : indexes.storeTotals.get(`${productId}|${selectedStore}`)?.total ?? 0;
+      return { status: stockStatus(network, store), network, store };
+    },
+    [indexes, selectedStore]
+  );
+
   const filteredProducts = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     const storeScoped = selectedStore !== 'all';
@@ -156,20 +174,19 @@ export function InventoryTable() {
         (p.article ?? '').toLowerCase().includes(term);
       // Выбран магазин — показываем только ЕГО инвентарь (товары, которые он возит)
       if (storeScoped && !indexes.storeTotals.has(`${p.id}|${selectedStore}`)) return false;
-      const total = storeScoped
-        ? indexes.storeTotals.get(`${p.id}|${selectedStore}`)?.total ?? 0
-        : indexes.productTotals.get(p.id) ?? 0;
-      const matchesAvailability =
-        availability === 'all' ||
-        (availability === 'inStock' ? total > 0 : total === 0);
-      return matchesSearch && matchesAvailability;
+      return matchesSearch && matchesAvailability(statusOf(p.id).status, availability);
     });
-  }, [products, searchTerm, availability, indexes, selectedStore]);
+  }, [products, searchTerm, availability, indexes, selectedStore, statusOf]);
 
   // Товары, убранные с сайта (из истории снимков): показываются в «Все» и
   // «Распроданные»; поиск и глобальные фильтры к ним тоже применяются.
   const filteredDelisted = useMemo(() => {
-    if (availability === 'inStock' || selectedStore !== 'all' || delistedProducts.length === 0) {
+    if (
+      availability === 'inStock' ||
+      availability === 'missing' ||
+      selectedStore !== 'all' ||
+      delistedProducts.length === 0
+    ) {
       return [];
     }
     const term = searchTerm.trim().toLowerCase();
@@ -197,15 +214,8 @@ export function InventoryTable() {
     const list = storeScoped
       ? products.filter((p) => indexes.storeTotals.has(`${p.id}|${selectedStore}`))
       : products;
-    let soldOut = 0;
-    for (const p of list) {
-      const total = storeScoped
-        ? indexes.storeTotals.get(`${p.id}|${selectedStore}`)?.total ?? 0
-        : indexes.productTotals.get(p.id) ?? 0;
-      if (total === 0) soldOut++;
-    }
-    return { carried: list.length, soldOut, inStock: list.length - soldOut };
-  }, [products, indexes, selectedStore]);
+    return countAvailability(list.map((p) => statusOf(p.id).status));
+  }, [products, indexes, selectedStore, statusOf]);
   const selectedStoreName = stores.find((st) => st.id === selectedStore)?.name ?? '';
 
   const totalPages = Math.max(1, Math.ceil(filteredProducts.length / pageSize));
@@ -249,12 +259,16 @@ export function InventoryTable() {
           <select
             value={selectedStore}
             onChange={(e) => {
-              setSelectedStore(e.target.value);
+              const id = e.target.value;
+              const name = id === 'all' ? ALL_SCOPE : stores.find((st) => st.id === id)?.name ?? '';
+              // область общая для всех вкладок и сохраняется в адресе страницы
+              setScope(name || ALL_SCOPE);
               setPage(1);
             }}
             className="px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm appearance-none bg-white cursor-pointer"
+            title="Магазин — общая область для «Обзора» и «Инвентаря»: выбор сохраняется в адресе страницы и переносится между вкладками"
           >
-            <option value="all">Все магазины</option>
+            <option value="all">🌐 Все магазины (вся сеть)</option>
             {stores.map((store) => (
               <option key={store.id} value={store.id}>
                 {isWarehouse(store.name) ? '📦 ' : ''}
@@ -274,7 +288,7 @@ export function InventoryTable() {
           из{' '}
           {selectedStore === 'all'
             ? products.length + delistedProducts.length
-            : `${scopedBase.carried} (столько возит выбранный магазин)`}
+            : `${scopedBase.all} (столько возит выбранный магазин)`}
           {filteredDelisted.length > 0 && (
             <span className="text-gray-400"> (вкл. {filteredDelisted.length} убранных с сайта)</span>
           )}
@@ -286,10 +300,17 @@ export function InventoryTable() {
               [
                 [
                   'all',
-                  `Все (${scopedBase.carried + (selectedStore === 'all' ? delistedProducts.length : 0)})`,
+                  `Все (${scopedBase.all + (selectedStore === 'all' ? delistedProducts.length : 0)})`,
                   'bg-gray-700',
                 ],
                 ['inStock', `В наличии (${scopedBase.inStock})`, 'bg-emerald-500'],
+                ...(selectedStore === 'all'
+                  ? []
+                  : [[
+                      'missing',
+                      `Отсутствует в магазине (${scopedBase.missing})`,
+                      'bg-amber-500',
+                    ] as [AvailabilityFilter, string, string]]),
                 [
                   'soldOut',
                   `Распроданные (${
@@ -297,7 +318,7 @@ export function InventoryTable() {
                   })`,
                   'bg-red-500',
                 ],
-              ] as [Availability, string, string][]
+              ] as [AvailabilityFilter, string, string][]
             ).map(([mode, label, activeBg]) => (
               <button
                 key={mode}
@@ -312,6 +333,7 @@ export function InventoryTable() {
                 }`}
               >
                 {mode === 'soldOut' && <Flame className="w-3 h-3 inline mr-1" />}
+                {mode === 'missing' && <PackageSearch className="w-3 h-3 inline mr-1" />}
                 {label}
               </button>
             ))}
@@ -340,11 +362,12 @@ export function InventoryTable() {
         {viewMode === 'cards' ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
             {visibleProducts.map((product) => {
-              const totalStock =
-                selectedStore === 'all'
-                  ? indexes.productTotals.get(product.id) ?? 0
-                  : indexes.storeTotals.get(`${product.id}|${selectedStore}`)?.total ?? 0;
-              const isSoldOut = totalStock === 0;
+              const { status, network } = statusOf(product.id);
+              const totalStock = selectedStore === 'all'
+                ? network
+                : indexes.storeTotals.get(`${product.id}|${selectedStore}`)?.total ?? 0;
+              const isSoldOut = status === 'soldOut';
+              const isMissing = status === 'missing';
               const sport = sportOf(product, settings.sportOverrides);
               const excluded = Boolean(excludedKeys[productSettingsKey(product)]);
               const hot = isHot(product);
@@ -359,8 +382,19 @@ export function InventoryTable() {
                   <div className="relative h-32 bg-gradient-to-br from-gray-50 to-blue-50 flex items-center justify-center overflow-hidden">
                     <ProductImage product={product} alt={product.name} />
                     {isSoldOut && (
-                      <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-red-500 text-white text-[9px] font-bold uppercase tracking-wide">
+                      <span
+                        className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-red-500 text-white text-[9px] font-bold uppercase tracking-wide"
+                        title={STOCK_STATUS_HINTS.soldOut}
+                      >
                         Распродано
+                      </span>
+                    )}
+                    {isMissing && (
+                      <span
+                        className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-amber-500 text-white text-[9px] font-bold uppercase tracking-wide"
+                        title={`${STOCK_STATUS_HINTS.missing} — в сети ${network} шт.`}
+                      >
+                        Отсутствует
                       </span>
                     )}
                     {excluded && (
@@ -484,11 +518,12 @@ export function InventoryTable() {
         {/* Product Rows */}
         {visibleProducts.map((product) => {
           const isExpanded = expandedProduct === product.id;
-          const totalStock =
-            selectedStore === 'all'
-              ? indexes.productTotals.get(product.id) ?? 0
-              : indexes.storeTotals.get(`${product.id}|${selectedStore}`)?.total ?? 0;
-          const isSoldOut = totalStock === 0;
+          const { status, network } = statusOf(product.id);
+          const totalStock = selectedStore === 'all'
+            ? network
+            : indexes.storeTotals.get(`${product.id}|${selectedStore}`)?.total ?? 0;
+          const isSoldOut = status === 'soldOut';
+          const isMissing = status === 'missing';
           const sizes = [...(indexes.sizesByProduct.get(product.id) ?? [])].sort(compareSizes);
 
           return (
@@ -551,8 +586,19 @@ export function InventoryTable() {
                         </span>
                       )}
                       {isSoldOut && (
-                        <span className="ml-1.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-bold uppercase tracking-wide align-middle">
+                        <span
+                          className="ml-1.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-bold uppercase tracking-wide align-middle"
+                          title={STOCK_STATUS_HINTS.soldOut}
+                        >
                           <Flame className="w-2.5 h-2.5" /> Распродано
+                        </span>
+                      )}
+                      {isMissing && (
+                        <span
+                          className="ml-1.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-bold uppercase tracking-wide align-middle"
+                          title={`${STOCK_STATUS_HINTS.missing} — в сети ${network} шт.`}
+                        >
+                          <PackageSearch className="w-2.5 h-2.5" /> Отсутствует
                         </span>
                       )}
                     </div>
@@ -692,6 +738,7 @@ export function InventoryTable() {
 
         {currentPage === totalPages &&
           availability !== 'inStock' &&
+          availability !== 'missing' &&
           filteredDelisted.slice(0, GHOST_LIMIT).map((g) => {
             const sport = sportOf(
               { article: g.article, link: g.link, name: g.name, category: g.category },

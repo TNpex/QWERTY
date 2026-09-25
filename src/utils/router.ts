@@ -151,11 +151,15 @@ export function useRoute(): Route {
   return route;
 }
 
-/** Переход на вкладку (для кнопок сайдбара и карточек «Обзора») */
+/**
+ * Переход на вкладку (для кнопок сайдбара и карточек «Обзора»).
+ * Выбранный магазин (?scope=…) переносится между вкладками: выбрали точку
+ * в «Обзоре» → перешли в «Инвентарь» → он открыт на ней же.
+ */
 export function useNavigateTab(): (tab: TabId) => void {
   const route = useRoute();
   return useCallback(
-    (tab: TabId) => navigate({ tab, ...(route.scope && tab === 'dashboard' ? { scope: route.scope } : {}) }),
+    (tab: TabId) => navigate({ tab, ...(route.scope ? { scope: route.scope } : {}) }),
     [route.scope]
   );
 }

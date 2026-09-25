@@ -16,7 +16,8 @@
     "images": "node scripts/sync-images.mjs",
     "compress-images": "node scripts/compress-images.mjs",
     "scrape-images": "node scripts/scrape-images.mjs",
-    "apply-edits": "node scripts/apply-brand-edits.mjs"
+    "apply-edits": "node scripts/apply-brand-edits.mjs",
+    "merge-settings": "node scripts/merge-settings.mjs"
   },
   "dependencies": {
     "@vercel/functions": "^3.9.9",
@@ -29,6 +30,7 @@
   "devDependencies": {
     "@eslint/js": "^9.17.0",
     "@tailwindcss/vite": "^4.1.7",
+    "@types/node": "^26.6.2",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.3.4",

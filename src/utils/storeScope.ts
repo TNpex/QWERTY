@@ -117,7 +117,9 @@ function inStoreAssortment(
 
 export function computeOverview(data: ParsedData, options: OverviewOptions = {}): OverviewMetrics {
   const settings = options.settings ?? EMPTY_SETTINGS;
-  const scope = options.scope ?? ALL_SCOPE;
+  // Пустое/непереданное значение области = «вся сеть» (иначе всё посчиталось бы
+  // по магазину с пустым названием и дало нули)
+  const scope = options.scope || ALL_SCOPE;
   const productById = new Map(data.products.map((p) => [p.id, p]));
   const storeById = new Map(data.stores.map((s) => [s.id, s]));
 

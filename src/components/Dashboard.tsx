@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo } from 'react';
 import {
   AlertTriangle,
   ArrowDownToLine,
@@ -34,10 +34,9 @@ import {
   ALL_SCOPE,
   sharePercent,
   totalsRow,
-  type OverviewScope,
   type StoreOverviewRow,
 } from '../utils/storeScope';
-import { navigate, useRoute } from '../utils/router';
+import { useStoreScope } from '../hooks/useStoreScope';
 import type { TabId } from '../types';
 
 /**
@@ -161,29 +160,10 @@ function money(value: number): string {
 
 export function Dashboard({ onNavigate }: { onNavigate?: (tab: TabId) => void }) {
   const { data, storeProfile, settings } = useData();
-  const route = useRoute();
-  // Область обзора живёт в адресе (/?scope=Уфа) — ссылку можно скопировать,
-  // перезагрузка страницы оставляет выбранный магазин
-  const [scope, setScopeState] = useState<OverviewScope>(route.scope ?? storeProfile ?? ALL_SCOPE);
-
-  const setScope = useCallback((next: OverviewScope) => {
-    setScopeState(next);
-    navigate(
-      next === ALL_SCOPE ? { tab: 'dashboard' } : { tab: 'dashboard', scope: next },
-      { replace: true }
-    );
-  }, []);
-
-  // «Мой магазин» сменили в сайдбаре — обзор переключается на него.
-  // При первом рендере приоритет у адреса: открытая по ссылке область не затирается.
-  const firstRun = useRef(true);
-  useEffect(() => {
-    if (firstRun.current) {
-      firstRun.current = false;
-      return;
-    }
-    if (storeProfile) setScope(storeProfile);
-  }, [storeProfile, setScope]);
+  // Область обзора общая для всех вкладок и живёт в адресе (?scope=Уфа):
+  // ссылку можно скопировать, перезагрузка оставляет выбранный магазин,
+  // а переход в «Инвентарь» открывает его на той же точке
+  const { scope, setScope } = useStoreScope();
 
   const overview = useOverview(scope);
   const transfers = useTransferRecommendations();

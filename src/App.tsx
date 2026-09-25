@@ -36,6 +36,8 @@ import { SalesHistory } from './components/SalesHistory';
 import { FilterBar } from './components/FilterBar';
 import { StoreProfiles } from './components/StoreProfiles';
 import { useRoute, useNavigateTab } from './utils/router';
+import { useStoreScope } from './hooks/useStoreScope';
+import { ALL_SCOPE } from './utils/storeScope';
 import type { TabId } from './types';
 
 type Tab = TabId;
@@ -113,7 +115,11 @@ function AppContent() {
     importSettings,
     storeProfile,
     setStoreProfile,
+    loadError,
+    retryLoad,
+    resetLocalSettings,
   } = useData();
+  const { setScope } = useStoreScope();
   // Каждая вкладка — своя страница: адрес меняется, работают «Назад»/«Вперёд»
   const route = useRoute();
   const activeTab: Tab = route.tab;
@@ -141,9 +147,36 @@ function AppContent() {
     );
   }
 
-  // Если данные не загружены — показываем экран загрузки
+  // Если данные не загружены — показываем причину и экран загрузки файла
   if (!data) {
-    return <FileUpload />;
+    return (
+      <div>
+        {loadError && (
+          <div className="px-4 pt-4">
+            <div className="max-w-3xl mx-auto bg-red-50 border border-red-200 rounded-xl p-5">
+              <div className="text-sm font-semibold text-red-800">
+                ⚠ Не удалось загрузить данные сайта
+              </div>
+              <div className="mt-1 text-xs text-red-700 break-words">{loadError}</div>
+              <p className="mt-2 text-[11px] text-red-600 leading-relaxed">
+                Обычно это сбой сети или блокировка хостинга у провайдера: попробуйте
+                <b> мобильную сеть</b> (или раздачу с телефона), включите в браузере
+                <b> защищённый DNS</b> (Настройки → Конфиденциальность → «Использовать защищённый
+                DNS» → Cloudflare) и нажмите «Повторить». Данные сайта при этом никуда не деваются —
+                они лежат в репозитории и отдаются при каждом открытии.
+              </p>
+              <button
+                onClick={retryLoad}
+                className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-500 transition-colors"
+              >
+                ↻ Повторить загрузку
+              </button>
+            </div>
+          </div>
+        )}
+        <FileUpload />
+      </div>
+    );
   }
 
   const tabs = [
@@ -233,9 +266,14 @@ function AppContent() {
             </label>
             <select
               value={storeProfile}
-              onChange={(e) => setStoreProfile(e.target.value)}
+              onChange={(e) => {
+                const name = e.target.value;
+                setStoreProfile(name);
+                // область общая для всех вкладок и видна в адресе (?scope=…)
+                setScope(name || ALL_SCOPE);
+              }}
               className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white cursor-pointer focus:ring-2 focus:ring-blue-500"
-              title="«Перемещения» покажут только ваш магазин (входящие/исходящие), «Инвентарь» откроется на нём. Профиль хранится только на этом устройстве."
+              title="«Обзор» и «Инвентарь» откроются на этом магазине, «Перемещения» покажут только ваши входящие/исходящие. Выбор виден в адресе страницы (?scope=…), поэтому ссылку можно скопировать. Сам профиль «Мой магазин» хранится только на этом устройстве."
             >
               <option value="">Вся сеть (не выбран)</option>
               {data.stores.map((store) => (
@@ -302,6 +340,25 @@ function AppContent() {
               Настройки товаров: {settingsTotal} — скачать JSON
             </button>
           )}
+          <button
+            onClick={() => {
+              if (
+                window.confirm(
+                  'Сбросить ЛОКАЛЬНЫЕ настройки этого устройства и вернуться к общим настройкам сайта (public/data/product-settings.json)?\n\n' +
+                    'Будут убраны ваши правки: ориентации товаров, «Поставляется», ходовые, исключения, минимумы и профили магазинов, заданные в этом браузере.\n' +
+                    'Общие настройки и данные остатков не пострадают.'
+                )
+              ) {
+                resetLocalSettings();
+                setSettingsMsg('✓ Локальные правки сброшены — действуют общие настройки сайта');
+                window.setTimeout(() => setSettingsMsg(null), 5000);
+              }
+            }}
+            className="w-full mb-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-white text-gray-400 border border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
+            title="Убрать локальные правки этого браузера и снова использовать только общие настройки сайта (нужно, если вы экспериментировали и локальные значения перекрывают общие)"
+          >
+            ↺ Сбросить локальные настройки
+          </button>
           <button
             onClick={() => settingsFileRef.current?.click()}
             className="w-full mb-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-white text-gray-500 border border-gray-200 hover:bg-gray-50 transition-colors"
