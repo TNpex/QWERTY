@@ -17,7 +17,28 @@
         height: 100%;
         background-color: #f9fafb;
       }
+      html.dark,
+      html.dark body {
+        background-color: #0f141c;
+      }
     </style>
+    <script>
+      // Тема — до первой отрисовки, чтобы не было белой вспышки
+      (function () {
+        try {
+          var saved = localStorage.getItem('st-theme');
+          var dark =
+            saved === 'dark' ||
+            (!saved && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) {
+            document.documentElement.classList.add('dark');
+            document.documentElement.style.colorScheme = 'dark';
+          }
+        } catch (e) {
+          /* приватный режим — остаётся светлая тема */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

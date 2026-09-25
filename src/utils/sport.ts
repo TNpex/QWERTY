@@ -25,12 +25,25 @@ export const SPORT_ICONS: Record<Sport, string> = {
   other: '🎽',
 };
 
-/** Категории, где товар по умолчанию теннисный (основа ассортимента сети) */
-const TENNIS_BY_DEFAULT_MARKERS = ['одежда', 'обувь'];
+/**
+ * Универсальные товарные группы: одежда, обувь и носки подходят и теннисистам,
+ * и падел-игрокам, поэтому по умолчанию получают ориентацию «Теннис/Падел»,
+ * а не «Теннис».
+ *
+ * Почему это важно: магазин с профилем «🏓 Только падел» не получает товары
+ * чужой ориентации — пока одежда и обувь считались теннисными, такая точка
+ * теряла весь ассортимент одежды (830 позиций из 850). Ориентация «Теннис/Падел»
+ * подходит любой точке (см. assortmentBlock в storeRules.ts).
+ *
+ * Явный падел в названии/категории («Кроссовки Joma Spin Padel») по-прежнему
+ * даёт «Падел», а ручная правка в карточке товара важнее автоопределения.
+ */
+const UNIVERSAL_MARKERS = ['одежда', 'обувь', 'носк', 'socks'];
 
 /**
  * Автоопределение ориентации по категории и названию.
- * Порядок правил: падел → сквош/прочее → явный теннис → одежда/обувь = теннис → прочее.
+ * Порядок правил: явный падел → сквош/прочее → одежда/обувь/носки = универсальные
+ * → явный теннис → прочее.
  */
 export function detectSport(category: string, name: string): Sport {
   const cat = (category ?? '').toLowerCase();
@@ -39,9 +52,9 @@ export function detectSport(category: string, name: string): Sport {
   if (cat.includes('падел') || n.includes('падел') || n.includes('padel')) return 'padel';
   // Сквош — отдельный вид спорта, не теннис и не падел
   if (cat.includes('сквош') || n.includes('сквош') || n.includes('squash')) return 'other';
+  // Одежда, обувь и носки — универсальные: в них играют и теннис, и падел
+  if (UNIVERSAL_MARKERS.some((m) => cat.includes(m) || n.includes(m))) return 'other';
   if (cat.includes('теннис') || n.includes('теннис') || n.includes('tennis')) return 'tennis';
-  // Одежда и обувь сети по умолчанию теннисные (падел-вещи помечены в названии)
-  if (TENNIS_BY_DEFAULT_MARKERS.some((m) => cat.includes(m))) return 'tennis';
   return 'other';
 }
 

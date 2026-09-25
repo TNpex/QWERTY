@@ -142,17 +142,33 @@ describe('🚫 запрет товара в магазине', () => {
 describe('⛔ ассортимент точки: вид спорта и категории', () => {
   const padelOnly = settingsWith({ Уфа: { sport: 'padel' } });
 
-  it('магазин «только падел» не получает теннисные товары', () => {
-    expect(storeSellsProduct(padelOnly, 'Уфа', TENNIS_SHOE)).toBe(false);
+  it('магазин «только падел» не получает теннисный инвентарь', () => {
     expect(storeSellsProduct(padelOnly, 'Уфа', TENNIS_STRING)).toBe(false);
-    expect(storeSellsProduct(padelOnly, 'Уфа', PADEL_RACKET)).toBe(true);
-    expect(assortmentBlock(padelOnly, 'Уфа', TENNIS_SHOE)?.label).toBe(
+    expect(assortmentBlock(padelOnly, 'Уфа', TENNIS_STRING)?.label).toBe(
       '⛔ магазин не продаёт «Теннис»'
     );
+    expect(storeSellsProduct(padelOnly, 'Уфа', PADEL_RACKET)).toBe(true);
+  });
+
+  it('одежда и обувь универсальны — падел-точка их получает', () => {
+    // обувь и одежда носят ориентацию «Теннис/Падел», поэтому подходят любой точке:
+    // иначе магазин «только падел» терял бы весь ассортимент одежды
+    expect(storeSellsProduct(padelOnly, 'Уфа', TENNIS_SHOE)).toBe(true);
+    expect(assortmentBlock(padelOnly, 'Уфа', TENNIS_SHOE)).toBeNull();
   });
 
   it('универсальные товары («Теннис/Падел», прочее) подходят любой точке', () => {
     expect(storeSellsProduct(padelOnly, 'Уфа', UNIVERSAL)).toBe(true);
+  });
+
+  it('ручная ориентация «Теннис» возвращает товар под правило вида спорта', () => {
+    const manual = {
+      ...padelOnly,
+      sportOverrides: { 'nk-1': 'tennis' as const },
+    };
+    // кроссовки помечены теннисными вручную → падел-точка их не получает
+    expect(storeSellsProduct(manual, 'Уфа', TENNIS_SHOE)).toBe(false);
+    expect(storeRuleView(manual, 'Уфа', TENNIS_SHOE).status).toBe('not-sold');
   });
 
   it('скрытая категория исключает товар, остальные не трогает', () => {
@@ -225,7 +241,7 @@ describe('статусы в строке магазина (карточка то
 
   it('⛔ магазин не продаёт «Теннис»', () => {
     const settings = settingsWith({ Уфа: { sport: 'padel' } });
-    const view = storeRuleView(settings, 'Уфа', TENNIS_SHOE);
+    const view = storeRuleView(settings, 'Уфа', TENNIS_STRING);
     expect(view.status).toBe('not-sold');
     expect(view.label).toBe('магазин не продаёт «Теннис»');
     expect(storeRuleText(view)).toBe('⛔ магазин не продаёт «Теннис»');
@@ -255,6 +271,7 @@ describe('статусы в строке магазина (карточка то
     expect(storeRuleView(settings, 'Уфа', TENNIS_SHOE).status).toBe('banned');
     expect(storeRuleView(settings, 'Уфа', TENNIS_STRING).status).toBe('not-sold');
     expect(storeRuleView(settings, 'Уфа', PADEL_RACKET).status).toBe('transfers-off');
+    expect(storeRuleView(settings, 'Уфа', UNIVERSAL).status).toBe('transfers-off');
   });
 
   it('storeRuleViews отдаёт строку на каждый магазин', () => {
@@ -272,8 +289,9 @@ describe('сводка профилей (плашка в «Перемещени�
     });
     const summary = summarizeStoreProfiles(PRODUCTS, settings, STORES);
     const parina = summary.find((s) => s.storeName === 'Екатеринбург (Парина)')!;
-    expect(parina.excluded.sport).toBe(2); // кроссовки и струны — теннис
-    expect(parina.excluded.total).toBe(2);
+    // теннисными остались только струны: обувь и аксессуары — «Теннис/Падел»
+    expect(parina.excluded.sport).toBe(1);
+    expect(parina.excluded.total).toBe(1);
     expect(parina.products).toBe(4);
 
     const ufa = summary.find((s) => s.storeName === 'Уфа')!;

@@ -145,10 +145,11 @@ describe('computeOverview: область магазина', () => {
         },
       },
     });
-    // теннисные кроссовки и мячи скрыты профилем, осталась падел-ракетка
-    expect(scoped.positions).toEqual({ carried: 1, inStock: 0, outOfStock: 1 });
-    expect(scoped.hiddenByProfile).toBe(2);
-    expect(scoped.products).toBe(1);
+    // профиль «только падел» скрывает теннисные мячи; кроссовки остались —
+    // обувь и одежда универсальны («Теннис/Падел») и подходят падел-точке
+    expect(scoped.positions).toEqual({ carried: 2, inStock: 0, outOfStock: 2 });
+    expect(scoped.hiddenByProfile).toBe(1);
+    expect(scoped.products).toBe(2);
   });
 
   it('скрытые категории профиля тоже убирают позиции из обзора', () => {

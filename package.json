@@ -17,7 +17,8 @@
     "compress-images": "node scripts/compress-images.mjs",
     "scrape-images": "node scripts/scrape-images.mjs",
     "apply-edits": "node scripts/apply-brand-edits.mjs",
-    "merge-settings": "node scripts/merge-settings.mjs"
+    "merge-settings": "node scripts/merge-settings.mjs",
+    "build-dark": "node scripts/build-dark-css.mjs"
   },
   "dependencies": {
     "@vercel/functions": "^3.9.9",

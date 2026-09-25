@@ -1,0 +1,181 @@
+/*
+ * Тёмная тема — СГЕНЕРИРОВАНО АВТОМАТИЧЕСКИ, руками не править.
+ * Команда: npm run build-dark  (scripts/build-dark-css.mjs)
+ *
+ * Слой переопределений цветовых утилит Tailwind для `.dark` на <html>.
+ * Классов в проекте: 160. Пересчёт — по HSL-правилам из шапки скрипта.
+ */
+
+html.dark {
+  color-scheme: dark;
+  background-color: #0f141c;
+}
+
+html.dark body {
+  background-color: #0f141c;
+  color: #e5e9f0;
+}
+
+/* Скроллбары */
+html.dark ::-webkit-scrollbar-track { background: #151b25; }
+html.dark ::-webkit-scrollbar-thumb { background: #334054; }
+html.dark ::-webkit-scrollbar-thumb:hover { background: #46586f; }
+
+html.dark .bg-amber-100 { background-color: hsl(38 92% 18%); }
+html.dark .bg-amber-50 { background-color: hsl(38 92% 13%); }
+html.dark .bg-amber-500 { background-color: hsl(38 92% 44%); }
+html.dark .bg-blue-100 { background-color: hsl(217 91% 18%); }
+html.dark .bg-blue-50 { background-color: hsl(217 91% 13%); }
+html.dark .bg-blue-50\/30 { background-color: hsl(217 91% 13% / 0.3); }
+html.dark .bg-blue-50\/50 { background-color: hsl(217 91% 13% / 0.5); }
+html.dark .bg-blue-500 { background-color: hsl(217 91% 44%); }
+html.dark .bg-blue-600 { background-color: hsl(217 91% 39%); }
+html.dark .bg-blue-700 { background-color: hsl(217 91% 33%); }
+html.dark .bg-emerald-100 { background-color: hsl(160 84% 18%); }
+html.dark .bg-emerald-200 { background-color: hsl(160 84% 24%); }
+html.dark .bg-emerald-400 { background-color: hsl(160 84% 46%); }
+html.dark .bg-emerald-50 { background-color: hsl(160 84% 13%); }
+html.dark .bg-emerald-50\/60 { background-color: hsl(160 84% 13% / 0.6); }
+html.dark .bg-emerald-500 { background-color: hsl(160 84% 44%); }
+html.dark .bg-emerald-600 { background-color: hsl(160 84% 39%); }
+html.dark .bg-emerald-700 { background-color: hsl(160 84% 33%); }
+html.dark .bg-gray-100 { background-color: hsl(220 24% 18%); }
+html.dark .bg-gray-200 { background-color: hsl(220 22% 24%); }
+html.dark .bg-gray-50 { background-color: hsl(220 26% 13%); }
+html.dark .bg-gray-50\/50 { background-color: hsl(220 26% 13% / 0.5); }
+html.dark .bg-gray-50\/60 { background-color: hsl(220 26% 13% / 0.6); }
+html.dark .bg-gray-50\/70 { background-color: hsl(220 26% 13% / 0.7); }
+html.dark .bg-gray-50\/80 { background-color: hsl(220 26% 13% / 0.8); }
+html.dark .bg-gray-500 { background-color: hsl(220 18% 44%); }
+html.dark .bg-gray-600 { background-color: hsl(220 18% 39%); }
+html.dark .bg-gray-700 { background-color: hsl(220 18% 33%); }
+html.dark .bg-gray-900 { background-color: hsl(220 25% 13%); }
+html.dark .bg-green-100 { background-color: hsl(142 71% 18%); }
+html.dark .bg-indigo-50 { background-color: hsl(239 84% 13%); }
+html.dark .bg-indigo-50\/50 { background-color: hsl(239 84% 13% / 0.5); }
+html.dark .bg-indigo-50\/60 { background-color: hsl(239 84% 13% / 0.6); }
+html.dark .bg-indigo-600 { background-color: hsl(239 84% 39%); }
+html.dark .bg-orange-100 { background-color: hsl(25 95% 18%); }
+html.dark .bg-orange-50 { background-color: hsl(25 95% 13%); }
+html.dark .bg-orange-50\/50 { background-color: hsl(25 95% 13% / 0.5); }
+html.dark .bg-orange-500 { background-color: hsl(25 95% 44%); }
+html.dark .bg-purple-50 { background-color: hsl(271 91% 13%); }
+html.dark .bg-purple-500 { background-color: hsl(271 91% 44%); }
+html.dark .bg-red-100 { background-color: hsl(0 72% 18%); }
+html.dark .bg-red-50 { background-color: hsl(0 72% 13%); }
+html.dark .bg-red-50\/50 { background-color: hsl(0 72% 13% / 0.5); }
+html.dark .bg-red-500 { background-color: hsl(0 72% 44%); }
+html.dark .bg-red-600 { background-color: hsl(0 72% 39%); }
+html.dark .bg-rose-100 { background-color: hsl(350 89% 18%); }
+html.dark .bg-rose-50 { background-color: hsl(350 89% 13%); }
+html.dark .bg-rose-500 { background-color: hsl(350 89% 44%); }
+html.dark .bg-rose-600 { background-color: hsl(350 89% 39%); }
+html.dark .bg-sky-100 { background-color: hsl(199 89% 18%); }
+html.dark .bg-sky-50 { background-color: hsl(199 89% 13%); }
+html.dark .bg-sky-600 { background-color: hsl(199 89% 39%); }
+html.dark .bg-violet-100 { background-color: hsl(258 90% 18%); }
+html.dark .bg-violet-50 { background-color: hsl(258 90% 13%); }
+html.dark .bg-violet-600 { background-color: hsl(258 90% 39%); }
+html.dark .bg-white { background-color: #151b25; }
+html.dark .bg-yellow-100 { background-color: hsl(48 96% 18%); }
+html.dark .bg-yellow-50\/50 { background-color: hsl(48 96% 13% / 0.5); }
+html.dark .border-amber-100 { border-color: hsl(38 92% 23%); }
+html.dark .border-amber-200 { border-color: hsl(38 92% 30%); }
+html.dark .border-amber-300 { border-color: hsl(38 92% 38%); }
+html.dark .border-amber-400 { border-color: hsl(38 92% 47%); }
+html.dark .border-blue-100 { border-color: hsl(217 91% 23%); }
+html.dark .border-blue-200 { border-color: hsl(217 91% 30%); }
+html.dark .border-blue-300 { border-color: hsl(217 91% 38%); }
+html.dark .border-blue-400 { border-color: hsl(217 91% 47%); }
+html.dark .border-blue-500 { border-color: hsl(217 91% 45%); }
+html.dark .border-blue-600 { border-color: hsl(217 91% 40%); }
+html.dark .border-emerald-200 { border-color: hsl(160 84% 30%); }
+html.dark .border-emerald-300 { border-color: hsl(160 84% 38%); }
+html.dark .border-emerald-600 { border-color: hsl(160 84% 40%); }
+html.dark .border-gray-100 { border-color: hsl(220 20% 23%); }
+html.dark .border-gray-200 { border-color: hsl(220 22% 30%); }
+html.dark .border-gray-300 { border-color: hsl(220 26% 38%); }
+html.dark .border-gray-50 { border-color: hsl(220 20% 18%); }
+html.dark .border-gray-600 { border-color: hsl(220 18% 40%); }
+html.dark .border-gray-700 { border-color: hsl(220 18% 33%); }
+html.dark .border-green-100 { border-color: hsl(142 71% 23%); }
+html.dark .border-indigo-100 { border-color: hsl(239 84% 23%); }
+html.dark .border-indigo-200 { border-color: hsl(239 84% 30%); }
+html.dark .border-indigo-300 { border-color: hsl(239 84% 38%); }
+html.dark .border-indigo-600 { border-color: hsl(239 84% 40%); }
+html.dark .border-orange-500 { border-color: hsl(25 95% 45%); }
+html.dark .border-purple-200 { border-color: hsl(271 91% 30%); }
+html.dark .border-red-100 { border-color: hsl(0 72% 23%); }
+html.dark .border-red-200 { border-color: hsl(0 72% 30%); }
+html.dark .border-sky-200 { border-color: hsl(199 89% 30%); }
+html.dark .border-sky-600 { border-color: hsl(199 89% 40%); }
+html.dark .border-violet-200 { border-color: hsl(258 90% 30%); }
+html.dark .border-violet-600 { border-color: hsl(258 90% 40%); }
+html.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color: hsl(220 20% 23%); }
+html.dark .divide-gray-50 > :not([hidden]) ~ :not([hidden]) { border-color: hsl(220 20% 18%); }
+html.dark .from-blue-50 { --tw-gradient-from: hsl(217 91% 13%); }
+html.dark .from-gray-50 { --tw-gradient-from: hsl(220 26% 13%); }
+html.dark .from-green-50 { --tw-gradient-from: hsl(142 71% 13%); }
+html.dark .from-green-500 { --tw-gradient-from: hsl(142 71% 44%); }
+html.dark .ring-blue-400 { --tw-ring-color: hsl(217 91% 47%); }
+html.dark .ring-blue-500 { --tw-ring-color: hsl(217 91% 45%); }
+html.dark .ring-emerald-200 { --tw-ring-color: hsl(160 84% 30%); }
+html.dark .ring-emerald-300 { --tw-ring-color: hsl(160 84% 38%); }
+html.dark .ring-emerald-400 { --tw-ring-color: hsl(160 84% 47%); }
+html.dark .ring-emerald-500 { --tw-ring-color: hsl(160 84% 45%); }
+html.dark .ring-indigo-400 { --tw-ring-color: hsl(239 84% 47%); }
+html.dark .text-amber-500 { color: hsl(38 62% 63%); }
+html.dark .text-amber-600 { color: hsl(38 72% 69%); }
+html.dark .text-amber-700 { color: hsl(38 78% 75%); }
+html.dark .text-amber-800 { color: hsl(38 70% 83%); }
+html.dark .text-blue-500 { color: hsl(217 62% 63%); }
+html.dark .text-blue-600 { color: hsl(217 72% 69%); }
+html.dark .text-blue-700 { color: hsl(217 78% 75%); }
+html.dark .text-blue-800 { color: hsl(217 70% 83%); }
+html.dark .text-emerald-500 { color: hsl(160 62% 63%); }
+html.dark .text-emerald-600 { color: hsl(160 72% 69%); }
+html.dark .text-emerald-700 { color: hsl(160 78% 75%); }
+html.dark .text-emerald-800 { color: hsl(160 70% 83%); }
+html.dark .text-gray-300 { color: hsl(220 14% 46%); }
+html.dark .text-gray-400 { color: hsl(220 18% 58%); }
+html.dark .text-gray-500 { color: hsl(220 18% 63%); }
+html.dark .text-gray-600 { color: hsl(220 18% 69%); }
+html.dark .text-gray-700 { color: hsl(220 18% 75%); }
+html.dark .text-gray-800 { color: hsl(220 18% 83%); }
+html.dark .text-green-600 { color: hsl(142 71% 69%); }
+html.dark .text-green-700 { color: hsl(142 71% 75%); }
+html.dark .text-indigo-500 { color: hsl(239 62% 63%); }
+html.dark .text-indigo-600 { color: hsl(239 72% 69%); }
+html.dark .text-indigo-800 { color: hsl(239 70% 83%); }
+html.dark .text-indigo-900 { color: hsl(239 60% 89%); }
+html.dark .text-orange-500 { color: hsl(25 62% 63%); }
+html.dark .text-orange-600 { color: hsl(25 72% 69%); }
+html.dark .text-orange-700 { color: hsl(25 78% 75%); }
+html.dark .text-pink-500 { color: hsl(330 62% 63%); }
+html.dark .text-pink-600 { color: hsl(330 72% 69%); }
+html.dark .text-purple-600 { color: hsl(271 72% 69%); }
+html.dark .text-purple-700 { color: hsl(271 78% 75%); }
+html.dark .text-red-400 { color: hsl(0 20% 58%); }
+html.dark .text-red-500 { color: hsl(0 62% 63%); }
+html.dark .text-red-600 { color: hsl(0 72% 69%); }
+html.dark .text-red-700 { color: hsl(0 72% 75%); }
+html.dark .text-red-800 { color: hsl(0 70% 83%); }
+html.dark .text-rose-600 { color: hsl(350 72% 69%); }
+html.dark .text-rose-700 { color: hsl(350 78% 75%); }
+html.dark .text-sky-700 { color: hsl(199 78% 75%); }
+html.dark .text-sky-800 { color: hsl(199 70% 83%); }
+html.dark .text-violet-700 { color: hsl(258 78% 75%); }
+html.dark .text-yellow-700 { color: hsl(48 78% 75%); }
+html.dark .to-blue-50 { --tw-gradient-to: hsl(217 91% 13%); }
+html.dark .to-green-600 { --tw-gradient-to: hsl(142 71% 39%); }
+html.dark .to-indigo-50 { --tw-gradient-to: hsl(239 84% 13%); }
+html.dark .to-white { --tw-gradient-to: #151b25; }
+html.dark .via-white { --tw-gradient-via: #151b25; }
+
+/* Инверсия изображений товаров: на тёмном фоне белая подложка фото режет глаз */
+html.dark img { background-color: #f3f4f6; border-radius: 8px; }
+
+/* Плотные тени на тёмном не видны — усиливаем контуры */
+html.dark .shadow-sm, html.dark .shadow-md, html.dark .shadow-lg, html.dark .shadow-2xl {
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.5);
+}

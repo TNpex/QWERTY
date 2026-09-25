@@ -37,6 +37,7 @@ import { FilterBar } from './components/FilterBar';
 import { StoreProfiles } from './components/StoreProfiles';
 import { useRoute, useNavigateTab } from './utils/router';
 import { useStoreScope } from './hooks/useStoreScope';
+import { applyTheme, loadTheme, saveTheme, toggleTheme, type Theme } from './theme';
 import { ALL_SCOPE } from './utils/storeScope';
 import type { TabId } from './types';
 
@@ -120,6 +121,13 @@ function AppContent() {
     resetLocalSettings,
   } = useData();
   const { setScope } = useStoreScope();
+  // Тёмная тема: выбор запоминается, класс ставится на <html>
+  const [theme, setTheme] = useState<Theme>(loadTheme);
+  useEffect(() => {
+    applyTheme(theme);
+    saveTheme(theme);
+  }, [theme]);
+
   // Каждая вкладка — своя страница: адрес меняется, работают «Назад»/«Вперёд»
   const route = useRoute();
   const activeTab: Tab = route.tab;
@@ -435,6 +443,18 @@ function AppContent() {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              <button
+                onClick={() => setTheme((current) => toggleTheme(current))}
+                className="p-2 rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
+                title={
+                  theme === 'dark'
+                    ? 'Включить светлую тему (выбор запоминается в браузере)'
+                    : 'Включить тёмную тему (выбор запоминается в браузере)'
+                }
+                aria-label="Переключить тему"
+              >
+                <span className="text-base leading-none">{theme === 'dark' ? '☀️' : '🌙'}</span>
+              </button>
               <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-emerald-50 rounded-full">
                 <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
                 <span className="text-xs font-medium text-emerald-700">Данные загружены</span>

@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./styles/dark.css";
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
@@ -18,6 +19,11 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+}
+
+/* Плавная смена темы (класс .dark ставится на <html>) */
+html {
+  transition: background-color 0.2s ease;
 }
 
 /* Smooth transitions */
