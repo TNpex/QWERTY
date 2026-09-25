@@ -517,7 +517,7 @@ export function TransferRecommendations() {
       {/* Профиль «Мой магазин» — видно только свои перемещения */}
       {profileStoreId && (
         <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 flex items-center gap-3 flex-wrap">
-          <span className="text-sm font-medium text-blue-800">📍 Мой магазин: {storeProfile}</span>
+          <span className="text-sm font-medium text-blue-800 min-w-0 break-words">📍 Мой магазин: {storeProfile}</span>
           <div className="inline-flex rounded-full border border-blue-300 overflow-hidden text-xs">
             {(
               [

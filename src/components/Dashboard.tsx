@@ -309,7 +309,7 @@ export function Dashboard({ onNavigate }: { onNavigate?: (tab: TabId) => void })
           {storeProfile && scope !== storeProfile && (
             <button
               onClick={() => setScope(storeProfile)}
-              className="px-3 py-2 rounded-lg text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100"
+              className="px-3 py-2 rounded-lg text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 min-w-0 break-words text-left"
               title="Вернуться к обзору «Моего магазина»"
             >
               📍 Мой магазин: {storeProfile}

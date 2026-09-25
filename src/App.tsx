@@ -31,13 +31,17 @@ import {
   AlertTriangle,
   Flame,
   Database,
+  ChevronDown,
+  Settings,
 } from 'lucide-react';
 import { SalesHistory } from './components/SalesHistory';
 import { FilterBar } from './components/FilterBar';
 import { StoreProfiles } from './components/StoreProfiles';
+import { StorePicker } from './components/StorePicker';
 import { useRoute, useNavigateTab } from './utils/router';
 import { useStoreScope } from './hooks/useStoreScope';
 import { applyTheme, loadTheme, saveTheme, toggleTheme, type Theme } from './theme';
+import { loadServicePanelOpen, saveServicePanelOpen } from './utils/uiPrefs';
 import { ALL_SCOPE } from './utils/storeScope';
 import type { TabId } from './types';
 
@@ -127,6 +131,14 @@ function AppContent() {
     applyTheme(theme);
     saveTheme(theme);
   }, [theme]);
+
+  // Служебная панель сайдбара (загрузка файла, настройки, сведения о данных) —
+  // по умолчанию свёрнута, чтобы на телефоне не закрывать дашборд. Выбор
+  // запоминается на устройстве.
+  const [serviceOpen, setServiceOpen] = useState<boolean>(loadServicePanelOpen);
+  useEffect(() => {
+    saveServicePanelOpen(serviceOpen);
+  }, [serviceOpen]);
 
   // Каждая вкладка — своя страница: адрес меняется, работают «Назад»/«Вперёд»
   const route = useRoute();
@@ -272,25 +284,15 @@ function AppContent() {
             <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
               Мой магазин
             </label>
-            <select
+            <StorePicker
+              stores={data.stores}
               value={storeProfile}
-              onChange={(e) => {
-                const name = e.target.value;
+              onChange={(name) => {
                 setStoreProfile(name);
                 // область общая для всех вкладок и видна в адресе (?scope=…)
                 setScope(name || ALL_SCOPE);
               }}
-              className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white cursor-pointer focus:ring-2 focus:ring-blue-500"
-              title="«Обзор» и «Инвентарь» откроются на этом магазине, «Перемещения» покажут только ваши входящие/исходящие. Выбор виден в адресе страницы (?scope=…), поэтому ссылку можно скопировать. Сам профиль «Мой магазин» хранится только на этом устройстве."
-            >
-              <option value="">Вся сеть (не выбран)</option>
-              {data.stores.map((store) => (
-                <option key={store.id} value={store.name}>
-                  {isWarehouse(store.name) ? '📦 ' : ''}
-                  {store.name}
-                </option>
-              ))}
-            </select>
+            />
           </div>
 
           <nav className="space-y-1">
@@ -315,101 +317,124 @@ function AppContent() {
               );
             })}
           </nav>
-
-          {/* Reload Data Button */}
-          <div className="mt-6 pt-6 border-t border-gray-100 space-y-1">
-            <button
-              onClick={clearData}
-              className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-800 transition-all"
-            >
-              <Upload className="w-4 h-4" />
-              Загрузить другой файл
-            </button>
-            {!isBundled && bundledData && (
-              <button
-                onClick={restoreBundled}
-                className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-800 transition-all"
-              >
-                <Database className="w-4 h-4" />
-                Вернуться к данным сайта
-              </button>
-            )}
-          </div>
         </div>
 
-        <div className="absolute bottom-0 left-0 right-0 p-6 border-t border-gray-100">
-          {settingsTotal > 0 && (
-            <button
-              onClick={() => downloadSettings(settings)}
-              className="w-full mb-2 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 transition-colors"
-              title={`Ориентации: ${counts.sports}, перемещение «Не требуется»: ${counts.excluded}, «Поставляется»: ${counts.supplied}, ходовые вручную: ${counts.hot}, минимумы товаров: ${counts.minimums}, профили магазинов: ${counts.profiles} (в т.ч. 🚫 запретов: ${counts.bans}). Скачайте JSON, чтобы перенести настройки на другой компьютер, передать коллегам или зафиксировать в public/data/product-settings.json для всех.`}
-            >
-              <Upload className="w-3.5 h-3.5" />
-              Настройки товаров: {settingsTotal} — скачать JSON
-            </button>
-          )}
-          <button
-            onClick={() => {
-              if (
-                window.confirm(
-                  'Сбросить ЛОКАЛЬНЫЕ настройки этого устройства и вернуться к общим настройкам сайта (public/data/product-settings.json)?\n\n' +
-                    'Будут убраны ваши правки: ориентации товаров, «Поставляется», ходовые, исключения, минимумы и профили магазинов, заданные в этом браузере.\n' +
-                    'Общие настройки и данные остатков не пострадают.'
-                )
-              ) {
-                resetLocalSettings();
-                setSettingsMsg('✓ Локальные правки сброшены — действуют общие настройки сайта');
-                window.setTimeout(() => setSettingsMsg(null), 5000);
-              }
-            }}
-            className="w-full mb-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-white text-gray-400 border border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
-            title="Убрать локальные правки этого браузера и снова использовать только общие настройки сайта (нужно, если вы экспериментировали и локальные значения перекрывают общие)"
-          >
-            ↺ Сбросить локальные настройки
-          </button>
-          <button
-            onClick={() => settingsFileRef.current?.click()}
-            className="w-full mb-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-white text-gray-500 border border-gray-200 hover:bg-gray-50 transition-colors"
-            title="Загрузить product-settings.json (ориентации Падел/Теннис и исключения-услуги) — например, полученный от админа"
-          >
-            <Database className="w-3.5 h-3.5" />
-            Загрузить настройки товаров
-          </button>
-          <input
-            ref={settingsFileRef}
-            type="file"
-            accept=".json,application/json"
-            className="hidden"
-            onChange={async (e) => {
-              const file = e.target.files?.[0];
-              e.target.value = '';
-              if (!file) return;
-              const text = await file.text();
-              setSettingsMsg(importSettings(text) ? '✓ Настройки загружены' : '⚠ Файл не похож на настройки');
-              window.setTimeout(() => setSettingsMsg(null), 4000);
-            }}
-          />
-          {settingsMsg && (
-            <div className="mb-2 text-center text-[11px] text-gray-500">{settingsMsg}</div>
-          )}
-          {overrideCount > 0 && (
-            <button
-              onClick={() => downloadBrandOverrides(brandOverrides)}
-              className="w-full mb-3 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors"
-              title="Скачать brand-edits.json и записать правки в CSV: npm run apply-edits -- brand-edits.json"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              Правки брендов: {overrideCount} — скачать JSON
-            </button>
-          )}
-          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4">
-            <div className="text-xs font-medium text-blue-800 mb-1">
-              {isBundled ? 'Встроенные данные' : 'Загруженный файл'}
+        {/* Служебная панель: загрузка файла, настройки товаров, сведения о данных.
+            Свёрнута по умолчанию — на телефоне она занимала пол-сайда и закрывала
+            дашборд. Кнопка «Настройки и данные» раскрывает всё то же содержимое. */}
+        <div className="absolute bottom-0 left-0 right-0 border-t border-gray-100">
+          {serviceOpen && (
+            <div className="px-6 pt-5 pb-2 max-h-[50vh] overflow-y-auto">
+              <div className="space-y-1 mb-3">
+                <button
+                  onClick={clearData}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-800 transition-all"
+                >
+                  <Upload className="w-4 h-4" />
+                  Загрузить другой файл
+                </button>
+                {!isBundled && bundledData && (
+                  <button
+                    onClick={restoreBundled}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-800 transition-all"
+                  >
+                    <Database className="w-4 h-4" />
+                    Вернуться к данным сайта
+                  </button>
+                )}
+              </div>
+
+              {settingsTotal > 0 && (
+                <button
+                  onClick={() => downloadSettings(settings)}
+                  className="w-full mb-2 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 transition-colors"
+                  title={`Ориентации: ${counts.sports}, перемещение «Не требуется»: ${counts.excluded}, «Поставляется»: ${counts.supplied}, ходовые вручную: ${counts.hot}, минимумы товаров: ${counts.minimums}, профили магазинов: ${counts.profiles} (в т.ч. 🚫 запретов: ${counts.bans}). Скачайте JSON, чтобы перенести настройки на другой компьютер, передать коллегам или зафиксировать в public/data/product-settings.json для всех.`}
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  Настройки товаров: {settingsTotal} — скачать JSON
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      'Сбросить ЛОКАЛЬНЫЕ настройки этого устройства и вернуться к общим настройкам сайта (public/data/product-settings.json)?\n\n' +
+                        'Будут убраны ваши правки: ориентации товаров, «Поставляется», ходовые, исключения, минимумы и профили магазинов, заданные в этом браузере.\n' +
+                        'Общие настройки и данные остатков не пострадают.'
+                    )
+                  ) {
+                    resetLocalSettings();
+                    setSettingsMsg('✓ Локальные правки сброшены — действуют общие настройки сайта');
+                    window.setTimeout(() => setSettingsMsg(null), 5000);
+                  }
+                }}
+                className="w-full mb-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-white text-gray-400 border border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
+                title="Убрать локальные правки этого браузера и снова использовать только общие настройки сайта (нужно, если вы экспериментировали и локальные значения перекрывают общие)"
+              >
+                ↺ Сбросить локальные настройки
+              </button>
+              <button
+                onClick={() => settingsFileRef.current?.click()}
+                className="w-full mb-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-white text-gray-500 border border-gray-200 hover:bg-gray-50 transition-colors"
+                title="Загрузить product-settings.json (ориентации Падел/Теннис и исключения-услуги) — например, полученный от админа"
+              >
+                <Database className="w-3.5 h-3.5" />
+                Загрузить настройки товаров
+              </button>
+              <input
+                ref={settingsFileRef}
+                type="file"
+                accept=".json,application/json"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = '';
+                  if (!file) return;
+                  const text = await file.text();
+                  setSettingsMsg(importSettings(text) ? '✓ Настройки загружены' : '⚠ Файл не похож на настройки');
+                  window.setTimeout(() => setSettingsMsg(null), 4000);
+                }}
+              />
+              {settingsMsg && (
+                <div className="mb-2 text-center text-[11px] text-gray-500">{settingsMsg}</div>
+              )}
+              {overrideCount > 0 && (
+                <button
+                  onClick={() => downloadBrandOverrides(brandOverrides)}
+                  className="w-full mb-3 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors"
+                  title="Скачать brand-edits.json и записать правки в CSV: npm run apply-edits -- brand-edits.json"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  Правки брендов: {overrideCount} — скачать JSON
+                </button>
+              )}
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4">
+                <div className="text-xs font-medium text-blue-800 mb-1">
+                  {isBundled ? 'Встроенные данные' : 'Загруженный файл'}
+                </div>
+                <div className="text-[10px] text-blue-600">{uploadedAtText}</div>
+                <div className="mt-2 text-[10px] text-blue-500">
+                  {data.stores.length} магазинов • {data.products.length} товаров
+                </div>
+              </div>
             </div>
-            <div className="text-[10px] text-blue-600">{uploadedAtText}</div>
-            <div className="mt-2 text-[10px] text-blue-500">
-              {data.stores.length} магазинов • {data.products.length} товаров
-            </div>
+          )}
+
+          <div className="p-3">
+            <button
+              onClick={() => setServiceOpen((o) => !o)}
+              aria-expanded={serviceOpen}
+              className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
+              title="Показать/скрыть загрузку файла, настройки товаров и сведения о данных"
+            >
+              <span className="flex items-center gap-2">
+                <Settings className="w-3.5 h-3.5" />
+                Настройки и данные
+              </span>
+              <ChevronDown
+                className={`w-4 h-4 transition-transform ${serviceOpen ? 'rotate-180' : ''}`}
+              />
+            </button>
           </div>
         </div>
       </aside>
