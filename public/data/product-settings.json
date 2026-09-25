@@ -147,7 +147,7 @@
       "note": ""
     },
     "Санкт-Петербург (Спортивная)": {
-      "sport": "other",
+      "sport": "all",
       "hiddenCategories": [],
       "transfersDisabled": false,
       "defaultMinimum": 0,
@@ -179,7 +179,7 @@
       "note": ""
     },
     "Екатеринбург (Соболева)": {
-      "sport": "other",
+      "sport": "all",
       "hiddenCategories": [],
       "transfersDisabled": false,
       "defaultMinimum": 0,
@@ -187,7 +187,7 @@
       "note": ""
     },
     "Тюмень (Народная)": {
-      "sport": "other",
+      "sport": "all",
       "hiddenCategories": [],
       "transfersDisabled": false,
       "defaultMinimum": 0,
@@ -195,7 +195,7 @@
       "note": ""
     },
     "Уфа": {
-      "sport": "other",
+      "sport": "all",
       "hiddenCategories": [],
       "transfersDisabled": false,
       "defaultMinimum": 0,
@@ -203,7 +203,7 @@
       "note": ""
     },
     "Ижевск": {
-      "sport": "other",
+      "sport": "all",
       "hiddenCategories": [],
       "transfersDisabled": false,
       "defaultMinimum": 0,
