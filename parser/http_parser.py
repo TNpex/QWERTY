@@ -30,7 +30,9 @@ sizes.csv, changes.csv, history/, cart-map.json) — сайт разницы н�
 import argparse
 import json
 import os
+import random
 import re
+import shutil
 import sys
 import time
 from urllib.parse import urljoin, urlparse, parse_qs
@@ -50,6 +52,17 @@ FETCH_RETRIES = 3          # повторы запроса при сетевых
 LOGIN_RETRIES = 3          # попытки авторизации
 MAX_CONSECUTIVE_FAILURES = 15   # подряд неудач → пересоздать сессию
 PAGE_DELAY = 0.4           # вежливая пауза между страницами
+PAGE_DELAY_JITTER = (0.9, 1.8)  # множитель джиттера паузы (менее «роботизированный» ритм)
+CATEGORY_PAUSE = (3.0, 7.0)     # пауза между категориями (мин, макс), сек
+
+# Защита от «пустых заглушек»: сайт может отдать HTTP 200 без товаров
+# (антибот после ~35 мин интенсивного парсинга, сбой кэша, редирект на заглушку).
+# Раньше такая страница считалась «пустой категорией» и весь прогон падал.
+# Теперь: несколько попыток с охлаждением и перелогином, затем «финальный заход».
+CATEGORY_ATTEMPTS = 3               # попыток собрать ссылки категории
+CATEGORY_COOLDOWNS = (60, 240)      # паузы между попытками, сек
+FINAL_PASS_COOLDOWN = 300           # пауза перед финальным заходом, сек
+CATALOG_PAGE_MIN_BYTES = 40_000     # реальная категория (меню+фильтры) ≈ 100-250 КБ
 
 
 # ================= СЕССИЯ И ЗАПРОСЫ =================
@@ -195,9 +208,20 @@ def _normalize_product_url(href: str) -> str:
     return absolute.split('#')[0].split('?')[0].strip().rstrip('/')
 
 
-def get_product_urls(session, category_url: str):
-    """Список ссылок на товары категории (серверная пагинация ?page=N)."""
-    r = fetch(session, category_url)
+def get_product_urls(session, category_url: str, cache_bust: bool = False):
+    """Список ссылок на товары категории (серверная пагинация ?page=N).
+
+    Возвращает (urls, response первой страницы) — ответ нужен, чтобы
+    отличить «пустую категорию» от заглушки антибота/сбоя кэша.
+    cache_bust=True добавляет случайный параметр и no-cache-заголовки
+    (повторные попытки не должны доставать ту же заглушку из кэша CDN).
+    """
+    request_url = category_url
+    headers = None
+    if cache_bust:
+        request_url = category_url + ('&' if '?' in category_url else '?') + f"_nc={int(time.time() * 1000)}"
+        headers = {"Cache-Control": "no-cache", "Pragma": "no-cache"}
+    r = fetch(session, request_url, headers=headers)
     if r is None:
         raise RuntimeError(f"категория не загрузилась: {category_url}")
     soup = BeautifulSoup(r.text, "lxml")
@@ -234,7 +258,168 @@ def get_product_urls(session, category_url: str):
         time.sleep(PAGE_DELAY)
 
     sp.log(f"   [INFO] Уникальных ссылок: {len(urls)}")
-    return sorted(urls)
+    return sorted(urls), r
+
+
+# ============ ЗАЩИТА ОТ «ПУСТЫХ ЗАГЛУШЕК» НА СТРАНИЦАХ КАТЕГОРИЙ ============
+#
+# Симптом (2026-09-25, прогон в Actions): первые ~1650 запросов за 35 минут
+# прошли нормально, затем сайт на ВСЕ оставшиеся страницы категорий начал
+# мгновенно отдавать HTTP 200 без единой ссылки на товар. Данные не
+# пострадали (прогон честно завершился с exit 1), но 6 категорий остались
+# непарсенными. Похоже на мягкую антибот-блокировку или сбой кэша на стороне
+# сайта: ответ маленький, без h1 и без пагинации.
+#
+# Лечение: пустая страница категории больше НЕ считается «пустой категорией».
+# Делаем несколько попыток с растущим охлаждением, перелогином (новая сессия)
+# и обходом кэша; сохраняем HTML заглушки в public/data/debug/ (уезжает
+# артефактом в Actions) — в следующий раз будет видно, что именно отдал сайт.
+
+def _debug_dir() -> str:
+    return os.path.join(sp.DATA_DIR, "debug")
+
+
+def _page_looks_like_catalog(resp, cat_url: str) -> bool:
+    """Страница похожа на настоящую категорию (а не заглушку/блокировку)?"""
+    if resp is None or resp.status_code != 200:
+        return False
+    if resp.url.split('?')[0].rstrip('/') != cat_url.split('?')[0].rstrip('/'):
+        return False   # уехали редиректом (логин/главная/404-страница)
+    if len(resp.text) < CATALOG_PAGE_MIN_BYTES:
+        return False   # настоящая категория с меню и фильтрами ≈ 100-250 КБ
+    soup = BeautifulSoup(resp.text, "lxml")
+    return soup.find("h1") is not None
+
+
+def _dump_category_page(resp, cat_url: str, attempt: int) -> str:
+    """Сохранить HTML подозрительной страницы категории для диагностики."""
+    try:
+        debug_dir = _debug_dir()
+        os.makedirs(debug_dir, exist_ok=True)
+        slug = urlparse(cat_url).path.strip('/').replace('/', '-') or 'category'
+        uniq = f"{int(time.time() * 1000) % 100_000_000}-{random.randint(100, 999)}"
+        path = os.path.join(debug_dir, f"{slug}-attempt{attempt}-{uniq}.html")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(f"<!-- url: {cat_url}\n"
+                    f"     final_url: {getattr(resp, 'url', '?')}\n"
+                    f"     status: {getattr(resp, 'status_code', '?')}\n"
+                    f"     saved_at: {time.strftime('%Y-%m-%d %H:%M:%S')} -->\n")
+            f.write(resp.text)
+        return path
+    except OSError:
+        return ""
+
+
+def _log_page_diagnostics(resp, cat_name: str, cat_url: str, attempt: int):
+    """Подробно описать пустую страницу: статус, размер, title, h1, текст."""
+    tag = f"      [DIAG] «{cat_name}», попытка {attempt}: "
+    if resp is None:
+        sp.log(tag + "ответа нет (сеть/не-200 после всех повторов)")
+        return
+    title = h1_text = snippet = None
+    try:
+        soup = BeautifulSoup(resp.text, "lxml")
+        if soup.title:
+            title = soup.title.get_text(strip=True)[:100]
+        h1 = soup.find("h1")
+        if h1:
+            h1_text = h1.get_text(strip=True)[:100]
+        if soup.body:
+            snippet = soup.body.get_text(" ", strip=True)[:300]
+    except Exception:
+        pass
+    sp.log(f"{tag}HTTP {resp.status_code}, {len(resp.text)} байт, final_url={resp.url}")
+    sp.log(f"      [DIAG] title={title!r} h1={h1_text!r}")
+    if snippet:
+        sp.log(f"      [DIAG] текст: {snippet}")
+    path = _dump_category_page(resp, cat_url, attempt)
+    if path:
+        sp.log(f"      [DIAG] HTML сохранён: {path}")
+
+
+def fetch_category_urls(session, cat_name: str, cat_url: str, args):
+    """Ссылки товаров категории с защитой от «пустых заглушек».
+
+    Возвращает (urls, session, page_valid):
+      page_valid=True  — страница категории реально отдавалась сайтом
+                         (товары есть ИЛИ категория действительно пуста);
+      page_valid=False — все попытки получили заглушку/сбой → нужен
+                         «финальный заход» после длинной паузы.
+    """
+    for attempt in range(1, CATEGORY_ATTEMPTS + 1):
+        try:
+            urls, resp = get_product_urls(session, cat_url, cache_bust=attempt > 1)
+        except Exception as e:
+            sp.log(f"   [ERROR] Категория «{cat_name}» не открылась: {e}")
+            urls, resp = [], None
+        if urls:
+            if attempt > 1:
+                sp.log(f"   [OK] «{cat_name}»: {len(urls)} товаров (с попытки {attempt})")
+            return urls, session, True
+        if _page_looks_like_catalog(resp, cat_url):
+            sp.log(f"   [WARN] «{cat_name}»: страница валидна, но товаров нет "
+                   f"— категория действительно пустая")
+            return [], session, True
+        _log_page_diagnostics(resp, cat_name, cat_url, attempt)
+        if attempt == CATEGORY_ATTEMPTS:
+            break
+        cooldown = CATEGORY_COOLDOWNS[attempt - 1]
+        sp.log(f"   [WARN] «{cat_name}»: страница без товаров (заглушка антибота/сбой кэша?). "
+               f"Пауза {cooldown} с → перелогин → попытка {attempt + 1}/{CATEGORY_ATTEMPTS}")
+        time.sleep(cooldown)
+        new_session = create_authorized_session(args)
+        if new_session is not None:
+            session = new_session
+    return [], session, False
+
+
+def parse_category_products(session, cat_name, urls, args, acc, state):
+    """Цикл товаров одной категории. acc/state — общие накопители прогона.
+
+    acc:   {'products': [], 'sizes': [], 'cart_map': {}}
+    state: {'consecutive_failures': 0, 'session_rebuilt': False, 'fatal_error': None}
+    Возвращает сессию (могла быть пересоздана после серии сбоев).
+    """
+    for i, url in enumerate(urls):
+        if (i + 1) % 25 == 0 or i == 0:
+            sp.log(f"   [{i + 1}/{len(urls)}] {url}")
+        product = parse_product(session, url, cat_name)
+        if product:
+            state['consecutive_failures'] = 0
+            sizes_data = product.pop('sizes_data', [])
+            cart_info = product.pop('cart_info', None)
+            if cart_info:
+                acc['cart_map'][url.rstrip('/')] = {
+                    'itemId': cart_info['itemId'],
+                    'article': product['Артикул'],
+                    'sizes': cart_info['sizes'],
+                }
+            for size_info in sizes_data:
+                size_info['Артикул'] = product['Артикул']
+                size_info['Категория'] = product['Категория']
+                size_info['Название'] = product['Название']
+                size_info['Бренд'] = product['Бренд']
+                size_info['Цена'] = product['Цена']
+                size_info['Ссылка'] = product['Ссылка']
+            acc['sizes'].extend(sizes_data)
+            acc['products'].append(product)
+        else:
+            state['consecutive_failures'] += 1
+            if state['consecutive_failures'] >= MAX_CONSECUTIVE_FAILURES:
+                if state['session_rebuilt']:
+                    state['fatal_error'] = (f"{state['consecutive_failures']} товаров подряд не загрузились "
+                                            f"— вероятно, сайт блокирует этот IP")
+                    break
+                sp.log("[WARN] Много сбоев подряд — пересоздаю сессию...")
+                new_session = create_authorized_session(args)
+                if new_session is None:
+                    state['fatal_error'] = "Сессия потеряна, перелогиниться не удалось"
+                    break
+                session = new_session
+                state['session_rebuilt'] = True
+                state['consecutive_failures'] = 0
+        time.sleep(PAGE_DELAY * random.uniform(*PAGE_DELAY_JITTER))
+    return session
 
 
 # ================= КАРТОЧКА ТОВАРА =================
@@ -611,75 +796,68 @@ def main():
     all_products = []
     all_sizes_data = []
     all_cart_map = {}
-    fatal_error = None
-    skipped_categories = []
-    consecutive_failures = 0
-    session_rebuilt = False
+    acc = {'products': all_products, 'sizes': all_sizes_data, 'cart_map': all_cart_map}
+    state = {'consecutive_failures': 0, 'session_rebuilt': False, 'fatal_error': None}
+    skipped_categories = []   # категории, где товаров нет (в т.ч. действительно пустые)
+    retry_queue = []          # категории-«заглушки» — для финального захода
 
-    for cat_name, cat_url in categories.items():
-        sp.log(f"\n[INFO] Категория: {cat_name}")
-        try:
-            urls = get_product_urls(session, cat_url)
-        except Exception as e:
-            sp.log(f"[ERROR] Категория «{cat_name}» не открылась: {e}")
-            skipped_categories.append(cat_name)
-            continue
+    def run_category(cat_name, cat_url, is_retry=False):
+        """Одна категория: ссылки (с ретраями) + товары. False = fatal."""
+        nonlocal session
+        sp.log(f"\n[INFO] Категория{' (повторно)' if is_retry else ''}: {cat_name}")
+        urls, session, page_valid = fetch_category_urls(session, cat_name, cat_url, args)
         if not urls:
-            sp.log(f"[WARN] В категории «{cat_name}» нет товаров")
-            skipped_categories.append(cat_name)
-            continue
+            if page_valid:
+                sp.log(f"[WARN] В категории «{cat_name}» нет товаров")
+                skipped_categories.append(cat_name)
+            else:
+                retry_queue.append((cat_name, cat_url))
+            return True   # не fatal — продолжаем остальные категории
         if args.limit:
             urls = urls[:args.limit]
+        session = parse_category_products(session, cat_name, urls, args, acc, state)
+        return not state['fatal_error']
 
-        for i, url in enumerate(urls):
-            if (i + 1) % 25 == 0 or i == 0:
-                sp.log(f"   [{i + 1}/{len(urls)}] {url}")
-            product = parse_product(session, url, cat_name)
-            if product:
-                consecutive_failures = 0
-                sizes_data = product.pop('sizes_data', [])
-                cart_info = product.pop('cart_info', None)
-                if cart_info:
-                    all_cart_map[url.rstrip('/')] = {
-                        'itemId': cart_info['itemId'],
-                        'article': product['Артикул'],
-                        'sizes': cart_info['sizes'],
-                    }
-                for size_info in sizes_data:
-                    size_info['Артикул'] = product['Артикул']
-                    size_info['Категория'] = product['Категория']
-                    size_info['Название'] = product['Название']
-                    size_info['Бренд'] = product['Бренд']
-                    size_info['Цена'] = product['Цена']
-                    size_info['Ссылка'] = product['Ссылка']
-                all_sizes_data.extend(sizes_data)
-                all_products.append(product)
-            else:
-                consecutive_failures += 1
-                if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                    if session_rebuilt:
-                        fatal_error = (f"{consecutive_failures} товаров подряд не загрузились "
-                                       f"— вероятно, сайт блокирует этот IP")
-                        break
-                    sp.log("[WARN] Много сбоев подряд — пересоздаю сессию...")
-                    new_session = create_authorized_session(args)
-                    if new_session is None:
-                        fatal_error = "Сессия потеряна, перелогиниться не удалось"
-                        break
-                    session = new_session
-                    session_rebuilt = True
-                    consecutive_failures = 0
-            time.sleep(PAGE_DELAY)
-        if fatal_error:
+    for cat_name, cat_url in categories.items():
+        if not run_category(cat_name, cat_url):
             break
+        time.sleep(random.uniform(*CATEGORY_PAUSE))
+
+    # ---- Финальный заход: категории, отдавшие пустые страницы-заглушки ----
+    # К этому моменту сайт обычно «отходит» (блокировка короткая), а свежая
+    # сессия снимает возможный лимит по PHPSESSID.
+    if retry_queue and not state['fatal_error']:
+        names = [c for c, _ in retry_queue]
+        sp.log(f"\n[WARN] {len(names)} категорий отдали пустые страницы-заглушки: {names}")
+        sp.log(f"[WARN] Финальный заход: пауза {FINAL_PASS_COOLDOWN} с → новая сессия → повтор.")
+        time.sleep(FINAL_PASS_COOLDOWN)
+        new_session = create_authorized_session(args)
+        if new_session is not None:
+            session = new_session
+        state['session_rebuilt'] = False   # новая сессия — отсчёт пересозданий заново
+        retry_now, retry_queue = retry_queue, []
+        for cat_name, cat_url in retry_now:
+            if not run_category(cat_name, cat_url, is_retry=True):
+                break
+            time.sleep(random.uniform(*CATEGORY_PAUSE))
+
+    fatal_error = state['fatal_error']
 
     sp.log(f"[INFO] Собрано товаров: {len(all_products)}")
-    if fatal_error or skipped_categories:
+    if fatal_error or skipped_categories or retry_queue:
+        if retry_queue:
+            skipped_categories = skipped_categories + [c for c, _ in retry_queue]
         sp.log("[ERROR] Парсинг неполный: "
                + (f"пропущены категории {skipped_categories}; " if skipped_categories else "")
                + (fatal_error or ""))
         sp.log("[ERROR] Основные файлы НЕ обновлены — данные сайта остаются прежними.")
+        debug_dir = _debug_dir()
+        if os.path.isdir(debug_dir):
+            sp.log(f"[ERROR] Диагностика заглушек: {debug_dir}/ "
+                   f"(в Actions скачайте артефакт parse-log-* — HTML страниц приложен)")
         sys.exit(1)
+    # прогон полный — диагностические дампы не нужны (и не должны попасть в git)
+    shutil.rmtree(_debug_dir(), ignore_errors=True)
     if not all_products:
         sp.log("[ERROR] Не удалось собрать данные — файлы не тронуты.")
         sys.exit(1)

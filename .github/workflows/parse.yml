@@ -47,7 +47,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: parse-log-${{ github.run_id }}
-          path: public/data/parse.log
+          path: |
+            public/data/parse.log
+            public/data/debug/
           if-no-files-found: ignore
           retention-days: 14
 
