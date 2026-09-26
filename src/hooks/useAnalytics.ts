@@ -32,6 +32,14 @@ import {
   type SizeSalesReport,
 } from '../utils/historyCore';
 import { sportOf, productSettingsKey } from '../utils/sport';
+import {
+  abcClasses,
+  availabilityTrend,
+  salesByStoreFromHistory,
+  type AbcClass,
+  type AvailabilityTrendPoint,
+  type HistorySales,
+} from '../utils/insights';
 import type { ParsedData, TransferRecommendation, RestockRecommendation } from '../types';
 
 export type { OverviewMetrics, OverviewScope, StoreProfileSummary, StoreProfile };
@@ -296,4 +304,22 @@ export function useHotArticles(): Set<string> {
     () => new Set(hotProducts.map((h) => h.article.trim().toLowerCase())),
     [hotProducts]
   );
+}
+
+/** Продажи по (товар × магазин) из снимков остатков — база runway/ABC/мёртвого запаса */
+export function useHistorySales(): HistorySales | null {
+  const { history } = useData();
+  return useMemo(() => salesByStoreFromHistory(history), [history]);
+}
+
+/** ABC-классы товаров по вкладу в продажи (A — 80% выручки) */
+export function useAbcClasses(): Map<string, AbcClass> {
+  const sales = useHistorySales();
+  return useMemo(() => abcClasses(sales), [sales]);
+}
+
+/** Динамика доступности по снимкам: доля нулевых позиций по сети и магазинам */
+export function useAvailabilityTrend(): AvailabilityTrendPoint[] {
+  const { history } = useData();
+  return useMemo(() => availabilityTrend(history), [history]);
 }

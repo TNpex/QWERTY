@@ -26,15 +26,19 @@ describe('StorePicker — название магазина читается п�
     expect(html).toContain('break-words');
   });
 
-  it('склад помечен 📦, обычный магазин — 📍', () => {
-    expect(render('Екатеринбург (Основной склад)')).toContain('📦');
-    expect(render('Уфа')).toContain('📍');
+  it('список показывает только названия магазинов — без эмодзи и иконок', () => {
+    const html = render('Екатеринбург (Основной склад)');
+    expect(html).not.toContain('📦');
+    expect(html).not.toContain('📍');
+    expect(html).not.toContain('🌐');
+    // никаких иконок-маркеров точек: только шеврон раскрытия
+    expect(html.match(/<svg/g)?.length ?? 0).toBe(1);
   });
 
-  it('пустое значение — «Вся сеть (не выбран)» с 🌐', () => {
+  it('пустое значение — «Вся сеть (не выбран)» без иконок', () => {
     const html = render('');
     expect(html).toContain(ALL_STORES_LABEL);
-    expect(html).toContain('🌐');
+    expect(html).not.toContain('🌐');
   });
 
   it('неизвестное имя тоже показывается как «Вся сеть»', () => {

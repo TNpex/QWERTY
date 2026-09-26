@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { X, ExternalLink, Package, Store as StoreIcon, Flame, Pencil, Check } from 'lucide-react';
+import { RunwayBadge } from './RunwayBadge';
+import { runwayDays } from '../utils/insights';
+import { useHistorySales } from '../hooks/useAnalytics';
 import { useData } from '../context/DataContext';
 import { toProductPath, localPhotoCandidates } from '../utils/images';
 import {
@@ -433,7 +436,7 @@ function StoreRulesPanel({ product }: { product: Product }) {
           ))}
         </div>
         <p className="mt-2 text-[10px] text-gray-400">
-          ⛔ — магазин не продаёт этот вид спорта или категорию (профиль на вкладке «🏬 Магазины»);
+          ⛔ — магазин не продаёт этот вид спорта или категорию (профиль на вкладке «Магазины»);
           📴 — перемещения магазина выключены; 🚫 запрет сильнее всех остальных правил.
         </p>
       </div>
@@ -453,6 +456,7 @@ export function ProductCardModal({
   onClose: () => void;
 }) {
   const { data, hotProducts, settings } = useData();
+  const historySales = useHistorySales();
 
   // Закрытие по Escape
   useEffect(() => {
@@ -509,7 +513,7 @@ export function ProductCardModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Шапка */}
-        <div className="sticky top-0 bg-white/95 backdrop-blur flex items-start justify-between gap-3 p-5 border-b border-gray-100 z-10">
+        <div className="sticky top-0 bg-white flex items-start justify-between gap-3 p-5 border-b border-gray-100 z-10">
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <BrandEditor product={product} />
@@ -671,10 +675,23 @@ export function ProductCardModal({
                       )}
                     </div>
                     {carried ? (
-                      <span
-                        className={`flex-shrink-0 inline-flex items-center justify-center min-w-[2rem] h-6 px-2 rounded text-xs ${cellClass(total ?? 0)}`}
-                      >
-                        {total ?? 0}
+                      <span className="flex-shrink-0 flex items-center gap-1">
+                        <span
+                          className={`inline-flex items-center justify-center min-w-[2rem] h-6 px-2 rounded text-xs ${cellClass(total ?? 0)}`}
+                        >
+                          {total ?? 0}
+                        </span>
+                        <RunwayBadge
+                          quantity={total ?? 0}
+                          days={runwayDays(
+                            total ?? 0,
+                            product.link
+                              ? historySales?.byProduct.get(product.link)?.byStore.get(store.name) ?? 0
+                              : 0,
+                            historySales?.days ?? 1
+                          )}
+                          storeName={store.name}
+                        />
                       </span>
                     ) : (
                       <span

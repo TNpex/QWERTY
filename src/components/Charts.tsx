@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 import { useFilteredData, useMetrics } from '../hooks/useAnalytics';
 import { compareSizes } from '../utils/sizes';
+import { shortStoreLabel } from '../utils/storeGroups';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
 
@@ -26,12 +27,44 @@ const IN_STOCK_LABEL = 'Единиц в наличии';
 const OUT_STOCK_LABEL = 'Позиций без наличия';
 const POSITION_HINT = 'Позиция = товар × размер × магазин. «Позиций без наличия» — сколько размерных позиций с нулевым остатком.';
 
+/**
+ * Темизированные элементы Recharts.
+ *
+ * Тёмная тема сделана генерируемым CSS-слоем (src/styles/dark.css), а Recharts
+ * рисует свои оси/сетку/тултип инлайном. Поэтому:
+ * - оси и подписи-легенды берут цвет из `currentColor` (обёртка text-gray-500 —
+ *   её тёмный эквивалент уже есть в dark.css);
+ * - сетка — currentColor с низкой прозрачностью;
+ * - тултип — CSS-переменные --tip-* из index.html (светлые/тёмные значения),
+ *   иначе оставалась бы белая плашка посреди тёмного экрана.
+ */
+const CHART_BODY = 'text-gray-500';
+const AXIS_TICK = { fontSize: 11, fill: 'currentColor' } as const;
+const AXIS_TICK_SMALL = { fontSize: 10, fill: 'currentColor' } as const;
+const GRID_PROPS = { strokeDasharray: '3 3', stroke: 'currentColor', strokeOpacity: 0.15 } as const;
+const TIP_CONTENT = {
+  backgroundColor: 'var(--tip-bg, #ffffff)',
+  border: '1px solid var(--tip-border, #e5e7eb)',
+  borderRadius: 8,
+  fontSize: 12,
+} as const;
+const TIP_LABEL = { color: 'var(--tip-text, #111827)', fontWeight: 600 } as const;
+const TIP_ITEM = { color: 'var(--tip-text, #374151)' } as const;
+const LEGEND_STYLE = { fontSize: 11, color: 'var(--tip-muted, #6b7280)' } as const;
+
+/** Полное название магазина для тултипа (на оси — короткое) */
+function fullStoreName(payload: unknown, fallback: string): string {
+  const first = Array.isArray(payload) ? payload[0] : undefined;
+  const full = (first as { payload?: { fullName?: string } } | undefined)?.payload?.fullName;
+  return full ?? fallback;
+}
+
 export function StoreStockChart() {
   const metrics = useMetrics();
   if (!metrics) return null;
 
   const storeData = metrics.storeMetrics.map((s) => ({
-    name: s.name.length > 20 ? s.name.substring(0, 20) + '...' : s.name,
+    name: shortStoreLabel(s.name),
     fullName: s.name,
     [IN_STOCK_LABEL]: s.totalItems,
     [OUT_STOCK_LABEL]: s.outOfStock,
@@ -40,23 +73,29 @@ export function StoreStockChart() {
   return (
     <div className={CHART_CARD}>
       <h3 className={CHART_TITLE}>Остатки по магазинам</h3>
-      <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={storeData}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-          <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-          <YAxis tick={{ fontSize: 12 }} />
-          <Tooltip
-            formatter={(value: number, name: string) => [value, name]}
-            labelFormatter={(_label, payload) =>
-              payload?.[0]?.payload?.fullName ?? String(_label)
-            }
-          />
-          <Legend wrapperStyle={{ fontSize: 11 }} />
-          <Bar dataKey={IN_STOCK_LABEL} fill="#3b82f6" radius={[4, 4, 0, 0]} />
-          <Bar dataKey={OUT_STOCK_LABEL} fill="#ef4444" radius={[4, 4, 0, 0]} />
-        </BarChart>
-      </ResponsiveContainer>
-      <p className={CHART_NOTE}>{POSITION_HINT}</p>
+      <div className={CHART_BODY}>
+        <ResponsiveContainer width="100%" height={300}>
+          <BarChart data={storeData}>
+            <CartesianGrid {...GRID_PROPS} />
+            <XAxis dataKey="name" tick={AXIS_TICK_SMALL} interval={0} />
+            <YAxis tick={AXIS_TICK} />
+            <Tooltip
+              contentStyle={TIP_CONTENT}
+              labelStyle={TIP_LABEL}
+              itemStyle={TIP_ITEM}
+              formatter={(value: number, name: string) => [value, name]}
+              labelFormatter={(label, payload) => fullStoreName(payload, String(label))}
+            />
+            <Legend wrapperStyle={LEGEND_STYLE} />
+            <Bar dataKey={IN_STOCK_LABEL} fill="#3b82f6" radius={[4, 4, 0, 0]} />
+            <Bar dataKey={OUT_STOCK_LABEL} fill="#ef4444" radius={[4, 4, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <p className={CHART_NOTE}>
+        {POSITION_HINT} Подписи осей — короткие имена точек; полное название — во всплывающей
+        подсказке.
+      </p>
     </div>
   );
 }
@@ -74,17 +113,24 @@ export function CategoryChart() {
   return (
     <div className={CHART_CARD}>
       <h3 className={CHART_TITLE}>Остатки по категориям</h3>
-      <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={categoryData} layout="vertical">
-          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-          <XAxis type="number" tick={{ fontSize: 12 }} />
-          <YAxis dataKey="name" type="category" tick={{ fontSize: 12 }} width={120} />
-          <Tooltip formatter={(value: number, name: string) => [value, name]} />
-          <Legend wrapperStyle={{ fontSize: 11 }} />
-          <Bar dataKey={IN_STOCK_LABEL} fill="#10b981" radius={[0, 4, 4, 0]} />
-          <Bar dataKey={OUT_STOCK_LABEL} fill="#ef4444" radius={[0, 4, 4, 0]} />
-        </BarChart>
-      </ResponsiveContainer>
+      <div className={CHART_BODY}>
+        <ResponsiveContainer width="100%" height={300}>
+          <BarChart data={categoryData} layout="vertical">
+            <CartesianGrid {...GRID_PROPS} />
+            <XAxis type="number" tick={AXIS_TICK} />
+            <YAxis dataKey="name" type="category" tick={AXIS_TICK} width={120} />
+            <Tooltip
+              contentStyle={TIP_CONTENT}
+              labelStyle={TIP_LABEL}
+              itemStyle={TIP_ITEM}
+              formatter={(value: number, name: string) => [value, name]}
+            />
+            <Legend wrapperStyle={LEGEND_STYLE} />
+            <Bar dataKey={IN_STOCK_LABEL} fill="#10b981" radius={[0, 4, 4, 0]} />
+            <Bar dataKey={OUT_STOCK_LABEL} fill="#ef4444" radius={[0, 4, 4, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
       <p className={CHART_NOTE}>{POSITION_HINT}</p>
     </div>
   );
@@ -154,22 +200,37 @@ export function SizeDistributionChart() {
           Нет размерных товаров в выбранной категории
         </p>
       ) : (
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={sizeData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis dataKey="size" tick={{ fontSize: 11 }} interval={0} angle={-35} textAnchor="end" height={55} />
-            <YAxis tick={{ fontSize: 12 }} />
-            <Tooltip formatter={(value: number) => [value, 'Остаток, шт']} />
-            <Bar dataKey="stock" name="Остаток" radius={[4, 4, 0, 0]}>
-              {sizeData.map((entry, index) => (
-                <Cell
-                  key={`cell-${index}`}
-                  fill={entry.stock < 5 ? '#ef4444' : entry.stock < 10 ? '#f59e0b' : '#3b82f6'}
-                />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+        <div className={CHART_BODY}>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={sizeData}>
+              <CartesianGrid {...GRID_PROPS} />
+              <XAxis
+                dataKey="size"
+                tick={AXIS_TICK_SMALL}
+                interval={0}
+                angle={-35}
+                textAnchor="end"
+                height={55}
+              />
+              <YAxis tick={AXIS_TICK} />
+              <Tooltip
+                contentStyle={TIP_CONTENT}
+                labelStyle={TIP_LABEL}
+                itemStyle={TIP_ITEM}
+                formatter={(value: number) => [value, 'Остаток, шт']}
+                labelFormatter={(label) => `Размер ${label}`}
+              />
+              <Bar dataKey="stock" name="Остаток" radius={[4, 4, 0, 0]}>
+                {sizeData.map((entry, index) => (
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={entry.stock < 5 ? '#ef4444' : entry.stock < 10 ? '#f59e0b' : '#3b82f6'}
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       )}
       <p className={CHART_NOTE}>
         Красный — меньше 5 шт на сеть, жёлтый — меньше 10. Товары без размеров («—») не показываются.
@@ -188,29 +249,47 @@ export function StockoutPieChart() {
     { name: 'Позиции в наличии', value: Math.max(0, inStock) },
     { name: 'Позиции без наличия', value: metrics.outOfStockSizes },
   ];
+  const total = pieData[0].value + pieData[1].value;
+  const percentOf = (value: number) => (total > 0 ? Math.round((value / total) * 100) : 0);
 
   return (
     <div className={CHART_CARD}>
       <h3 className={CHART_TITLE}>Статус наличия (размерные позиции)</h3>
-      <ResponsiveContainer width="100%" height={250}>
-        <PieChart>
-          <Pie
-            data={pieData}
-            cx="50%"
-            cy="50%"
-            innerRadius={60}
-            outerRadius={100}
-            paddingAngle={5}
-            dataKey="value"
-            label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
-          >
-            <Cell fill="#3b82f6" />
-            <Cell fill="#ef4444" />
-          </Pie>
-          <Tooltip formatter={(value: number, name: string) => [`${value} поз.`, name]} />
-          <Legend wrapperStyle={{ fontSize: 11 }} />
-        </PieChart>
-      </ResponsiveContainer>
+      <div className={CHART_BODY}>
+        <ResponsiveContainer width="100%" height={250}>
+          <PieChart>
+            <Pie
+              data={pieData}
+              cx="50%"
+              cy="50%"
+              innerRadius={60}
+              outerRadius={100}
+              paddingAngle={5}
+              dataKey="value"
+            >
+              <Cell fill="#3b82f6" />
+              <Cell fill="#ef4444" />
+            </Pie>
+            <Tooltip
+              contentStyle={TIP_CONTENT}
+              labelStyle={TIP_LABEL}
+              itemStyle={TIP_ITEM}
+              formatter={(value: number, name: string) => [
+                `${value} поз. (${percentOf(value)}%)`,
+                name,
+              ]}
+            />
+            <Legend
+              wrapperStyle={LEGEND_STYLE}
+              formatter={(value, entry) => {
+                const idx = (entry as { payload?: { index?: number } })?.payload?.index ?? 0;
+                const row = pieData[idx] ?? pieData[0];
+                return `${value} — ${percentOf(row.value)}%`;
+              }}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
       <p className={CHART_NOTE}>
         {POSITION_HINT} Учтены только позиции, которые магазины возят ({metrics.carriedSKUs}
         {metrics.notCarriedSKUs > 0 ? `; вне ассортимента: ${metrics.notCarriedSKUs}` : ''}).
@@ -233,13 +312,15 @@ export function StoreComparisonChart() {
       .map((store) => {
         const units = totals.get(store.id) ?? 0;
         return {
-          name: store.name.length > 15 ? store.name.substring(0, 15) + '...' : store.name,
+          name: store.name,
           fullName: store.name,
           units,
         };
       })
       .filter((s) => s.units > 0);
   }, [data]);
+
+  const totalUnits = useMemo(() => pieData.reduce((sum, s) => sum + s.units, 0), [pieData]);
 
   if (!data) return null;
 
@@ -255,28 +336,43 @@ export function StoreComparisonChart() {
   return (
     <div className={CHART_CARD}>
       <h3 className={CHART_TITLE}>Распределение запасов по магазинам</h3>
-      <ResponsiveContainer width="100%" height={250}>
-        <PieChart>
-          <Pie
-            data={pieData}
-            cx="50%"
-            cy="50%"
-            outerRadius={90}
-            dataKey="units"
-            label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
-          >
-            {pieData.map((_, index) => (
-              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-            ))}
-          </Pie>
-          <Tooltip
-            formatter={(value: number) => [`${value} шт`, 'Остаток']}
-            labelFormatter={(_label, payload) =>
-              payload?.[0]?.payload?.fullName ?? String(_label)
-            }
-          />
-        </PieChart>
-      </ResponsiveContainer>
+      <div className={CHART_BODY}>
+        <ResponsiveContainer width="100%" height={280}>
+          <PieChart>
+            <Pie data={pieData} cx="50%" cy="50%" outerRadius={90} dataKey="units">
+              {pieData.map((_, index) => (
+                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+              ))}
+            </Pie>
+            <Tooltip
+              contentStyle={TIP_CONTENT}
+              labelStyle={TIP_LABEL}
+              itemStyle={TIP_ITEM}
+              formatter={(value: number, _name, entry) => {
+                const units = Number(value);
+                const percent = totalUnits > 0 ? Math.round((units / totalUnits) * 100) : 0;
+                void entry;
+                return [`${units} шт (${percent}%)`, 'Остаток'];
+              }}
+              labelFormatter={(label, payload) => fullStoreName(payload, String(label))}
+            />
+            <Legend
+              wrapperStyle={LEGEND_STYLE}
+              layout="vertical"
+              align="right"
+              verticalAlign="middle"
+              formatter={(value) => {
+                const row = pieData.find((s) => s.name === value);
+                const percent = row && totalUnits > 0 ? Math.round((row.units / totalUnits) * 100) : 0;
+                return `${shortStoreLabel(String(value))} — ${percent}%`;
+              }}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+      <p className={CHART_NOTE}>
+        Доли — в штуках остатка по точкам. Полное название магазина — в подсказке на секторе.
+      </p>
     </div>
   );
 }

@@ -3,7 +3,7 @@
  * Команда: npm run build-dark  (scripts/build-dark-css.mjs)
  *
  * Слой переопределений цветовых утилит Tailwind для `.dark` на <html>.
- * Классов в проекте: 160. Пересчёт — по HSL-правилам из шапки скрипта.
+ * Классов в проекте: 161. Пересчёт — по HSL-правилам из шапки скрипта.
  */
 
 html.dark {
@@ -27,6 +27,7 @@ html.dark .bg-amber-500 { background-color: hsl(38 92% 44%); }
 html.dark .bg-blue-100 { background-color: hsl(217 91% 18%); }
 html.dark .bg-blue-50 { background-color: hsl(217 91% 13%); }
 html.dark .bg-blue-50\/30 { background-color: hsl(217 91% 13% / 0.3); }
+html.dark .bg-blue-50\/40 { background-color: hsl(217 91% 13% / 0.4); }
 html.dark .bg-blue-50\/50 { background-color: hsl(217 91% 13% / 0.5); }
 html.dark .bg-blue-500 { background-color: hsl(217 91% 44%); }
 html.dark .bg-blue-600 { background-color: hsl(217 91% 39%); }
@@ -41,6 +42,7 @@ html.dark .bg-emerald-600 { background-color: hsl(160 84% 39%); }
 html.dark .bg-emerald-700 { background-color: hsl(160 84% 33%); }
 html.dark .bg-gray-100 { background-color: hsl(220 24% 18%); }
 html.dark .bg-gray-200 { background-color: hsl(220 22% 24%); }
+html.dark .bg-gray-400 { background-color: hsl(220 18% 46%); }
 html.dark .bg-gray-50 { background-color: hsl(220 26% 13%); }
 html.dark .bg-gray-50\/50 { background-color: hsl(220 26% 13% / 0.5); }
 html.dark .bg-gray-50\/60 { background-color: hsl(220 26% 13% / 0.6); }
@@ -164,6 +166,7 @@ html.dark .text-rose-600 { color: hsl(350 72% 69%); }
 html.dark .text-rose-700 { color: hsl(350 78% 75%); }
 html.dark .text-sky-700 { color: hsl(199 78% 75%); }
 html.dark .text-sky-800 { color: hsl(199 70% 83%); }
+html.dark .text-violet-600 { color: hsl(258 72% 69%); }
 html.dark .text-violet-700 { color: hsl(258 78% 75%); }
 html.dark .text-yellow-700 { color: hsl(48 78% 75%); }
 html.dark .to-blue-50 { --tw-gradient-to: hsl(217 91% 13%); }

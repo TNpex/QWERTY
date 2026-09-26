@@ -469,7 +469,7 @@ export function SalesHistory() {
                   Сохраняйте результат каждого парсинга — и здесь появятся продажи, перемещения и
                   товары, распроданные между снимками.
                 </p>
-                <pre className="bg-white/70 rounded-lg p-3 text-xs overflow-x-auto">
+                <pre className="bg-gray-50 border border-gray-100 rounded-lg p-3 text-xs overflow-x-auto">
 {`# ежедневный парсинг saletennis.com сохраните в CSV, затем:
 npm run snapshot -- путь/к/2026-09-24.csv
 

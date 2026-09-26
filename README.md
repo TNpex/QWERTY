@@ -1,4 +1,4 @@
-# SaleTennis BI Analytics
+# SaleTennis Analytics
 
 BI-дашборд для анализа наличия товаров и размеров по магазинам сети SaleTennis
 (теннис и падел).

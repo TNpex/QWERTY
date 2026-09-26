@@ -15,6 +15,7 @@ describe('адреса разделов', () => {
     expect(TAB_PATHS).toEqual({
       dashboard: '/',
       inventory: '/inventory',
+    matrix: '/matrix',
       sales: '/sales',
       transfers: '/transfers',
       restock: '/restock',
@@ -104,7 +105,7 @@ describe('переходы и подписка', () => {
 
   it('все вкладки достижимы переходом', () => {
     const tabs = Object.keys(TAB_PATHS) as TabId[];
-    expect(tabs).toHaveLength(7);
+    expect(tabs).toHaveLength(8);
     for (const tab of tabs) {
       expect(parseRoute(TAB_PATHS[tab]).tab).toBe(tab);
     }

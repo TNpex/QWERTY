@@ -45,6 +45,7 @@ import {
 } from '../utils/orderSelection';
 import { ProductCardModal, ProductImage } from './ProductCardModal';
 import { useProductRoute } from '../utils/router';
+import { Download, Loader2 } from 'lucide-react';
 import type { TransferRecommendation } from '../types';
 
 const PRIORITY_STYLES: Record<string, string> = {
@@ -151,6 +152,46 @@ function QtyStepper({
   );
 }
 
+/** Выгрузка текущих рекомендаций перемещения в XLSX (с учётом фильтров) */
+async function exportTransfersXlsx(
+  rows: TransferRecommendation[],
+  date = new Date().toISOString().slice(0, 10)
+) {
+  const XLSX = await import('xlsx');
+  const sheetRows = rows.map((r) => ({
+    'Товар': r.productName,
+    'Бренд': r.brand,
+    'Категория': r.category,
+    'Размер': r.size,
+    'Откуда': r.fromStore,
+    'Остаток у донора': r.fromQty,
+    'Куда': r.toStore,
+    'Остаток у получателя': r.toQty,
+    'К перемещению, шт': r.quantity,
+    'Приоритет': r.priority,
+    'Маршрут': r.route,
+    'Основание': r.reason,
+  }));
+  const worksheet = XLSX.utils.json_to_sheet(sheetRows);
+  worksheet['!cols'] = [
+    { wch: 44 },
+    { wch: 14 },
+    { wch: 18 },
+    { wch: 8 },
+    { wch: 28 },
+    { wch: 14 },
+    { wch: 28 },
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 10 },
+    { wch: 12 },
+    { wch: 40 },
+  ];
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Перемещения');
+  XLSX.writeFile(workbook, `transfers-${date}.xlsx`);
+}
+
 export function TransferRecommendations() {
   const data = useFilteredData();
   const recommendations = useTransferRecommendations();
@@ -166,6 +207,7 @@ export function TransferRecommendations() {
   const [sessionDraft, setSessionDraft] = useState('');
   const [showHelp, setShowHelp] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>(loadViewMode);
+  const [exporting, setExporting] = useState(false);
   /**
    * Окно заказа НЕ хранит снимок списка: оно открыто/закрыто, а содержимое
    * (числа, ссылка, текст) каждый раз считается из текущего выбора — иначе
@@ -596,7 +638,7 @@ export function TransferRecommendations() {
             })}
           </div>
           <p className="text-[10px] text-indigo-500 mt-2">
-            Профили правятся на вкладке «🏬 Магазины», индивидуальные запреты и минимумы — в
+            Профили правятся на вкладке «Магазины», индивидуальные запреты и минимумы — в
             карточке товара («🏬 Правила по магазинам»). 🚫 Запрет сильнее всех остальных правил.
           </p>
         </div>
@@ -643,6 +685,22 @@ export function TransferRecommendations() {
                 <LayoutGrid className="w-4 h-4" />
               </button>
             </div>
+            <button
+              onClick={async () => {
+                setExporting(true);
+                try {
+                  await exportTransfersXlsx(filtered);
+                } finally {
+                  setExporting(false);
+                }
+              }}
+              disabled={exporting || filtered.length === 0}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors disabled:opacity-60"
+              title="Скачать текущие рекомендации перемещения в XLSX (с учётом фильтров)"
+            >
+              {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              XLSX
+            </button>
             {subtypes.length > 0 && (
               <select
                 value={selectedSubtype}

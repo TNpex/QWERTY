@@ -7,7 +7,7 @@
       name="description"
       content="BI-дашборд для аналитики наличия товаров и размеров по магазинам сети SaleTennis"
     />
-    <title>SaleTennis BI Analytics — Аналитика наличия товаров</title>
+    <title>SaleTennis Analytics — Аналитика наличия товаров</title>
     <style>
       html,
       body {
@@ -20,6 +20,19 @@
       html.dark,
       html.dark body {
         background-color: #0f141c;
+      }
+      /* Тултипы Recharts: в тёмной теме без них оставалась бы белая плашка */
+      :root {
+        --tip-bg: #ffffff;
+        --tip-border: #e5e7eb;
+        --tip-text: #1f2937;
+        --tip-muted: #6b7280;
+      }
+      html.dark {
+        --tip-bg: #151b25;
+        --tip-border: #2c3542;
+        --tip-text: #e5e9f0;
+        --tip-muted: #9aa7b8;
       }
     </style>
     <script>
