@@ -87,6 +87,8 @@ export type InventorySort =
   | 'brand'
   | 'stock-desc'
   | 'stock-asc'
+  | 'price-asc'
+  | 'price-desc'
   | 'discount';
 
 const SORT_LABELS: Record<InventorySort, string> = {
@@ -96,6 +98,8 @@ const SORT_LABELS: Record<InventorySort, string> = {
   brand: 'Бренд, затем название',
   'stock-desc': 'Остаток: больше сначала',
   'stock-asc': 'Остаток: меньше сначала',
+  'price-asc': 'Цена: дешевле сначала',
+  'price-desc': 'Цена: дороже сначала',
   discount: '💰 По размеру скидки',
 };
 
@@ -295,6 +299,10 @@ export function InventoryTable() {
         return list.sort((a, b) => totalOf(b) - totalOf(a) || byName(a, b));
       case 'stock-asc':
         return list.sort((a, b) => totalOf(a) - totalOf(b) || byName(a, b));
+      case 'price-asc':
+        return list.sort((a, b) => a.price - b.price || byName(a, b));
+      case 'price-desc':
+        return list.sort((a, b) => b.price - a.price || byName(a, b));
       case 'discount':
         return list.sort(
           (a, b) => (b.discountPercent ?? 0) - (a.discountPercent ?? 0) || byName(a, b)
@@ -750,7 +758,7 @@ export function InventoryTable() {
             >
               {/* Main Row */}
               <div
-                className="grid gap-2 px-4 py-3 items-center cursor-pointer hover:bg-blue-50/30 transition-colors"
+                className="cv-row grid gap-2 px-4 py-3 items-center cursor-pointer hover:bg-blue-50/30 transition-colors"
                 style={{ gridTemplateColumns: `2.6fr 0.7fr 0.8fr 0.8fr ${Math.max(displayStores.length, 1)}fr` }}
                 onClick={() => setExpandedProduct(isExpanded ? null : product.id)}
               >
@@ -1010,7 +1018,7 @@ export function InventoryTable() {
             return (
               <div
                 key={`delisted-${g.key}`}
-                className="grid gap-2 px-4 py-3 items-center bg-gray-50/70 border border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 transition-colors"
+                className="cv-row grid gap-2 px-4 py-3 items-center bg-gray-50/70 border border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 transition-colors"
                 style={{
                   gridTemplateColumns: `2.6fr 0.7fr 0.8fr 0.8fr ${Math.max(displayStores.length, 1)}fr`,
                 }}

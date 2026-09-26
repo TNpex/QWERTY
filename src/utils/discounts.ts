@@ -143,6 +143,8 @@ export function applyDiscounts(data: ParsedData, map: DiscountMap | null): Parse
   const products = data.products.map((product) => {
     const discount = discountFor(map, product);
     if (!discount) return product;
+    // Скидка из парсера (старая цена на странице) уже может стоять: берём большую
+    if ((product.discountPercent ?? 0) >= discount.percent) return product;
     touched = true;
     return {
       ...product,

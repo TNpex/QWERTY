@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { DataProvider, useData } from './context/DataContext';
 import { downloadBrandOverrides } from './utils/overrides';
@@ -220,23 +220,29 @@ function AppContent() {
   // Ctrl/средняя кнопка/«Открыть в новой вкладке» — как обычные ссылки
   useEffect(() => interceptInternalLinks(), []);
 
-  // Предзагрузка чанка вкладки при наведении: клик открывает раздел без паузы
-  const prefetched = useRef<Set<Tab>>(new Set());
-  const prefetchTab = useCallback((tab: Tab) => {
-    if (prefetched.current.has(tab)) return;
-    prefetched.current.add(tab);
-    const loaders: Partial<Record<Tab, () => Promise<unknown>>> = {
-      dashboard: () => import('./components/Dashboard'),
-      inventory: () => import('./components/InventoryTable'),
-      matrix: () => import('./components/StockMatrix'),
-      sales: () => import('./components/SalesHistory'),
-      transfers: () => import('./components/TransferRecommendations'),
-      restock: () => import('./components/RestockRecommendations'),
-      stores: () => import('./components/StoreProfiles'),
-      analytics: () => import('./components/AnalyticsPage'),
+  // Предзагрузка чанков тяжёлых вкладок в ПРОСТОЕ время браузера (не при
+  // наведении: компиляция чанка на hover сама давала подвисание). Первый
+  // экран рисуется сразу, остальное дотягивается фоном без пауз клику.
+  useEffect(() => {
+    if (!hydrated) return;
+    const idle = (fn: () => void): number => {
+      const w = window as unknown as {
+        requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      };
+      if (typeof w.requestIdleCallback === 'function') {
+        return w.requestIdleCallback(fn, { timeout: 5000 });
+      }
+      return window.setTimeout(fn, 1200);
     };
-    void loaders[tab]?.().catch(() => {});
-  }, []);
+    const handles = [
+      window.setTimeout(() => idle(() => void import('./components/Dashboard').catch(() => {})), 400),
+      window.setTimeout(() => idle(() => void import('./components/InventoryTable').catch(() => {})), 1200),
+      window.setTimeout(() => idle(() => void import('./components/AnalyticsPage').catch(() => {})), 2200),
+      window.setTimeout(() => idle(() => void import('./components/TransferRecommendations').catch(() => {})), 3200),
+      window.setTimeout(() => idle(() => void import('./components/SalesHistory').catch(() => {})), 4200),
+    ];
+    return () => handles.forEach((h) => window.clearTimeout(h));
+  }, [hydrated]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Название раздела — в заголовок вкладки браузера
@@ -379,7 +385,6 @@ function AppContent() {
                   key={tab.id}
                   href={routeToPath({ tab: tab.id })}
                   onClick={() => setSidebarOpen(false)}
-                  onMouseEnter={() => prefetchTab(tab.id)}
                   className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                     activeTab === tab.id
                       ? 'bg-blue-50 text-blue-700 shadow-sm'

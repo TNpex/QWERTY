@@ -209,3 +209,40 @@ describe('hashString', () => {
     expect(hashString('')).toBeTruthy();
   });
 });
+
+describe('старая цена из CSV (скидка вне раздела «Распродажа»)', () => {
+  it('старая цена больше текущей → oldPrice и discountPercent', () => {
+    const rows = [
+      {
+        'Название': 'Рюкзак Wilson Junior',
+        'Категория': 'Сумки и чехлы',
+        'Бренд': 'Wilson',
+        'Цена': '4792 ₽',
+        'Старая цена': '5990 ₽',
+        'Ссылка': 'https://saletennis.com/catalog/product/1',
+        'Уфа': 1,
+      },
+    ];
+    const data = parseBundledRows(rows, [], {});
+    expect(data.products[0].price).toBe(4792);
+    expect(data.products[0].oldPrice).toBe(5990);
+    expect(data.products[0].discountPercent).toBe(20);
+  });
+
+  it('старая цена не больше текущей — скидки нет', () => {
+    const rows = [
+      {
+        'Название': 'Сумка 7/6',
+        'Категория': 'Сумки и чехлы',
+        'Бренд': '7/6',
+        'Цена': '5990 ₽',
+        'Старая цена': '5990 ₽',
+        'Ссылка': 'https://saletennis.com/catalog/product/2',
+        'Уфа': 1,
+      },
+    ];
+    const data = parseBundledRows(rows, [], {});
+    expect(data.products[0].oldPrice).toBeUndefined();
+    expect(data.products[0].discountPercent).toBeUndefined();
+  });
+});

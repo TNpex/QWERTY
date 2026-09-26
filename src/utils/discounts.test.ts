@@ -114,3 +114,20 @@ describe('discountFor / applyDiscounts', () => {
     expect(discountSummary(null)).toEqual({ count: 0, maxPercent: 0, avgPercent: 0 });
   });
 });
+
+describe('applyDiscounts: скидка из парсера против раздела «Распродажа»', () => {
+  it('больший процент побеждает', () => {
+    const data: ParsedData = {
+      stores: [{ id: 's', name: 'Уфа' }],
+      products: [
+        { id: 'p', name: 'Т', brand: 'B', category: 'Обувь', price: 4000, oldPrice: 5000, discountPercent: 20, link: 'l1' },
+      ],
+      inventory: [],
+    };
+    const map = {
+      items: { i1: { itemId: 'i1', price: 4400, oldPrice: 5000, percent: 10, link: 'l1' } },
+    };
+    const applied = applyDiscounts(data, map);
+    expect(applied.products[0].discountPercent).toBe(20);
+  });
+});
