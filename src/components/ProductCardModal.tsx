@@ -509,7 +509,7 @@ export function ProductCardModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Шапка */}
-        <div className="sticky top-0 bg-white/95 backdrop-blur flex items-start justify-between gap-3 p-5 border-b border-gray-100 z-10">
+        <div className="sticky top-0 bg-white flex items-start justify-between gap-3 p-5 border-b border-gray-100 z-10">
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <BrandEditor product={product} />

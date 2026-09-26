@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, Globe, MapPin, Warehouse } from 'lucide-react';
+import { Check, ChevronDown } from 'lucide-react';
 import type { Store } from '../types';
-import { isWarehouse } from '../utils/storeGroups';
 
 /**
  * Выбор «Моего магазина» без обрезки названий.
@@ -20,17 +19,6 @@ interface StorePickerProps {
 }
 
 export const ALL_STORES_LABEL = 'Вся сеть (не выбран)';
-
-/**
- * Монохромная иконка точки вместо цветных эмодзи (🌐/📦/📍): вся сеть, склад,
- * магазин — в стиле остальных иконок сайдбара (lucide). data-icon — стабильный
- * хук для тестов.
- */
-function StoreIcon({ name, className }: { name: string; className?: string }) {
-  const kind = !name ? 'all' : isWarehouse(name) ? 'warehouse' : 'store';
-  const Icon = kind === 'all' ? Globe : kind === 'warehouse' ? Warehouse : MapPin;
-  return <Icon className={className} data-icon={kind} aria-hidden="true" />;
-}
 
 export function StorePicker({ stores, value, onChange }: StorePickerProps) {
   const [open, setOpen] = useState(false);
@@ -77,7 +65,6 @@ export function StorePicker({ stores, value, onChange }: StorePickerProps) {
         className="w-full mt-1 flex items-start gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white text-left cursor-pointer hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
         title="«Обзор» и «Инвентарь» откроются на этом магазине, «Перемещения» покажут только ваши входящие/исходящие. Выбор виден в адресе страницы (?scope=…), поэтому ссылку можно скопировать. Сам профиль «Мой магазин» хранится только на этом устройстве."
       >
-        <StoreIcon name={value} className="mt-0.5 w-4 h-4 shrink-0 text-gray-500" />
         <span className="flex-1 break-words leading-snug text-gray-800">{label}</span>
         <ChevronDown
           className={`mt-0.5 w-4 h-4 shrink-0 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`}
@@ -103,7 +90,6 @@ export function StorePicker({ stores, value, onChange }: StorePickerProps) {
                       : 'text-gray-700 hover:bg-gray-50'
                   }`}
                 >
-                  <StoreIcon name={opt.value} className="mt-0.5 w-4 h-4 shrink-0 text-gray-400" />
                   <span className="flex-1">{opt.label}</span>
                   {active && <Check className="mt-0.5 w-4 h-4 shrink-0 text-blue-600" />}
                 </button>

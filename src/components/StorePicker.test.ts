@@ -26,17 +26,18 @@ describe('StorePicker — название магазина читается п�
     expect(html).toContain('break-words');
   });
 
-  it('склад и магазин помечены монохромными иконками (без цветных эмодзи)', () => {
-    expect(render('Екатеринбург (Основной склад)')).toContain('data-icon="warehouse"');
-    expect(render('Уфа')).toContain('data-icon="store"');
-    // цветных эмодзи-маркеров в сайдбаре больше нет
-    expect(render('Уфа')).not.toContain('📍');
+  it('список показывает только названия магазинов — без эмодзи и иконок', () => {
+    const html = render('Екатеринбург (Основной склад)');
+    expect(html).not.toContain('📦');
+    expect(html).not.toContain('📍');
+    expect(html).not.toContain('🌐');
+    // никаких иконок-маркеров точек: только шеврон раскрытия
+    expect(html.match(/<svg/g)?.length ?? 0).toBe(1);
   });
 
-  it('пустое значение — «Вся сеть (не выбран)» с иконкой всей сети', () => {
+  it('пустое значение — «Вся сеть (не выбран)» без иконок', () => {
     const html = render('');
     expect(html).toContain(ALL_STORES_LABEL);
-    expect(html).toContain('data-icon="all"');
     expect(html).not.toContain('🌐');
   });
 

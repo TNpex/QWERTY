@@ -253,7 +253,7 @@ function AppContent() {
 
   // Название раздела — в заголовок вкладки браузера
   useEffect(() => {
-    document.title = `${TAB_BY_ID[activeTab]?.label ?? 'SaleTennis'} — SaleTennis BI`;
+    document.title = `${TAB_BY_ID[activeTab]?.label ?? 'SaleTennis'} — SaleTennis Analytics`;
   }, [activeTab]);
   const overrideCount = Object.keys(brandOverrides).length;
   const settingsFileRef = useRef<HTMLInputElement>(null);
@@ -371,7 +371,7 @@ function AppContent() {
             <div>
               <h1 className="font-bold text-gray-800 text-lg leading-tight">SaleTennis</h1>
               <p className="text-[10px] text-green-600 uppercase tracking-wider font-semibold">
-                BI Analytics
+                Analytics
               </p>
             </div>
           </div>
