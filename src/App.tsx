@@ -1,27 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { DataProvider, useData } from './context/DataContext';
-import { useMetrics } from './hooks/useAnalytics';
-import { oosLevel } from './utils/analyticsCore';
-import { isWarehouse } from './utils/storeGroups';
 import { downloadBrandOverrides } from './utils/overrides';
 import { downloadSettings, settingsCounts } from './utils/settings';
 import { lazy, Suspense } from 'react';
 import { Loader2 as LazyLoader } from 'lucide-react';
-import {
-  StoreStockChart,
-  CategoryChart,
-  SizeDistributionChart,
-  StockoutPieChart,
-  StoreComparisonChart,
-} from './components/Charts';
-import {
-  AvailabilityTrendChart,
-  StockValueChart,
-  AbcCoverageCard,
-  DeadStockCard,
-  SizeProfileCard,
-} from './components/AnalyticsInsights';
 
 /**
  * Тяжёлые вкладки грузятся отдельными чанками (code-splitting): первый экран
@@ -35,6 +18,7 @@ const RestockRecommendations = lazy(() => import('./components/RestockRecommenda
 const SalesHistory = lazy(() => import('./components/SalesHistory').then((m) => ({ default: m.SalesHistory })));
 const StoreProfiles = lazy(() => import('./components/StoreProfiles').then((m) => ({ default: m.StoreProfiles })));
 const StockMatrix = lazy(() => import('./components/StockMatrix').then((m) => ({ default: m.StockMatrix })));
+const AnalyticsPage = lazy(() => import('./components/AnalyticsPage').then((m) => ({ default: m.AnalyticsPage })));
 import {
   LayoutDashboard,
   LayoutGrid,
@@ -130,12 +114,6 @@ const TAB_BY_ID = Object.fromEntries(TABS.map((tab) => [tab.id, tab])) as Record
   (typeof TABS)[number]
 >;
 
-const OOS_LEVEL_STYLES = {
-  ok: { dot: 'bg-emerald-500', text: 'text-emerald-600' },
-  warn: { dot: 'bg-amber-500', text: 'text-amber-600' },
-  bad: { dot: 'bg-red-500', text: 'text-red-600' },
-} as const;
-
 /** Заголовок секции в панели «Настройки и данные» */
 function ServiceSection({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -188,50 +166,6 @@ function ServiceRow({
         </span>
       )}
     </button>
-  );
-}
-
-function StoreSummary() {
-  const metrics = useMetrics();
-  if (!metrics) return null;
-
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-      <h3 className="text-lg font-semibold text-gray-800 mb-4">Сводка по магазинам</h3>
-      <div className="space-y-3">
-        {metrics.storeMetrics.map((store) => {
-          const warehouse = isWarehouse(store.name);
-          const styles = warehouse
-            ? { dot: 'bg-blue-500', text: 'text-blue-600' }
-            : OOS_LEVEL_STYLES[oosLevel(store.outOfStockPercent)];
-          return (
-            <div
-              key={store.id}
-              className={`flex items-center justify-between p-3 rounded-lg ${
-                warehouse ? 'bg-blue-50 border border-blue-100' : 'bg-gray-50'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className={`w-3 h-3 rounded-full ${styles.dot}`} />
-                <span className={`font-medium text-sm ${warehouse ? 'text-blue-800' : 'text-gray-700'}`}>
-                  {warehouse ? '📦 ' : ''}
-                  {store.name}
-                </span>
-              </div>
-              <div className="flex items-center gap-4">
-                <span className="text-xs text-gray-500">Остаток: {store.totalItems} шт.</span>
-                <span className={`text-xs font-medium ${styles.text}`}>
-                  {store.outOfStockPercent}% нет
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <p className="mt-3 text-[10px] text-gray-400">
-        Доля «нет в наличии» считается только по позициям, которые магазин возит.
-      </p>
-    </div>
   );
 }
 
@@ -362,25 +296,7 @@ function AppContent() {
       case 'stores':
         return <StoreProfiles />;
       case 'analytics':
-        return (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <StoreStockChart />
-              <CategoryChart />
-              <SizeDistributionChart />
-              <StockoutPieChart />
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <AvailabilityTrendChart />
-              <StockValueChart />
-              <AbcCoverageCard />
-              <SizeProfileCard />
-              <DeadStockCard />
-              <StoreSummary />
-            </div>
-            <StoreComparisonChart />
-          </div>
-        );
+        return <AnalyticsPage />;
       default:
         return null;
     }
