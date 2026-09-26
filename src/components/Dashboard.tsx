@@ -29,7 +29,7 @@ import {
 } from '../hooks/useAnalytics';
 import { useData } from '../context/DataContext';
 import { getOverstockPositions } from '../utils/analyticsCore';
-import { isWarehouse, shortStoreLabel } from '../utils/storeGroups';
+import { shortStoreLabel } from '../utils/storeGroups';
 import {
   ALL_SCOPE,
   sharePercent,
@@ -37,6 +37,7 @@ import {
   type StoreOverviewRow,
 } from '../utils/storeScope';
 import { useStoreScope } from '../hooks/useStoreScope';
+import { StoreDigest } from './StoreDigest';
 import type { TabId } from '../types';
 
 /**
@@ -280,7 +281,7 @@ export function Dashboard({ onNavigate }: { onNavigate?: (tab: TabId) => void })
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex-1 min-w-[220px]">
             <h3 className="text-lg font-semibold text-gray-800">
-              {scope === ALL_SCOPE ? '🌐 Вся сеть' : `🏬 ${scope}`}
+              {scope === ALL_SCOPE ? 'Вся сеть' : scope}
             </h3>
             <p className="text-sm text-gray-500 mt-0.5">
               {snapshotDate ? `Источник: снимок остатков от ${snapshotDate}` : 'Источник: загруженный файл'} ·{' '}
@@ -297,10 +298,9 @@ export function Dashboard({ onNavigate }: { onNavigate?: (tab: TabId) => void })
               className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white cursor-pointer focus:ring-2 focus:ring-blue-500 max-w-[320px]"
               title="Обзор всей сети или одного магазина (по умолчанию подставляется «Мой магазин»)"
             >
-              <option value={ALL_SCOPE}>🌐 Вся сеть</option>
+              <option value={ALL_SCOPE}>Вся сеть</option>
               {data.stores.map((store) => (
                 <option key={store.id} value={store.name}>
-                  {isWarehouse(store.name) ? '📦 ' : ''}
                   {store.name}
                 </option>
               ))}
@@ -312,7 +312,7 @@ export function Dashboard({ onNavigate }: { onNavigate?: (tab: TabId) => void })
               className="px-3 py-2 rounded-lg text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 min-w-0 break-words text-left"
               title="Вернуться к обзору «Моего магазина»"
             >
-              📍 Мой магазин: {storeProfile}
+              Мой магазин: {storeProfile}
             </button>
           )}
         </div>
@@ -345,6 +345,9 @@ export function Dashboard({ onNavigate }: { onNavigate?: (tab: TabId) => void })
           </div>
         </div>
       </div>
+
+      {/* Утренний дайджест точки — когда выбрана конкретная точка */}
+      {scope !== ALL_SCOPE && <StoreDigest storeName={scope} />}
 
       {/* Карточки: дроби вместо процентов */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

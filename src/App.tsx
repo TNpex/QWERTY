@@ -6,11 +6,8 @@ import { oosLevel } from './utils/analyticsCore';
 import { isWarehouse } from './utils/storeGroups';
 import { downloadBrandOverrides } from './utils/overrides';
 import { downloadSettings, settingsCounts } from './utils/settings';
-import { FileUpload } from './components/FileUpload';
-import { Dashboard } from './components/Dashboard';
-import { InventoryTable } from './components/InventoryTable';
-import { TransferRecommendations } from './components/TransferRecommendations';
-import { RestockRecommendations } from './components/RestockRecommendations';
+import { lazy, Suspense } from 'react';
+import { Loader2 as LazyLoader } from 'lucide-react';
 import {
   StoreStockChart,
   CategoryChart,
@@ -19,7 +16,28 @@ import {
   StoreComparisonChart,
 } from './components/Charts';
 import {
+  AvailabilityTrendChart,
+  StockValueChart,
+  AbcCoverageCard,
+  DeadStockCard,
+  SizeProfileCard,
+} from './components/AnalyticsInsights';
+
+/**
+ * Тяжёлые вкладки грузятся отдельными чанками (code-splitting): первый экран
+ * не тащит таблицы, XLSX-парсер и рекомендации, пока пользователь их не открыл.
+ */
+const FileUpload = lazy(() => import('./components/FileUpload').then((m) => ({ default: m.FileUpload })));
+const Dashboard = lazy(() => import('./components/Dashboard').then((m) => ({ default: m.Dashboard })));
+const InventoryTable = lazy(() => import('./components/InventoryTable').then((m) => ({ default: m.InventoryTable })));
+const TransferRecommendations = lazy(() => import('./components/TransferRecommendations').then((m) => ({ default: m.TransferRecommendations })));
+const RestockRecommendations = lazy(() => import('./components/RestockRecommendations').then((m) => ({ default: m.RestockRecommendations })));
+const SalesHistory = lazy(() => import('./components/SalesHistory').then((m) => ({ default: m.SalesHistory })));
+const StoreProfiles = lazy(() => import('./components/StoreProfiles').then((m) => ({ default: m.StoreProfiles })));
+const StockMatrix = lazy(() => import('./components/StockMatrix').then((m) => ({ default: m.StockMatrix })));
+import {
   LayoutDashboard,
+  LayoutGrid,
   Package,
   ArrowLeftRight,
   ShoppingCart,
@@ -40,9 +58,7 @@ import {
   Settings,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { SalesHistory } from './components/SalesHistory';
 import { FilterBar } from './components/FilterBar';
-import { StoreProfiles } from './components/StoreProfiles';
 import { StorePicker } from './components/StorePicker';
 import { useRoute, useNavigateTab } from './utils/router';
 import { useStoreScope } from './hooks/useStoreScope';
@@ -70,6 +86,12 @@ const TABS: { id: Tab; label: string; icon: LucideIcon; subtitle: string }[] = [
     label: 'Инвентарь',
     icon: Package,
     subtitle: 'Детальная таблица наличия товаров и размеров',
+  },
+  {
+    id: 'matrix',
+    label: 'Матрица',
+    icon: LayoutGrid,
+    subtitle: 'Товар × магазин: где пусто, где последняя штука, где запас',
   },
   {
     id: 'sales',
@@ -213,6 +235,16 @@ function StoreSummary() {
   );
 }
 
+/** Заглушка между кликом по вкладке и приездом её чанка */
+function TabLoading() {
+  return (
+    <div className="flex items-center justify-center gap-2 py-24 text-sm text-gray-500">
+      <LazyLoader className="w-5 h-5 animate-spin" />
+      Загружаем раздел…
+    </div>
+  );
+}
+
 function AppContent() {
   const {
     data,
@@ -299,7 +331,9 @@ function AppContent() {
             </div>
           </div>
         )}
-        <FileUpload />
+        <Suspense fallback={<TabLoading />}>
+          <FileUpload />
+        </Suspense>
       </div>
     );
   }
@@ -317,6 +351,8 @@ function AppContent() {
         return <Dashboard onNavigate={setActiveTab} />;
       case 'inventory':
         return <InventoryTable />;
+      case 'matrix':
+        return <StockMatrix />;
       case 'sales':
         return <SalesHistory />;
       case 'transfers':
@@ -335,9 +371,14 @@ function AppContent() {
               <StockoutPieChart />
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <StoreComparisonChart />
+              <AvailabilityTrendChart />
+              <StockValueChart />
+              <AbcCoverageCard />
+              <SizeProfileCard />
+              <DeadStockCard />
               <StoreSummary />
             </div>
+            <StoreComparisonChart />
           </div>
         );
       default:
@@ -595,7 +636,9 @@ function AppContent() {
         {/* Page Content */}
         <div className="p-4 lg:p-8 space-y-4">
           <FilterBar />
-          {renderContent()}
+          <Suspense fallback={<TabLoading />}>
+            {renderContent()}
+          </Suspense>
         </div>
       </main>
     </div>

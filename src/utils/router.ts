@@ -30,6 +30,7 @@ import type { TabId } from '../types';
 export const TAB_PATHS: Record<TabId, string> = {
   dashboard: '/',
   inventory: '/inventory',
+  matrix: '/matrix',
   sales: '/sales',
   transfers: '/transfers',
   restock: '/restock',

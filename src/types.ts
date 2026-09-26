@@ -128,6 +128,7 @@ export interface RestockRecommendation {
 export type TabId =
   | 'dashboard'
   | 'inventory'
+  | 'matrix'
   | 'sales'
   | 'transfers'
   | 'restock'

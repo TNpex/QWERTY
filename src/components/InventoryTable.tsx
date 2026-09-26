@@ -9,7 +9,9 @@ import {
   LayoutGrid,
   List,
 } from 'lucide-react';
-import { useFilteredData, useIsHot } from '../hooks/useAnalytics';
+import { useFilteredData, useIsHot, useHistorySales } from '../hooks/useAnalytics';
+import { RunwayBadge } from './RunwayBadge';
+import { runwayDays } from '../utils/insights';
 import { useStoreScope } from '../hooks/useStoreScope';
 import { useData } from '../context/DataContext';
 import {
@@ -306,6 +308,7 @@ export function InventoryTable() {
     return countAvailability(list.map((p) => statusOf(p.id).status));
   }, [products, indexes, selectedStore, statusOf]);
   const selectedStoreName = stores.find((st) => st.id === selectedStore)?.name ?? '';
+  const historySales = useHistorySales();
   /** Сколько товаров со скидкой в текущей области (для подписи переключателя) */
   const discountCount = useMemo(() => {
     const storeScoped = selectedStore !== 'all';
@@ -667,7 +670,7 @@ export function InventoryTable() {
         {/* Table Header */}
         <div
           className="grid gap-2 px-4 py-2 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg text-xs font-semibold text-gray-600 uppercase tracking-wide border border-green-100"
-          style={{ gridTemplateColumns: `2.6fr 0.7fr 0.8fr ${Math.max(displayStores.length, 1)}fr` }}
+          style={{ gridTemplateColumns: `2.6fr 0.7fr 0.8fr 0.8fr ${Math.max(displayStores.length, 1)}fr` }}
         >
           <div>🎾 Товар</div>
           <div>Бренд</div>
@@ -675,6 +678,12 @@ export function InventoryTable() {
             {selectedStore === 'all' || !selectedStoreName
               ? 'Общий остаток'
               : `Остаток · ${shortStoreLabel(selectedStoreName)}`}
+          </div>
+          <div
+            className="text-center"
+            title="Дней до обнуления при текущей скорости продаж по снимкам остатков (— = продаж за окно истории не было)"
+          >
+            Дней запаса
           </div>
           <div className="text-center">По магазинам</div>
         </div>
@@ -698,7 +707,7 @@ export function InventoryTable() {
               {/* Main Row */}
               <div
                 className="grid gap-2 px-4 py-3 items-center cursor-pointer hover:bg-blue-50/30 transition-colors"
-                style={{ gridTemplateColumns: `2.6fr 0.7fr 0.8fr ${Math.max(displayStores.length, 1)}fr` }}
+                style={{ gridTemplateColumns: `2.6fr 0.7fr 0.8fr 0.8fr ${Math.max(displayStores.length, 1)}fr` }}
                 onClick={() => setExpandedProduct(isExpanded ? null : product.id)}
               >
                 <div className="flex items-center gap-2 min-w-0">
@@ -810,6 +819,25 @@ export function InventoryTable() {
                   >
                     {totalStock} шт.
                   </span>
+                </div>
+                <div className="text-center">
+                  {historySales ? (
+                    <RunwayBadge
+                      quantity={totalStock}
+                      days={runwayDays(
+                        totalStock,
+                        selectedStore === 'all' || !selectedStoreName
+                          ? (product.link ? historySales.byProduct.get(product.link)?.total ?? 0 : 0)
+                          : (product.link
+                              ? historySales.byProduct.get(product.link)?.byStore.get(selectedStoreName) ?? 0
+                              : 0),
+                        historySales.days
+                      )}
+                      storeName={selectedStore === 'all' || !selectedStoreName ? 'вся сеть' : selectedStoreName}
+                    />
+                  ) : (
+                    <span className="text-[10px] text-gray-400" title="Мало снимков истории — скорость продаж неизвестна">—</span>
+                  )}
                 </div>
                 <div className="flex gap-2 justify-center flex-wrap">
                   {displayStores.map((store) => {
@@ -938,7 +966,7 @@ export function InventoryTable() {
                 key={`delisted-${g.key}`}
                 className="grid gap-2 px-4 py-3 items-center bg-gray-50/70 border border-dashed border-gray-300 rounded-lg"
                 style={{
-                  gridTemplateColumns: `2.6fr 0.7fr 0.8fr ${Math.max(displayStores.length, 1)}fr`,
+                  gridTemplateColumns: `2.6fr 0.7fr 0.8fr 0.8fr ${Math.max(displayStores.length, 1)}fr`,
                 }}
               >
                 <div className="min-w-0">

@@ -122,9 +122,9 @@ describe('stockValueByStore', () => {
       ],
       products: [{ id: 'p1', name: 'Т', brand: 'B', category: 'Обувь', price: 100, link: 'l1' }],
       inventory: [
-        { productId: 'p1', storeId: 's1', size: '42', quantity: 3 },
-        { productId: 'p1', storeId: 's2', size: '42', quantity: 0 },
-        { productId: 'p1', storeId: 's2', size: '43', quantity: 7, notCarried: true },
+        { productId: 'p1', storeId: 's1', size: '42', quantity: 3, lastUpdated: '2026-09-21' },
+        { productId: 'p1', storeId: 's2', size: '42', quantity: 0, lastUpdated: '2026-09-21' },
+        { productId: 'p1', storeId: 's2', size: '43', quantity: 7, notCarried: true, lastUpdated: '2026-09-21' },
       ],
       warnings: [],
     };
@@ -156,9 +156,9 @@ describe('deadStock', () => {
       { id: 'p3', name: 'Распродан', brand: 'B', category: 'Обувь', price: 30, link: 'l2' },
     ],
     inventory: [
-      { productId: 'p1', storeId: 's1', size: '42', quantity: 2 },
-      { productId: 'p2', storeId: 's1', size: '42', quantity: 4 },
-      { productId: 'p3', storeId: 's1', size: '42', quantity: 0 },
+      { productId: 'p1', storeId: 's1', size: '42', quantity: 2, lastUpdated: '2026-09-21' },
+      { productId: 'p2', storeId: 's1', size: '42', quantity: 4, lastUpdated: '2026-09-21' },
+      { productId: 'p3', storeId: 's1', size: '42', quantity: 0, lastUpdated: '2026-09-21' },
     ],
     warnings: [],
   };
@@ -193,8 +193,8 @@ describe('sizeProfile', () => {
       stores: [{ id: 's1', name: 'Уфа' }],
       products: [{ id: 'p1', name: 'Т', brand: 'B', category: 'Обувь', price: 10, link: 'l1' }],
       inventory: [
-        { productId: 'p1', storeId: 's1', size: '42', quantity: 8 },
-        { productId: 'p1', storeId: 's1', size: '44', quantity: 2 },
+        { productId: 'p1', storeId: 's1', size: '42', quantity: 8, lastUpdated: '2026-09-21' },
+        { productId: 'p1', storeId: 's1', size: '44', quantity: 2, lastUpdated: '2026-09-21' },
       ],
       warnings: [],
     };
