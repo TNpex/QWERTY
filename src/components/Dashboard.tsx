@@ -338,7 +338,7 @@ export function Dashboard({ onNavigate }: { onNavigate?: (tab: TabId) => void })
               <li>
                 <b>Источник</b> — снимок остатков{snapshotDate ? ` от ${snapshotDate}` : ''}
                 {scope !== ALL_SCOPE &&
-                  ' ; ассортимент точки сужен её профилем (вид спорта, скрытые категории) — вкладка «🏬 Магазины»'}
+                  ' ; ассортимент точки сужен её профилем (вид спорта, скрытые категории) — вкладка «Магазины»'}
                 .
               </li>
             </ul>
@@ -520,7 +520,7 @@ export function Dashboard({ onNavigate }: { onNavigate?: (tab: TabId) => void })
           <p className="text-xs text-gray-500 mb-4">
             {scope === ALL_SCOPE
               ? 'Выберите магазин в «Области» выше — покажем, чем его заполнить.'
-              : 'Ближайшие дефициты точки: что и откуда везти (полный список — вкладка «🔄 Перемещения»).'}
+              : 'Ближайшие дефициты точки: что и откуда везти (полный список — вкладка «Перемещения»).'}
           </p>
           <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
             {fillStore.length === 0 && scope !== ALL_SCOPE && (
@@ -574,7 +574,7 @@ export function Dashboard({ onNavigate }: { onNavigate?: (tab: TabId) => void })
               onClick={() => onNavigate('transfers')}
               className="mt-3 text-xs text-blue-600 hover:text-blue-800 hover:underline"
             >
-              Открыть «🔄 Перемещения» →
+              Открыть «Перемещения» →
             </button>
           )}
         </div>
