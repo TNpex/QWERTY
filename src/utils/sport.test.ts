@@ -42,7 +42,7 @@ describe('detectSport', () => {
   });
 
   it('ручная правка важнее автоопределения', () => {
-    const product = { article: 'X1', link: '', name: 'Футболка Nike', category: 'Одежда' };
+    const product = { article: 'X1', link: 'x1', name: 'Футболка Nike', category: 'Одежда' };
     expect(sportOf(product)).toBe('other'); // авто: универсальная одежда
     expect(sportOf(product, { x1: 'padel' })).toBe('padel');
     expect(sportOf(product, { x1: 'tennis' })).toBe('tennis');
@@ -50,13 +50,25 @@ describe('detectSport', () => {
 });
 
 describe('productSettingsKey', () => {
-  it('приоритет: артикул → ссылка → название (регистр и слэши не важны)', () => {
-    expect(productSettingsKey({ article: ' TS76-BKWH ', link: 'https://x/y/', name: 'N' })).toBe(
-      'ts76-bkwh'
+  it('ссылка — главный ключ: уникальна даже при одинаковом артикуле', () => {
+    expect(productSettingsKey({ article: 'WR1', link: 'https://x/a/', name: 'Один' })).toBe(
+      'https://x/a'
     );
-    expect(productSettingsKey({ link: 'https://site.ru/catalog/product/1/', name: 'N' })).toBe(
-      'https://site.ru/catalog/product/1'
+    expect(productSettingsKey({ article: 'WR1', link: 'https://x/b/', name: 'Другой' })).toBe(
+      'https://x/b'
     );
+  });
+
+  it('без ссылки: артикул+название — товары с одним артикулом не склеиваются', () => {
+    expect(productSettingsKey({ article: ' TS76-BKWH ', name: 'Модель А' })).toBe(
+      'ts76-bkwh::модель а'
+    );
+    expect(productSettingsKey({ article: 'TS76-BKWH', name: 'Модель Б' })).toBe(
+      'ts76-bkwh::модель б'
+    );
+  });
+
+  it('без ссылки и артикула — название', () => {
     expect(productSettingsKey({ name: ' Товар Без Артикула ' })).toBe('товар без артикула');
   });
 });

@@ -18,14 +18,7 @@ import {
   type ParserChange,
   type SizeSnapshot,
 } from '../utils/historyCore';
-import {
-  loadSettings,
-  saveSettings,
-  mergeSettings,
-  parseSettings,
-  EMPTY_SETTINGS,
-  type ProductSettings,
-} from '../utils/settings';
+import {loadSettings, saveSettings, mergeSettings, parseSettings, EMPTY_SETTINGS, type ProductSettings, migrateSettingsKeys} from '../utils/settings';
 import { EMPTY_STORE_PROFILE, type StoreProfile } from '../utils/storeRules';
 
 /** Профиль «Мой магазин» — локальный для устройства (в общий JSON не входит) */
@@ -465,12 +458,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const parsed = parseSettings(json);
     if (!parsed) return false;
     setSettingsState((current) => {
-      const next = mergeSettings(current, parsed);
+      let next = mergeSettings(current, parsed);
+      if (data) next = migrateSettingsKeys(next, data.products);
       saveSettings(next);
       return next;
     });
     return true;
-  }, []);
+  }, [data]);
+
+  // Миграция ключей настроек товаров: старые артикульные ключи (не уникальны)
+  // → индивидуальные ключи позиций. Прогоняем при каждой смене данных; если
+  // переносить нечего, migrateSettingsKeys возвращает тот же объект.
+  useEffect(() => {
+    if (!data) return;
+    setSettingsState((current) => {
+      const next = migrateSettingsKeys(current, data.products);
+      if (next !== current) saveSettings(next);
+      return next;
+    });
+  }, [data]);
 
   // Товары, исчезнувшие из каталога, но известные истории (для «Распроданных»)
   const delistedProducts = useMemo(() => {

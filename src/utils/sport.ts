@@ -59,17 +59,22 @@ export function detectSport(category: string, name: string): Sport {
 }
 
 /**
- * Стабильный ключ товара для ручных настроек (ориентация, исключения).
- * Артикул не уникален у цветовых вариантов, но настройки у вариантов одной
- * модели одинаковые; ссылка же меняется между парсингами — поэтому артикул,
- * затем нормализованная ссылка, затем название.
+ * Стабильный ключ товара для ручных настроек (ориентация, исключения,
+ * ходовые, минимумы, запреты).
+ *
+ * Артикул НЕ уникален: разные позиции (цветовые варианты и даже разные
+ * модели) могут иметь один артикул — настройки, привязанные к артикулу,
+ * «склеивались» между такими товарами. Уникальный идентификатор товара —
+ * ссылка на страницу (нормализованная), поэтому порядок такой:
+ * ссылка → артикул+название → название.
  */
 export function productSettingsKey(product: Pick<Product, 'article' | 'link' | 'name'>): string {
-  const article = (product.article ?? '').trim().toLowerCase();
-  if (article) return article;
   const link = (product.link ?? '').trim().replace(/\/+$/, '').toLowerCase();
   if (link) return link;
-  return (product.name ?? '').trim().toLowerCase();
+  const article = (product.article ?? '').trim().toLowerCase();
+  const name = (product.name ?? '').trim().toLowerCase();
+  if (article) return name ? `${article}::${name}` : article;
+  return name;
 }
 
 /** Итоговая ориентация товара: ручная правка → автоопределение */

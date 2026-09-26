@@ -489,7 +489,7 @@ describe('профили магазинов в перемещениях', () => 
         { id: 'w', name: 'Основной склад' },
       ],
       products: [
-        { id: 'p', name: 'Носки 7/6 Socks Pro', brand: '7/6', category: 'Аксессуары', price: 990, article: 'SL76-WH' },
+        { id: 'p', name: 'Носки 7/6 Socks Pro', brand: '7/6', category: 'Аксессуары', price: 990, article: 'SL76-WH', link: 'sl76-wh' },
       ],
       inventory: [
         { productId: 'p', storeId: 'a', size: '39-42', quantity: 2, lastUpdated: '' },
@@ -512,7 +512,7 @@ describe('профили магазинов в перемещениях', () => 
         { id: 'w', name: 'Основной склад' },
       ],
       products: [
-        { id: 'p', name: 'Носки 7/6 Socks Pro', brand: '7/6', category: 'Аксессуары', price: 990, article: 'SL76-WH' },
+        { id: 'p', name: 'Носки 7/6 Socks Pro', brand: '7/6', category: 'Аксессуары', price: 990, article: 'SL76-WH', link: 'sl76-wh' },
       ],
       inventory: [
         { productId: 'p', storeId: 'a', size: '39-42', quantity: 1, lastUpdated: '' },
@@ -544,7 +544,7 @@ describe('профили магазинов в дозакупке', () => {
       { id: 'w', name: 'Основной склад' },
     ],
     products: [
-      { id: 'p', name: 'Носки 7/6 Socks Pro - White', brand: '7/6', category: 'Аксессуары', price: 990, article: 'SL76-WH' },
+      { id: 'p', name: 'Носки 7/6 Socks Pro - White', brand: '7/6', category: 'Аксессуары', price: 990, article: 'SL76-WH', link: 'sl76-wh' },
     ],
     inventory: [
       { productId: 'p', storeId: 'a', size: '39-42', quantity: 2, lastUpdated: '' },

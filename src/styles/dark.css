@@ -3,7 +3,7 @@
  * Команда: npm run build-dark  (scripts/build-dark-css.mjs)
  *
  * Слой переопределений цветовых утилит Tailwind для `.dark` на <html>.
- * Классов в проекте: 161. Пересчёт — по HSL-правилам из шапки скрипта.
+ * Классов в проекте: 162. Пересчёт — по HSL-правилам из шапки скрипта.
  */
 
 html.dark {
@@ -97,6 +97,7 @@ html.dark .border-emerald-600 { border-color: hsl(160 84% 40%); }
 html.dark .border-gray-100 { border-color: hsl(220 20% 23%); }
 html.dark .border-gray-200 { border-color: hsl(220 22% 30%); }
 html.dark .border-gray-300 { border-color: hsl(220 26% 38%); }
+html.dark .border-gray-400 { border-color: hsl(220 35% 47%); }
 html.dark .border-gray-50 { border-color: hsl(220 20% 18%); }
 html.dark .border-gray-600 { border-color: hsl(220 18% 40%); }
 html.dark .border-gray-700 { border-color: hsl(220 18% 33%); }
