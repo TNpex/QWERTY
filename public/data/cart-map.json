@@ -1,5 +1,5 @@
 {
- "generatedAt": "2026-09-26 06:11:30",
+ "generatedAt": "2026-09-26 08:12:45",
  "items": {
   "https://saletennis.com/catalog/product/chiekhol-dlia-rakietki-7-6-one-racket-black-19469": {
    "itemId": "19469",
@@ -2555,22 +2555,22 @@
    "itemId": "17907",
    "article": "KJJ76-4056",
    "sizes": {
-    "L": "41049",
-    "M": "41050",
+    "XS": "41053",
     "S": "41051",
-    "XL": "41052",
-    "XS": "41053"
+    "M": "41050",
+    "L": "41049",
+    "XL": "41052"
    }
   },
   "https://saletennis.com/catalog/product/kofta-dietskaia-7-6-jackie-jacket-kids-light-green-17908": {
    "itemId": "17908",
    "article": "KJJ76-0116",
    "sizes": {
-    "XL": "41057",
     "XS": "41058",
     "S": "41056",
     "M": "41055",
-    "L": "41054"
+    "L": "41054",
+    "XL": "41057"
    }
   },
   "https://saletennis.com/catalog/product/kofta-dietskaia-7-6-taylor-kids-jacket-black-17278": {
@@ -5905,8 +5905,7 @@
    "sizes": {
     "XS": "41165",
     "S": "41164",
-    "L": "41162",
-    "XL": "41276"
+    "L": "41162"
    }
   },
   "https://saletennis.com/catalog/product/top-zhienskii-7-6-kris-top-misty-blue-19287": {
@@ -6648,13 +6647,6 @@
    "sizes": {
     "42,5": "31137",
     "44": "31139"
-   }
-  },
-  "https://saletennis.com/catalog/product/krossovki-muzhskiie-head-spint-pro-4-0-clay-red-dark-red-18572": {
-   "itemId": "18572",
-   "article": "273156-RDDR",
-   "sizes": {
-    "42,5": "42617"
    }
   },
   "https://saletennis.com/catalog/product/krossovki-muzhskiie-head-spint-pro-4-0-dark-blue-red-16979": {
@@ -7705,7 +7697,6 @@
     "36,5": "44492",
     "37": "31114",
     "38": "31115",
-    "38,5": "31116",
     "40,5": "31119",
     "42": "44493"
    }
@@ -7750,7 +7741,6 @@
     "38": "31296",
     "38,5": "31266",
     "39": "31267",
-    "40": "31268",
     "40,5": "31297",
     "41": "31298",
     "42": "42044"
@@ -11573,7 +11563,8 @@
    "itemId": "18687",
    "article": "WR201311",
    "sizes": {
-    "3": "43007"
+    "3": "43007",
+    "4": "43008"
    }
   },
   "https://saletennis.com/catalog/product/tiennisnaia-rakietka-wilson-pro-staff-97-v14-14720": {
@@ -12275,6 +12266,11 @@
   "https://saletennis.com/catalog/product/kol-tso-na-ruchku-rakietki-7-6-assorty-14380": {
    "itemId": "14380",
    "article": "HR76-AS",
+   "sizes": {}
+  },
+  "https://saletennis.com/catalog/product/kolpachiek-na-ruchku-rakietki-head-4-12489": {
+   "itemId": "12489",
+   "article": "285907",
    "sizes": {}
   },
   "https://saletennis.com/catalog/product/kolpachiek-na-ruchku-rakietki-head-5-13949": {
@@ -14666,11 +14662,6 @@
   "https://saletennis.com/catalog/product/rakietka-dlia-padiela-head-coello-jr-2026-19269": {
    "itemId": "19269",
    "article": "226726",
-   "sizes": {}
-  },
-  "https://saletennis.com/catalog/product/rakietka-dlia-padiela-head-coello-team-2026-19272": {
-   "itemId": "19272",
-   "article": "225056",
    "sizes": {}
   },
   "https://saletennis.com/catalog/product/rakietka-dlia-padiela-head-coello-vibe-2026-18926": {
