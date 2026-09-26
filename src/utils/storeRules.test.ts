@@ -31,6 +31,7 @@ const TENNIS_SHOE: Product = {
   category: 'Обувь',
   price: 8990,
   article: 'NK-1',
+  link: 'nk-1',
 };
 const PADEL_RACKET: Product = {
   id: 'p2',
@@ -39,6 +40,7 @@ const PADEL_RACKET: Product = {
   category: 'Падел - Ракетки',
   price: 24990,
   article: 'BB-2',
+  link: 'bb-2',
 };
 const TENNIS_STRING: Product = {
   id: 'p3',
@@ -47,6 +49,7 @@ const TENNIS_STRING: Product = {
   category: 'Теннисные струны',
   price: 1500,
   article: 'SOL-3',
+  link: 'sol-3',
 };
 const UNIVERSAL: Product = {
   id: 'p4',

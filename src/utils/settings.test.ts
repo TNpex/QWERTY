@@ -6,6 +6,8 @@ import {
   settingsToJson,
   hasStoreRules,
   EMPTY_SETTINGS,
+  migrateSettingsKeys,
+  type ProductSettings,
 } from './settings';
 import { storeProfileJson, storeProfileFileName, EMPTY_STORE_PROFILE } from './storeRules';
 
@@ -242,5 +244,55 @@ describe('storeProfiles в настройках', () => {
         storeProfiles: { Уфа: { ...EMPTY_STORE_PROFILE, bannedProducts: { k1: true } } },
       })
     ).toBe(true);
+  });
+});
+
+describe('migrateSettingsKeys', () => {
+  const products = [
+    { article: 'WR100', link: 'https://site/a', name: 'Куртка красная' },
+    { article: 'WR100', link: 'https://site/b', name: 'Куртка синяя' },
+    { article: 'WR200', link: 'https://site/c', name: 'Футболка' },
+  ];
+
+  it('старые артикульные ключи разливаются на все позиции с тем артикулом', () => {
+    const migrated = migrateSettingsKeys(
+      {
+        ...EMPTY_SETTINGS,
+        sportOverrides: { wr100: 'padel' },
+        hotProducts: { wr200: true },
+      },
+      products
+    );
+    expect(migrated.sportOverrides).toEqual({
+      'https://site/a': 'padel',
+      'https://site/b': 'padel',
+    });
+    expect(migrated.hotProducts).toEqual({ 'https://site/c': true });
+  });
+
+  it('новые ключи не трогают; без изменений возвращается тот же объект', () => {
+    const settings: ProductSettings = {
+      ...EMPTY_SETTINGS,
+      sportOverrides: { 'https://site/a': 'tennis' },
+    };
+    expect(migrateSettingsKeys(settings, products)).toBe(settings);
+  });
+
+  it('минимумы и запреты профилей мигрируют так же', () => {
+    const migrated = migrateSettingsKeys(
+      {
+        ...EMPTY_SETTINGS,
+        storeMinimums: { Уфа: { wr200: 3 } },
+        storeProfiles: {
+          Уфа: { ...EMPTY_STORE_PROFILE, bannedProducts: { wr100: true } },
+        },
+      },
+      products
+    );
+    expect(migrated.storeMinimums['Уфа']).toEqual({ 'https://site/c': 3 });
+    expect(Object.keys(migrated.storeProfiles['Уфа'].bannedProducts).sort()).toEqual([
+      'https://site/a',
+      'https://site/b',
+    ]);
   });
 });

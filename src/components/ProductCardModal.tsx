@@ -160,9 +160,7 @@ function ProductSettingsPanel({ product }: { product: Product }) {
         <div>
           <div className="text-xs font-semibold text-gray-600 mb-2">
             Ориентация товара{' '}
-            {override ? (
-              <span className="font-normal text-gray-400">(выбрана вручную ✎)</span>
-            ) : (
+            {!override && (
               <span className="font-normal text-gray-400">(определена автоматически)</span>
             )}
           </div>
@@ -786,8 +784,8 @@ export function ProductCardModal({
               </table>
             </div>
             <p className="mt-2 text-[10px] text-gray-400">
-              «—» — магазин не возит товар. Правка бренда (✎) сохраняется в браузере и
-              экспортируется для записи в CSV (см. README: npm run apply-edits).
+              «—» — магазин не возит товар. Правка бренда (✎) сохраняется
+              индивидуально в браузере и экспортируется для администратора.
             </p>
           </div>
         )}

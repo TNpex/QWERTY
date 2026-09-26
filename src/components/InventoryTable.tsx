@@ -28,6 +28,8 @@ import { compareSizes } from '../utils/sizes';
 import { isWarehouse, shortStoreLabel } from '../utils/storeGroups';
 import { sportOf, productSettingsKey } from '../utils/sport';
 import { ProductCardModal, ProductImage } from './ProductCardModal';
+import { DelistedProductModal } from './DelistedProductModal';
+import type { DelistedProduct } from '../utils/historyCore';
 import { useProductRoute } from '../utils/router';
 import { SportBadge } from './SportBadge';
 import type { InventoryItem } from '../types';
@@ -42,6 +44,40 @@ const VIEW_MODE_KEY = 'st-inventory-view';
 const SORT_KEY = 'st-inventory-sort';
 
 type ViewMode = 'table' | 'cards';
+
+/**
+ * Цена со скидкой по примеру «3 699 3 299 ₽»: старая зачёркнута, новая —
+ * красным жирным; без скидки — обычная серая цена.
+ */
+function PriceTag({ product, className = '' }: { product: Product; className?: string }) {
+  if (!product.price || product.price <= 0) return null;
+  const hasDiscount = (product.discountPercent ?? 0) > 0 && (product.oldPrice ?? 0) > product.price;
+  return (
+    <span className={`whitespace-nowrap tabular-nums ${className}`}>
+      {hasDiscount && (
+        <s className="text-gray-400 font-normal mr-1">
+          {(product.oldPrice ?? 0).toLocaleString('ru-RU')}
+        </s>
+      )}
+      <b className={hasDiscount ? 'text-rose-600 font-bold' : 'text-gray-600 font-semibold'}>
+    {product.price.toLocaleString('ru-RU')} ₽
+      </b>
+    </span>
+  );
+}
+
+/** Убранный с сайта товар из истории → товароподобный объект (фото, карточка) */
+function delistedAsProduct(g: DelistedProduct): Product {
+  return {
+    id: `delisted-${g.key}`,
+    name: g.name,
+    brand: g.brand,
+    category: g.category,
+    price: g.price,
+    link: g.link || undefined,
+    article: g.article || undefined,
+  };
+}
 
 /** Сортировка списка товаров (выбор запоминается в браузере) */
 export type InventorySort =
@@ -123,6 +159,7 @@ export function InventoryTable() {
       return 'table';
     }
   });
+  const [selectedDelisted, setSelectedDelisted] = useState<DelistedProduct | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   // Карточка товара — часть адреса (?product=<id>): работает кнопка «Назад»,
@@ -576,6 +613,7 @@ export function InventoryTable() {
                       {product.brand}
                       {product.article ? ` · ${product.article}` : ''}
                     </div>
+                    <PriceTag product={product} className="text-[10px]" />
                     {(isNew(product) || (product.discountPercent ?? 0) > 0) && (
                       <div className="flex items-center gap-1 flex-wrap">
                         {isNew(product) && (
@@ -626,11 +664,16 @@ export function InventoryTable() {
               return (
                 <div
                   key={`delisted-${g.key}`}
-                  className="text-left bg-gray-50 border border-dashed border-gray-300 rounded-xl overflow-hidden flex flex-col opacity-90"
-                  title="Товар убран с сайта — считается распроданным"
+                  className="text-left bg-gray-50 border border-dashed border-gray-300 rounded-xl overflow-hidden flex flex-col opacity-90 cursor-pointer hover:border-gray-400 transition-colors"
+                  title="Товар убран с сайта — считается распроданным. Клик — последнее наличие и размеры"
+                  onClick={() => setSelectedDelisted(g)}
                 >
-                  <div className="relative h-32 bg-gray-100 flex items-center justify-center text-gray-300">
-                    <PackageSearch className="w-10 h-10" />
+                  <div
+                    className="relative h-32 bg-gradient-to-br from-gray-50 to-blue-50 flex items-center justify-center overflow-hidden cursor-pointer"
+                    onClick={() => setSelectedDelisted(g)}
+                    title="Открыть подробности: последнее место нахождения и размеры"
+                  >
+                    <ProductImage product={delistedAsProduct(g)} alt={g.name} />
                     <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-gray-500 text-white text-[9px] font-bold uppercase">
                       Убран с сайта
                     </span>
@@ -641,6 +684,7 @@ export function InventoryTable() {
                         href={g.link}
                         target="_blank"
                         rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
                         className="text-[11px] leading-tight text-gray-600 line-clamp-2 hover:text-blue-600 hover:underline"
                         title={g.name}
                       >
@@ -800,9 +844,12 @@ export function InventoryTable() {
                         </span>
                       )}
                     </div>
-                    <div className="text-xs text-gray-500">
-                      {product.category}
-                      {product.article ? ` · ${product.article}` : ''}
+                    <div className="text-xs text-gray-500 flex items-baseline gap-2 flex-wrap">
+                      <span className="truncate">
+                        {product.category}
+                        {product.article ? ` · ${product.article}` : ''}
+                      </span>
+                      <PriceTag product={product} className="text-[11px]" />
                     </div>
                   </div>
                 </div>
@@ -944,7 +991,7 @@ export function InventoryTable() {
                     </table>
                   </div>
                   <div className="mt-2 text-xs text-gray-500">
-                    {product.price > 0 && <>Цена: {product.price.toLocaleString('ru-RU')} ₽ | </>}
+                    {product.price > 0 && <>Цена: <PriceTag product={product} /> | </>}
                     Обновлено: {uploadedAtText}
                   </div>
                 </div>
@@ -964,12 +1011,18 @@ export function InventoryTable() {
             return (
               <div
                 key={`delisted-${g.key}`}
-                className="grid gap-2 px-4 py-3 items-center bg-gray-50/70 border border-dashed border-gray-300 rounded-lg"
+                className="grid gap-2 px-4 py-3 items-center bg-gray-50/70 border border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 transition-colors"
                 style={{
                   gridTemplateColumns: `2.6fr 0.7fr 0.8fr 0.8fr ${Math.max(displayStores.length, 1)}fr`,
                 }}
+                onClick={() => setSelectedDelisted(g)}
+                title="Открыть подробности: последнее место нахождения и размеры"
               >
-                <div className="min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-10 h-10 flex-shrink-0 rounded bg-gray-100 overflow-hidden">
+                    <ProductImage product={delistedAsProduct(g)} alt={g.name} />
+                  </div>
+                  <div className="min-w-0">
                   <div className="text-sm text-gray-500 line-clamp-1" title={g.name}>
                     {g.link ? (
                       <a
@@ -994,6 +1047,7 @@ export function InventoryTable() {
                     {g.category}
                     {g.article ? ` · ${g.article}` : ''} · последний раз в наличии:{' '}
                     {g.lastSeen.slice(0, 10)} ({g.lastTotal} шт.)
+                  </div>
                   </div>
                 </div>
                 <div className="text-sm text-gray-400 truncate">{g.brand}</div>
@@ -1122,6 +1176,12 @@ export function InventoryTable() {
 
       {selectedProduct && (
         <ProductCardModal productId={selectedProduct} onClose={() => closeProductCard()} />
+      )}
+      {selectedDelisted && (
+        <DelistedProductModal
+          delisted={selectedDelisted}
+          onClose={() => setSelectedDelisted(null)}
+        />
       )}
     </div>
   );

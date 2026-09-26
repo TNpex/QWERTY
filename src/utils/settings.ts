@@ -1,4 +1,6 @@
 import type { Sport } from './sport';
+import { productSettingsKey } from './sport';
+import type { Product } from '../types';
 
 /**
  * Ручные настройки товаров — «как можно проще»: всё хранится в браузере
@@ -253,4 +255,80 @@ function isEmptyProfile(profile: StoreProfile): boolean {
     Object.keys(profile.bannedProducts).length === 0 &&
     !profile.note.trim()
   );
+}
+
+/**
+ * Миграция старых ключей настроек на новые (unique-per-product).
+ *
+ * Раньше ключом был артикул, но он не уникален: правки «склеивались» между
+ * разными товарами с одним артикулом. Новый ключ — нормализованная ссылка
+ * (см. productSettingsKey). Функция переносит сохранённые значения со старых
+ * артикульных ключей на новые ключи всех товаров с тем артикулом (поведение
+ * «как было» однократно, дальше настройки становятся индивидуальными).
+ * Если переносить нечего — возвращает тот же объект (без перерисовок).
+ */
+export function migrateSettingsKeys<T extends ProductSettings>(
+  settings: T,
+  products: Pick<Product, 'article' | 'link' | 'name'>[]
+): T {
+  const newKeys = new Set(products.map(productSettingsKey));
+  const byOldKey = new Map<string, string[]>();
+  for (const product of products) {
+    const article = (product.article ?? '').trim().toLowerCase();
+    if (!article) continue;
+    const newKey = productSettingsKey(product);
+    const list = byOldKey.get(article) ?? [];
+    if (!list.includes(newKey)) list.push(newKey);
+    byOldKey.set(article, list);
+  }
+
+  const remap = (key: string): string[] => {
+    if (newKeys.has(key)) return [key];
+    const legacy = byOldKey.get(key.trim().toLowerCase());
+    return legacy && legacy.length > 0 ? legacy : [key];
+  };
+
+  const remapRecord = <V>(record: Record<string, V>): { next: Record<string, V>; changed: boolean } => {
+    const next: Record<string, V> = {};
+    let changed = false;
+    for (const [key, value] of Object.entries(record)) {
+      const targets = remap(key);
+      if (targets.length !== 1 || targets[0] !== key) changed = true;
+      for (const target of targets) {
+        if (!(target in next)) next[target] = value;
+      }
+    }
+    return { next, changed };
+  };
+
+  let changed = false;
+  const sport = remapRecord(settings.sportOverrides);
+  const excluded = remapRecord(settings.excludedProducts);
+  const supplied = remapRecord(settings.suppliedProducts);
+  const hot = remapRecord(settings.hotProducts);
+  changed ||= sport.changed || excluded.changed || supplied.changed || hot.changed;
+
+  const storeMinimums: Record<string, Record<string, number>> = {};
+  for (const [store, record] of Object.entries(settings.storeMinimums)) {
+    const r = remapRecord(record);
+    changed ||= r.changed;
+    storeMinimums[store] = r.next;
+  }
+  const storeProfiles: Record<string, StoreProfile> = {};
+  for (const [store, profile] of Object.entries(settings.storeProfiles)) {
+    const banned = remapRecord(profile.bannedProducts);
+    changed ||= banned.changed;
+    storeProfiles[store] = banned.changed ? { ...profile, bannedProducts: banned.next } : profile;
+  }
+
+  if (!changed) return settings;
+  return {
+    ...settings,
+    sportOverrides: sport.next,
+    excludedProducts: excluded.next,
+    suppliedProducts: supplied.next,
+    hotProducts: hot.next,
+    storeMinimums,
+    storeProfiles,
+  };
 }
