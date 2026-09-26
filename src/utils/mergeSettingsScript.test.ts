@@ -31,7 +31,7 @@ describe('scripts/merge-settings.mjs', () => {
           hotProducts: {},
           storeMinimums: { Уфа: { 'nt76-4104': 2 }, Ижевск: { k: 3 } },
           storeProfiles: {
-            Уфа: { sport: 'padel', hiddenCategories: ['Струны'], bannedProducts: { 'старый': true }, note: '' },
+            Уфа: { sport: 'padel', hiddenCategories: ['Струны'], bannedProducts: { 'старый': true }, categoryExceptions: {}, note: '' },
           },
         })
       );

@@ -345,3 +345,46 @@ describe('экспорт профиля магазина', () => {
     expect(downloadStoreProfile(EMPTY_SETTINGS, 'Уфа')).toBe('product-settings-уфа.json');
   });
 });
+
+describe('исключения из скрытых категорий («все аксессуары, кроме носков»)', () => {
+  const settings = {
+    sportOverrides: {},
+    storeMinimums: {},
+    storeProfiles: {
+      'Екатеринбург (Елизаветинское шоссе)': {
+        ...EMPTY_STORE_PROFILE,
+        hiddenCategories: ['Аксессуары'],
+        categoryExceptions: { Аксессуары: ['Носки'] },
+      },
+    },
+  };
+  const store = 'Екатеринбург (Елизаветинское шоссе)';
+  const base = { article: 'A1', link: 'l1', name: 'Товар', category: 'Аксессуары' };
+
+  it('подтип-исключение продаётся, остальная категория скрыта', () => {
+    expect(storeSellsProduct(settings, store, { ...base, subtype: 'Носки' })).toBe(true);
+    expect(storeSellsProduct(settings, store, { ...base, subtype: 'Грипы' })).toBe(false);
+    expect(storeSellsProduct(settings, store, base)).toBe(false);
+  });
+
+  it('🚫 запрет сильнее исключения', () => {
+    const withBan = {
+      sportOverrides: {},
+      storeMinimums: {},
+      storeProfiles: {
+        [store]: {
+          ...EMPTY_STORE_PROFILE,
+          hiddenCategories: ['Аксессуары'],
+          categoryExceptions: { Аксессуары: ['Носки'] },
+          bannedProducts: { l1: true as const },
+        },
+      },
+    };
+    expect(storeSellsProduct(withBan, store, { ...base, subtype: 'Носки' })).toBe(false);
+  });
+
+  it('нормализация профиля сохраняет исключения из JSON', () => {
+    const profile = normalizeStoreProfile(settings.storeProfiles[store]);
+    expect(profile.categoryExceptions).toEqual({ Аксессуары: ['Носки'] });
+  });
+});

@@ -132,8 +132,8 @@ describe('productMeta', () => {
 
 describe('detectClothingSubtype: разбор «Прочее» по смыслу', () => {
   it('аксессуары для ракеток: grips, виброгасители, утяжелители, защита', () => {
-    expect(detectClothingSubtype('Овергрип Head Sonic Pro')).toBe('Грипы и овергрипы');
-    expect(detectClothingSubtype('Грип Wilson Leather')).toBe('Грипы и овергрипы');
+    expect(detectClothingSubtype('Овергрип Head Sonic Pro')).toBe('Овергрипы');
+    expect(detectClothingSubtype('Грип Wilson Leather')).toBe('Грипы');
     expect(detectClothingSubtype('Виброгаситель Head Djokovic')).toBe('Виброгасители');
     expect(detectClothingSubtype('Заглушка ручки ракетки 7/6')).toBe('Аксессуары для ракеток');
     expect(detectClothingSubtype('Лента утяжелитель 7/6')).toBe('Аксессуары для ракеток');
@@ -231,5 +231,20 @@ describe('cleanBrand', () => {
   it('валидный бренд не трогает', () => {
     expect(cleanBrand('Ракетка Head Speed', 'H1', 'Head')).toBe('Head');
     expect(cleanBrand('Что угодно', 'B1', 'Babolat')).toBe('Babolat');
+  });
+});
+
+describe('подтипы аксессуаров: грипы и овергрипы раздельно', () => {
+  it('овергрип не попадает в грипы', () => {
+    expect(detectClothingSubtype('Овергрип Head Prime Feel')).toBe('Овергрипы');
+    expect(detectClothingSubtype('Overgrip Wilson Pro')).toBe('Овергрипы');
+  });
+  it('грип без приставки «овер» — грипы', () => {
+    expect(detectClothingSubtype('Грип Tourna Tac')).toBe('Грипы');
+    expect(detectClothingSubtype('Grip Head Hydrosorb')).toBe('Грипы');
+  });
+  it('виброгасители и носки на месте', () => {
+    expect(detectClothingSubtype('Виброгаситель Babolat Pure Drive')).toBe('Виброгасители');
+    expect(detectClothingSubtype('Носки Nike Everyday')).toBe('Носки');
   });
 });

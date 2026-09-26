@@ -75,7 +75,9 @@ const SUBTYPE_RULES: { subtype: string; markers: string[] }[] = [
   { subtype: 'Комплекты', markers: ['комплект', 'набор ', 'костюм'] },
   { subtype: 'Головные уборы', markers: ['кепк', 'бейсболк', 'шапк', 'повязк', 'бандан', 'козырек', 'козырёк'] },
   // ---- аксессуары для ракеток ----
-  { subtype: 'Грипы и овергрипы', markers: ['овергрип', 'overgrip', 'over g rip', 'грип', 'grip'] },
+  // Порядок важен: «овергрип» проверяется раньше «грипа»
+  { subtype: 'Овергрипы', markers: ['овергрип', 'overgrip', 'over g rip', 'over-grip'] },
+  { subtype: 'Грипы', markers: ['грип', 'grip'] },
   { subtype: 'Виброгасители', markers: ['виброгаситель', 'вибро', 'dampener', 'vibration'] },
   {
     subtype: 'Аксессуары для ракеток',

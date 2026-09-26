@@ -77,6 +77,19 @@ export function StoreProfiles() {
   const storeName = selected || data?.stores[0]?.name || '';
   const profile = useMemo(() => profileOf(settings, storeName), [settings, storeName]);
 
+  /** Подтипы товаров по категориям — для исключений из скрытых категорий */
+  const subtypesByCategory = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const product of products) {
+      if (!product.subtype) continue;
+      const list = map.get(product.category) ?? [];
+      if (!list.includes(product.subtype)) list.push(product.subtype);
+      map.set(product.category, list);
+    }
+    for (const list of map.values()) list.sort((a, b) => a.localeCompare(b, 'ru'));
+    return map;
+  }, [products]);
+
   const searchResults = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return [];
@@ -100,6 +113,17 @@ export function StoreProfiles() {
       ? profile.hiddenCategories.filter((c) => c !== category)
       : [...profile.hiddenCategories, category];
     updateStoreProfile(storeName, { hiddenCategories: hidden });
+  };
+
+  /** Исключение подтипа из скрытой категории («все аксессуары, кроме носков») */
+  const toggleException = (category: string, subtype: string) => {
+    const current = profile.categoryExceptions[category] ?? [];
+    const next = current.includes(subtype)
+      ? current.filter((s) => s !== subtype)
+      : [...current, subtype];
+    const categoryExceptions = { ...profile.categoryExceptions, [category]: next };
+    if (next.length === 0) delete categoryExceptions[category];
+    updateStoreProfile(storeName, { categoryExceptions });
   };
 
   const exportProfile = () => {
@@ -295,6 +319,42 @@ export function StoreProfiles() {
                 );
               })}
             </div>
+            {profile.hiddenCategories.length > 0 && (
+              <div className="mt-2 space-y-1.5">
+                {profile.hiddenCategories.map((category) => {
+                  const subtypes = subtypesByCategory.get(category) ?? [];
+                  if (subtypes.length === 0) return null;
+                  const exceptions = profile.categoryExceptions[category] ?? [];
+                  return (
+                    <div key={category} className="flex items-center gap-1.5 flex-wrap text-[11px]">
+                      <span className="text-gray-400">⛔ {category} — но продавать:</span>
+                      {subtypes.map((subtype) => {
+                        const active = exceptions.includes(subtype);
+                        return (
+                          <button
+                            key={subtype}
+                            onClick={() => toggleException(category, subtype)}
+                            className={`px-2 py-0.5 rounded-full border transition-colors ${
+                              active
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : 'bg-white text-gray-400 border-gray-200 hover:bg-gray-50'
+                            }`}
+                            title={
+                              active
+                                ? 'Убрать исключение: подтип снова скрыт вместе с категорией'
+                                : 'Оставить этот подтип в продаже, даже когда категория скрыта'
+                            }
+                          >
+                            {active ? '✓ ' : ''}
+                            {subtype}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </section>
 
           {/* Перемещения */}
