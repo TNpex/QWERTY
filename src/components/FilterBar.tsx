@@ -64,9 +64,9 @@ export function FilterBar() {
           value={filters.subtype}
           onChange={(e) => setFilters({ subtype: e.target.value })}
           className={selectClass}
-          title="Тип одежды (носки, футболки, шорты, платья и т.д.)"
+          title="Подтип товара: носки, футболки, шорты, грипы, овергрипы, виброгасители и т.д."
         >
-          <option value="all">Все типы одежды</option>
+          <option value="all">Все типы (одежда, аксессуары)</option>
           {subtypes.map((subtype) => (
             <option key={subtype} value={subtype}>
               {subtype}

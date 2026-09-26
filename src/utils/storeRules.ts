@@ -42,6 +42,12 @@ export interface StoreProfile {
   defaultMinimum: number;
   /** Индивидуальные запреты: ключ товара (productSettingsKey) → true */
   bannedProducts: Record<string, true>;
+  /**
+   * Исключения из скрытых категорий: категория → подтипы, которые точка
+   * ПРОДАЁТ, даже когда категория скрыта целиком («все аксессуары, кроме
+   * носков»: hiddenCategories=['Аксессуары'], categoryExceptions={'Аксессуары':['Носки']}).
+   */
+  categoryExceptions: Record<string, string[]>;
   /** Заметка о магазине (видна только в профиле) */
   note: string;
 }
@@ -52,6 +58,7 @@ export const EMPTY_STORE_PROFILE: StoreProfile = {
   transfersDisabled: false,
   defaultMinimum: 0,
   bannedProducts: {},
+  categoryExceptions: {},
   note: '',
 };
 
@@ -96,6 +103,15 @@ export function normalizeStoreProfile(raw: unknown): StoreProfile {
       }
     }
   }
+  if (source.categoryExceptions && typeof source.categoryExceptions === 'object') {
+    for (const [category, list] of Object.entries(source.categoryExceptions as Record<string, unknown>)) {
+      if (!Array.isArray(list)) continue;
+      const subtypes = list
+        .filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+        .map((x) => x.trim());
+      if (subtypes.length > 0) profile.categoryExceptions[category] = subtypes;
+    }
+  }
   if (typeof source.note === 'string') profile.note = source.note;
   return profile;
 }
@@ -122,6 +138,7 @@ export function profileOf(settings: StoreRulesSource, storeName: string): StoreP
     transfersDisabled: stored.transfersDisabled === true,
     defaultMinimum: stored.defaultMinimum > 0 ? stored.defaultMinimum : 0,
     bannedProducts: stored.bannedProducts ?? {},
+    categoryExceptions: stored.categoryExceptions ?? {},
     note: stored.note ?? '',
   };
 }
@@ -131,6 +148,7 @@ export function isProfileEmpty(profile: StoreProfile): boolean {
   return (
     profile.sport === 'all' &&
     profile.hiddenCategories.length === 0 &&
+    Object.keys(profile.categoryExceptions ?? {}).length === 0 &&
     !profile.transfersDisabled &&
     profile.defaultMinimum <= 0 &&
     Object.keys(profile.bannedProducts).length === 0 &&
@@ -168,10 +186,19 @@ export function effectiveMinimum(
 }
 
 /** Причина, по которой товар вне ассортимента точки (null — товар подходит) */
+/** Подтипы категории, которые точка продаёт несмотря на скрытую категорию */
+export function categoryExceptionsOf(
+  settings: StoreAssortmentSource,
+  storeName: string,
+  category: string
+): string[] {
+  return profileOf(settings, storeName).categoryExceptions[category] ?? [];
+}
+
 export function assortmentBlock(
   settings: StoreAssortmentSource,
   storeName: string,
-  product: Pick<Product, 'article' | 'link' | 'name' | 'category'>
+  product: Pick<Product, 'article' | 'link' | 'name' | 'category' | 'subtype'>
 ): { reason: 'sport' | 'category' | 'banned'; label: string } | null {
   const profile = profileOf(settings, storeName);
   if (profile.bannedProducts[productSettingsKey(product)]) {
@@ -186,7 +213,11 @@ export function assortmentBlock(
     };
   }
   if (profile.hiddenCategories.includes(product.category)) {
-    return { reason: 'category', label: `⛔ категория «${product.category}» скрыта в магазине` };
+    const exceptions = profile.categoryExceptions[product.category];
+    const excepted = product.subtype != null && exceptions?.includes(product.subtype);
+    if (!excepted) {
+      return { reason: 'category', label: `⛔ категория «${product.category}» скрыта в магазине` };
+    }
   }
   return null;
 }
@@ -198,7 +229,7 @@ export function assortmentBlock(
 export function storeSellsProduct(
   settings: StoreAssortmentSource,
   storeName: string,
-  product: Pick<Product, 'article' | 'link' | 'name' | 'category'>
+  product: Pick<Product, 'article' | 'link' | 'name' | 'category' | 'subtype'>
 ): boolean {
   return assortmentBlock(settings, storeName, product) === null;
 }
@@ -210,7 +241,7 @@ export function storeSellsProduct(
 export function storeAcceptsTransfer(
   settings: StoreAssortmentSource,
   storeName: string,
-  product: Pick<Product, 'article' | 'link' | 'name' | 'category'>
+  product: Pick<Product, 'article' | 'link' | 'name' | 'category' | 'subtype'>
 ): boolean {
   if (profileOf(settings, storeName).transfersDisabled) return false;
   return storeSellsProduct(settings, storeName, product);
@@ -262,7 +293,7 @@ const STATUS_META: Record<StoreRuleStatus, { icon: string; label: string }> = {
 export function storeRuleView(
   settings: StoreAssortmentSource,
   storeName: string,
-  product: Pick<Product, 'article' | 'link' | 'name' | 'category'>
+  product: Pick<Product, 'article' | 'link' | 'name' | 'category' | 'subtype'>
 ): StoreRuleView {
   const profile = profileOf(settings, storeName);
   const block = assortmentBlock(settings, storeName, product);
@@ -302,7 +333,7 @@ export function storeRuleView(
 export function storeRuleViews(
   settings: StoreAssortmentSource,
   storeNames: string[],
-  product: Pick<Product, 'article' | 'link' | 'name' | 'category'>
+  product: Pick<Product, 'article' | 'link' | 'name' | 'category' | 'subtype'>
 ): StoreRuleView[] {
   return storeNames.map((name) => storeRuleView(settings, name, product));
 }

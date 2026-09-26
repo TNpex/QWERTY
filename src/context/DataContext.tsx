@@ -9,7 +9,7 @@ import {
 } from 'react';
 import type { ParsedData } from '../types';
 import { saveParsedData, loadParsedData, clearSavedData } from '../utils/storage';
-import { loadBundledDataset, type HotProductConfig } from '../utils/bundledData';
+import { loadBundledDataset, loadBundledHistory, type HotProductConfig } from '../utils/bundledData';
 import {
   collectDelistedProducts,
   productIdentityKey,
@@ -189,7 +189,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       let loadedDiscounts: DiscountMap | null = null;
       let failure: string | null = null;
       try {
-        const dataset = await loadBundledDataset();
+        // Первый экран — без тяжёлой истории снимков: она дотягивается фоном
+        const dataset = await loadBundledDataset({ skipHistory: true });
         bundled = dataset.data;
         snapshots = dataset.history;
         changes = dataset.changes;
@@ -245,6 +246,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setBrandOverrides(overrides);
       if (chosen) setDataState(applyBrandOverrides(chosen, overrides));
       setHydrated(true);
+
+      // История снимков (~20 МБ) — фоном после первого экрана: продажи,
+      // «дней запаса», динамика и дайджест оживают сразу после догрузки
+      void (async () => {
+        const loaded = await loadBundledHistory();
+        if (cancelled) return;
+        setHistory(loaded.history);
+        setSizeSnapshots(loaded.sizeSnapshots);
+      })();
     })().catch((e) => {
       // сюда попадаем только при неожиданной ошибке — экран не должен висеть в «Загрузка…»
       if (!cancelled) {

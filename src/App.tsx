@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { DataProvider, useData } from './context/DataContext';
 import { downloadBrandOverrides } from './utils/overrides';
@@ -219,6 +219,24 @@ function AppContent() {
   // Внутренние ссылки работают как в SPA: обычный клик — без перезагрузки,
   // Ctrl/средняя кнопка/«Открыть в новой вкладке» — как обычные ссылки
   useEffect(() => interceptInternalLinks(), []);
+
+  // Предзагрузка чанка вкладки при наведении: клик открывает раздел без паузы
+  const prefetched = useRef<Set<Tab>>(new Set());
+  const prefetchTab = useCallback((tab: Tab) => {
+    if (prefetched.current.has(tab)) return;
+    prefetched.current.add(tab);
+    const loaders: Partial<Record<Tab, () => Promise<unknown>>> = {
+      dashboard: () => import('./components/Dashboard'),
+      inventory: () => import('./components/InventoryTable'),
+      matrix: () => import('./components/StockMatrix'),
+      sales: () => import('./components/SalesHistory'),
+      transfers: () => import('./components/TransferRecommendations'),
+      restock: () => import('./components/RestockRecommendations'),
+      stores: () => import('./components/StoreProfiles'),
+      analytics: () => import('./components/AnalyticsPage'),
+    };
+    void loaders[tab]?.().catch(() => {});
+  }, []);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Название раздела — в заголовок вкладки браузера
@@ -361,7 +379,8 @@ function AppContent() {
                   key={tab.id}
                   href={routeToPath({ tab: tab.id })}
                   onClick={() => setSidebarOpen(false)}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                  onMouseEnter={() => prefetchTab(tab.id)}
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                     activeTab === tab.id
                       ? 'bg-blue-50 text-blue-700 shadow-sm'
                       : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'

@@ -455,37 +455,17 @@ async function fetchSnapshotRows(url: string): Promise<Record<string, unknown>[]
 }
 
 /** Загружает встроенные данные, историю снимков, журнал изменений и ходовые товары */
-export async function loadBundledDataset(): Promise<BundledDataset> {
+/**
+ * История снимков и size-снимки из public/data/history — самая тяжёлая часть
+ * загрузки (десятки МБ). Вынесена отдельно, чтобы интерфейс мог показать
+ * данные сразу, а историю дотянуть фоном (см. DataContext).
+ */
+export async function loadBundledHistory(): Promise<{
+  history: HistorySnapshot[];
+  sizeSnapshots: SizeSnapshot[];
+  lastDate?: string;
+}> {
   const base = `${import.meta.env.BASE_URL ?? '/'}data/`;
-
-  const [productsText, sizesText, changesText, hotText, settingsText, cartMapText, discountsText] =
-    await Promise.all([
-      fetchText(`${base}products.csv`),
-      fetchText(`${base}sizes.csv`).catch(() => ''),
-      fetchText(`${base}changes.csv`).catch(() => ''),
-      fetchText(`${base}hot-products.json`).catch(() => ''),
-      fetchText(`${base}product-settings.json`).catch(() => ''),
-      fetchText(`${base}cart-map.json`).catch(() => ''),
-      fetchText(`${base}discounts.json`).catch(() => ''),
-    ]);
-
-  const productsRows = parseCSVText(productsText);
-  const sizesRows = sizesText ? parseCSVText(sizesText) : [];
-  const changes = changesText ? parseChangesCsv(parseCSVText(changesText)) : [];
-
-  let hotProducts: HotProductConfig[] = [];
-  if (hotText) {
-    try {
-      const parsed = JSON.parse(hotText) as { articles?: HotProductConfig[] };
-      hotProducts = (parsed.articles ?? []).filter(
-        (h) => h && typeof h.article === 'string' && Number(h.minPerStore) > 0
-      );
-    } catch {
-      /* повреждённый hot-products.json — работаем без ходовых */
-    }
-  }
-
-  // История снимков (опциональна; CSV или XLSX, имена вида ГГГГ-ММ-ДД[_ЧЧ-ММ-СС])
   let history: HistorySnapshot[] = [];
   let sizeSnapshots: SizeSnapshot[] = [];
   try {
@@ -531,8 +511,70 @@ export async function loadBundledDataset(): Promise<BundledDataset> {
   } catch {
     // Истории нет — не критично
   }
+  const lastDate = history.length > 0 ? history[history.length - 1].date : undefined;
+  return { history, sizeSnapshots, lastDate };
+}
 
-  const asOf = history.length > 0 ? history[history.length - 1].date : undefined;
+/** Дата последнего снимка из манифеста — дёшево, без загрузки самих снимков */
+export async function loadBundledHistoryLastDate(): Promise<string | undefined> {
+  const base = `${import.meta.env.BASE_URL ?? '/'}data/`;
+  try {
+    const manifest = JSON.parse(await fetchText(`${base}history/manifest.json`)) as {
+      snapshots?: ManifestEntry[];
+    };
+    const dates = (manifest.snapshots ?? [])
+      .map((entry) => (entry && entry.file ? entry.date || snapshotFileToDate(entry.file) : ''))
+      .filter(Boolean)
+      .sort();
+    return dates.length > 0 ? dates[dates.length - 1] : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function loadBundledDataset(opts?: { skipHistory?: boolean }): Promise<BundledDataset> {
+  const base = `${import.meta.env.BASE_URL ?? '/'}data/`;
+
+  const [productsText, sizesText, changesText, hotText, settingsText, cartMapText, discountsText] =
+    await Promise.all([
+      fetchText(`${base}products.csv`),
+      fetchText(`${base}sizes.csv`).catch(() => ''),
+      fetchText(`${base}changes.csv`).catch(() => ''),
+      fetchText(`${base}hot-products.json`).catch(() => ''),
+      fetchText(`${base}product-settings.json`).catch(() => ''),
+      fetchText(`${base}cart-map.json`).catch(() => ''),
+      fetchText(`${base}discounts.json`).catch(() => ''),
+    ]);
+
+  const productsRows = parseCSVText(productsText);
+  const sizesRows = sizesText ? parseCSVText(sizesText) : [];
+  const changes = changesText ? parseChangesCsv(parseCSVText(changesText)) : [];
+
+  let hotProducts: HotProductConfig[] = [];
+  if (hotText) {
+    try {
+      const parsed = JSON.parse(hotText) as { articles?: HotProductConfig[] };
+      hotProducts = (parsed.articles ?? []).filter(
+        (h) => h && typeof h.article === 'string' && Number(h.minPerStore) > 0
+      );
+    } catch {
+      /* повреждённый hot-products.json — работаем без ходовых */
+    }
+  }
+
+  let history: HistorySnapshot[] = [];
+  let sizeSnapshots: SizeSnapshot[] = [];
+  let asOf: string | undefined;
+  if (opts?.skipHistory) {
+    // Первый экран без тяжёлой истории: дату снимка берём из манифеста
+    asOf = await loadBundledHistoryLastDate();
+  } else {
+    const loaded = await loadBundledHistory();
+    history = loaded.history;
+    sizeSnapshots = loaded.sizeSnapshots;
+    asOf = loaded.lastDate;
+  }
+
   const discounts = discountsText ? parseDiscounts(discountsText) : null;
   // Скидки проставляются товарам сразу: price в каталоге уже «со скидкой»,
   // поэтому добавляем только старую цену и процент

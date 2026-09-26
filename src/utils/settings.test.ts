@@ -125,6 +125,7 @@ describe('settingsCounts / roundtrip', () => {
           transfersDisabled: true,
           defaultMinimum: 2,
           bannedProducts: { k1: true as const },
+          categoryExceptions: {},
           note: 'мало места',
         },
       },
@@ -170,6 +171,7 @@ describe('storeProfiles в настройках', () => {
       transfersDisabled: false,
       defaultMinimum: 3,
       bannedProducts: { 'ts76-bkwh': true },
+      categoryExceptions: {},
       note: '  точка в ТЦ  ',
     });
   });
