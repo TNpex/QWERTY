@@ -54,3 +54,10 @@ html {
 .animate-pulse-subtle {
   animation: pulse-subtle 2s ease-in-out infinite;
 }
+
+/* Тяжёлые списки: строки вне экрана не участвуют в раскладке и отрисовке.
+   contain-intrinsic-size сохраняет высоту строки, чтобы скролл не прыгал. */
+.cv-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 96px;
+}

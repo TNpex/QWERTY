@@ -508,6 +508,26 @@ def parse_stock_from_soup(soup):
     return store_totals, sizes_data, details_text
 
 
+def extract_old_price_http(soup) -> str:
+    """Старая (зачёркнутая) цена на странице товара.
+
+    Скидка есть не только у товаров из раздела «Распродажа»: сайт показывает
+    перечёркнутую цену прямо в карточке (p.card__price-old). Без неё дашборд
+    видел только текущую цену и не помечал товар как скидочный.
+    """
+    for sel in (".card__price-old", "s.card__price", ".price-old", ".card__price s"):
+        el = soup.select_one(sel)
+        if not el:
+            continue
+        digits = re.sub(r'[^\d,.]', '', el.get_text(strip=True))
+        if digits:
+            try:
+                return f"{int(float(digits.replace(' ', '').replace(',', '.')))} ₽"
+            except ValueError:
+                continue
+    return ''
+
+
 def extract_price_http(soup) -> str:
     meta = soup.select_one("meta[itemprop='price']")
     if meta and meta.get("content"):
@@ -749,6 +769,7 @@ def _product_from_soup(soup, url: str, category: str) -> dict:
         'Название': name,
         'Бренд': brand,
         'Цена': price,
+        'Старая цена': extract_old_price_http(soup),
         'Ссылка': url,
         'Размеры и наличие': details_text,
         'Всего': sum(store_totals.values()),

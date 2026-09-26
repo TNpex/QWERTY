@@ -80,6 +80,13 @@ const isBadBrandValue = (brand: string): boolean =>
  * Чистая функция слияния строк products.csv и sizes.csv в ParsedData.
  * Экспортируется для unit-тестов.
  */
+/** Старая цена и процент скидки, если старая больше текущей */
+function oldPriceFields(price: number, oldPrice: number): Pick<Product, 'oldPrice' | 'discountPercent'> | Record<string, never> {
+  if (!oldPrice || oldPrice <= price || price <= 0) return {};
+  const percent = Math.min(99, Math.max(1, Math.round((1 - price / oldPrice) * 100)));
+  return { oldPrice, discountPercent: percent };
+}
+
 export function parseBundledRows(
   productsRows: Record<string, unknown>[],
   sizesRows: Record<string, unknown>[],
@@ -97,6 +104,7 @@ export function parseBundledRows(
   const mapping = detectColumns(productHeaders);
   const linkCol = findColumn(productHeaders, LINK_ALIASES);
   const photoCol = findColumn(productHeaders, PHOTO_ALIASES);
+  const oldPriceCol = findColumn(productHeaders, ['старая цена', 'old price', 'цена до скидки']);
   const catalogStoreColumns = mapping.format === 'wide' ? mapping.storeColumns : [];
 
   // Магазины — из колонок products.csv (канонические полные названия)
@@ -137,6 +145,7 @@ export function parseBundledRows(
       ? String(row[mapping.categoryCol] ?? '').trim() || 'Другое'
       : 'Другое';
     const price = mapping.priceCol ? parsePrice(row[mapping.priceCol]) : 0;
+    const oldPrice = oldPriceCol ? parsePrice(row[oldPriceCol]) : 0;
 
     // Артикул НЕ уникален (варианты цветов одной модели) — ключом служит ссылка
     const id = `p_${hashString(link || `${article}|${name}`)}`;
@@ -153,6 +162,7 @@ export function parseBundledRows(
       article,
       ...(link ? { link } : {}),
       ...(photo ? { photo } : {}),
+      ...oldPriceFields(price, oldPrice),
       gender: meta.gender,
       ...(meta.subtype ? { subtype: meta.subtype } : {}),
     };
@@ -179,6 +189,7 @@ export function parseBundledRows(
     const brandColS = findColumn(sizesHeaders, ['бренд', 'brand']);
     const categoryColS = findColumn(sizesHeaders, ['категория', 'category']);
     const priceColS = findColumn(sizesHeaders, ['цена', 'price']);
+    const oldPriceColS = findColumn(sizesHeaders, ['старая цена', 'old price', 'цена до скидки']);
 
     if (!storeCol || !qtyCol) {
       throw new Error('sizes.csv: не найдены колонки «Магазин» или «Количество»');
@@ -202,6 +213,7 @@ export function parseBundledRows(
             ? String(row[categoryColS] ?? '').trim() || 'Другое'
             : 'Другое';
           const rowPrice = priceColS ? parsePrice(row[priceColS]) : 0;
+          const rowOldPrice = oldPriceColS ? parsePrice(row[oldPriceColS]) : 0;
           const meta = productMeta(name || article, rowCategory);
           product = {
             id,
@@ -209,6 +221,7 @@ export function parseBundledRows(
             brand: cleanBrand(name, article, rawBrand),
             category: rowCategory,
             price: rowPrice,
+            ...oldPriceFields(rowPrice, rowOldPrice),
             article,
             ...(link ? { link } : {}),
             gender: meta.gender,
@@ -474,40 +487,38 @@ export async function loadBundledHistory(): Promise<{
       sizeSnapshots?: ManifestEntry[];
     };
     const entries = (manifest.snapshots ?? []).filter((s) => s && s.file);
-    const rowSets = await Promise.all(
-      entries.map((entry) => fetchSnapshotRows(`${base}history/${entry.file}`).catch(() => null))
-    );
-    history = rowSets
-      .map((rows, i) => {
-        if (!rows) return null;
-        const date = entries[i].date || snapshotFileToDate(entries[i].file);
+    // Парсим снимки по одному с отдачей главного потока между ними:
+    // история весит десятки МБ, без yield фоновая догрузка подвешивала UI
+    const parsed: HistorySnapshot[] = [];
+    for (const entry of entries) {
+      const rows = await fetchSnapshotRows(`${base}history/${entry.file}`).catch(() => null);
+      if (rows) {
+        const date = entry.date || snapshotFileToDate(entry.file);
         try {
-          return parseSnapshotRows(rows, date);
+          parsed.push(parseSnapshotRows(rows, date));
         } catch {
-          return null;
+          /* битый снимок пропускаем */
         }
-      })
-      .filter((snapshot): snapshot is HistorySnapshot => snapshot !== null)
-      .sort((a, b) => a.date.localeCompare(b.date));
+      }
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    history = parsed.sort((a, b) => a.date.localeCompare(b.date));
 
     const sizeEntries = (manifest.sizeSnapshots ?? []).filter((s) => s && s.file);
-    const sizeRowSets = await Promise.all(
-      sizeEntries.map((entry) =>
-        fetchSnapshotRows(`${base}history/${entry.file}`).catch(() => null)
-      )
-    );
-    sizeSnapshots = sizeRowSets
-      .map((rows, i) => {
-        if (!rows) return null;
-        const date = sizeEntries[i].date || snapshotFileToDate(sizeEntries[i].file);
+    const parsedSizes: SizeSnapshot[] = [];
+    for (const entry of sizeEntries) {
+      const rows = await fetchSnapshotRows(`${base}history/${entry.file}`).catch(() => null);
+      if (rows) {
+        const date = entry.date || snapshotFileToDate(entry.file);
         try {
-          return parseSizeSnapshotRows(rows, date);
+          parsedSizes.push(parseSizeSnapshotRows(rows, date));
         } catch {
-          return null;
+          /* битый снимок пропускаем */
         }
-      })
-      .filter((snapshot): snapshot is SizeSnapshot => snapshot !== null)
-      .sort((a, b) => a.date.localeCompare(b.date));
+      }
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    sizeSnapshots = parsedSizes.sort((a, b) => a.date.localeCompare(b.date));
   } catch {
     // Истории нет — не критично
   }

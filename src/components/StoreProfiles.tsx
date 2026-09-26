@@ -2,13 +2,7 @@ import { useMemo, useState } from 'react';
 import { Download, Search, Store as StoreIcon, Trash2, X } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { productSettingsKey } from '../utils/sport';
-import {
-  downloadStoreProfile,
-  isProfileEmpty,
-  profileOf,
-  STORE_SPORT_LABELS,
-  type StoreSport,
-} from '../utils/storeRules';
+import {downloadStoreProfile, isProfileEmpty, profileOf, STORE_SPORT_LABELS, type StoreSport, storeSellsProduct} from '../utils/storeRules';
 import { isWarehouse, shortStoreLabel } from '../utils/storeGroups';
 import { ProductCardModal } from './ProductCardModal';
 import { useProductRoute } from '../utils/router';
@@ -37,6 +31,7 @@ export function StoreProfiles() {
     useData();
   const [selected, setSelected] = useState<string>(storeProfile || '');
   const [query, setQuery] = useState('');
+  const [bansOpen, setBansOpen] = useState(false);
   // Карточка товара — часть адреса (?product=<id>), кнопка «Назад» её закрывает
   const { productId: openProduct, openProduct: openCard, closeProduct: closeCard } =
     useProductRoute('stores');
@@ -44,11 +39,22 @@ export function StoreProfiles() {
 
   const products = useMemo(() => data?.products ?? [], [data]);
 
-  /** Ассортимент точки: сколько артикулов она возит из всех */
+  /**
+   * Ассортимент точки: сколько артикулов она РЕАЛЬНО продаёт из всех —
+   * с учётом профиля (вид спорта, ⛔ скрытые категории с исключениями,
+   * 🚫 индивидуальные запреты), а не только «возит по данным».
+   */
   const assortment = useMemo(() => {
     const carried = new Map<string, Set<string>>();
-    for (const item of data?.inventory ?? []) {
+    if (!data) return carried;
+    const productById = new Map(data.products.map((p) => [p.id, p]));
+    const storeNameById = new Map(data.stores.map((st) => [st.id, st.name]));
+    for (const item of data.inventory) {
       if (item.notCarried) continue;
+      const storeName = storeNameById.get(item.storeId);
+      const product = productById.get(item.productId);
+      if (!storeName || !product) continue;
+      if (!storeSellsProduct(settings, storeName, product)) continue;
       let set = carried.get(item.storeId);
       if (!set) {
         set = new Set();
@@ -57,7 +63,7 @@ export function StoreProfiles() {
       set.add(item.productId);
     }
     return carried;
-  }, [data]);
+  }, [data, settings]);
 
   /** Запреты: ключ товара → товар (для человекочитаемого списка) */
   const productByKey = useMemo(() => {
@@ -400,9 +406,20 @@ export function StoreProfiles() {
 
           {/* Индивидуальные запреты товаров */}
           <section>
-            <div className="text-xs font-semibold text-gray-600 mb-2">
-              Индивидуальные запреты товаров{' '}
-              <span className="font-normal text-gray-400">— 🚫 {bannedKeys.length}</span>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="text-xs font-semibold text-gray-600">
+                Индивидуальные запреты товаров{' '}
+                <span className="font-normal text-gray-400">— 🚫 {bannedKeys.length}</span>
+              </div>
+              {bannedKeys.length > 0 && (
+                <button
+                  onClick={() => setBansOpen((o) => !o)}
+                  className="text-[11px] font-medium text-indigo-600 hover:text-indigo-800 hover:underline"
+                  title={bansOpen ? 'Свернуть список запрещённых товаров' : 'Показать список запрещённых товаров'}
+                >
+                  {bansOpen ? '▾ Скрыть список' : '▸ Показать список'}
+                </button>
+              )}
             </div>
             <div className="relative">
               <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -455,7 +472,7 @@ export function StoreProfiles() {
               </div>
             )}
 
-            {bannedKeys.length > 0 && (
+            {bansOpen && bannedKeys.length > 0 && (
               <div className="mt-3 space-y-1">
                 {bannedKeys.map((key) => {
                   const product = productByKey.get(key);
