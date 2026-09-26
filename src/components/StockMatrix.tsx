@@ -3,7 +3,7 @@ import { Search } from 'lucide-react';
 import { useFilteredData, useHistorySales } from '../hooks/useAnalytics';
 import { isWarehouse, shortStoreLabel, sortStoresForDisplay } from '../utils/storeGroups';
 import { runwayDays } from '../utils/insights';
-import { navigate } from '../utils/router';
+import { navigate, routeToPath } from '../utils/router';
 import type { Product } from '../types';
 
 /**
@@ -165,13 +165,22 @@ export function StockMatrix() {
                 <tr
                   key={row.product.id}
                   className="border-t border-gray-100 hover:bg-blue-50/40 cursor-pointer transition-colors"
-                  onClick={() => navigate({ tab: 'inventory', product: row.product.id })}
+                  onClick={(e) => {
+                    // клик по внутренней ссылке обрабатывает сама ссылка
+                    if ((e.target as HTMLElement).closest('a[href]')) return;
+                    navigate({ tab: 'inventory', product: row.product.id });
+                  }}
                   title="Открыть карточку товара"
                 >
                   <td className="py-1.5 px-3 sticky left-0 bg-white">
-                    <div className="font-medium text-gray-800 leading-snug line-clamp-1">
+                    <a
+                      href={routeToPath({ tab: 'inventory', product: row.product.id })}
+                      onClick={(e) => e.stopPropagation()}
+                      className="font-medium text-gray-800 leading-snug line-clamp-1 hover:text-blue-600 hover:underline cursor-pointer"
+                      title="Открыть карточку товара (Ctrl/средняя кнопка — в новой вкладке)"
+                    >
                       {row.product.name}
-                    </div>
+                    </a>
                     <div className="text-[10px] text-gray-400">
                       {row.product.brand}
                       {row.product.article ? ` · ${row.product.article}` : ''}

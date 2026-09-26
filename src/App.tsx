@@ -44,7 +44,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { FilterBar } from './components/FilterBar';
 import { StorePicker } from './components/StorePicker';
-import { useRoute, useNavigateTab } from './utils/router';
+import { useRoute, useNavigateTab, routeToPath, interceptInternalLinks } from './utils/router';
 import { useStoreScope } from './hooks/useStoreScope';
 import { applyTheme, loadTheme, saveTheme, toggleTheme, type Theme } from './theme';
 import { loadServicePanelOpen, saveServicePanelOpen } from './utils/uiPrefs';
@@ -215,6 +215,10 @@ function AppContent() {
   const route = useRoute();
   const activeTab: Tab = route.tab;
   const setActiveTab = useNavigateTab();
+
+  // Внутренние ссылки работают как в SPA: обычный клик — без перезагрузки,
+  // Ctrl/средняя кнопка/«Открыть в новой вкладке» — как обычные ссылки
+  useEffect(() => interceptInternalLinks(), []);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Название раздела — в заголовок вкладки браузера
@@ -353,12 +357,10 @@ function AppContent() {
             {TABS.map((tab) => {
               const Icon = tab.icon;
               return (
-                <button
+                <a
                   key={tab.id}
-                  onClick={() => {
-                    setActiveTab(tab.id);
-                    setSidebarOpen(false);
-                  }}
+                  href={routeToPath({ tab: tab.id })}
+                  onClick={() => setSidebarOpen(false)}
                   className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
                     activeTab === tab.id
                       ? 'bg-blue-50 text-blue-700 shadow-sm'
@@ -367,7 +369,7 @@ function AppContent() {
                 >
                   <Icon className="w-4 h-4" />
                   {tab.label}
-                </button>
+                </a>
               );
             })}
           </nav>

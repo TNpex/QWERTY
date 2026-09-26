@@ -89,6 +89,42 @@ export function routeToPath(route: Route): string {
   return query ? `${path}?${query}` : path;
 }
 
+/** Маршрут, если адрес — известная страница приложения, иначе null */
+export function matchRoute(pathname: string, search = ''): Route | null {
+  const base = basePath();
+  let path = pathname || '/';
+  if (base && path.startsWith(base)) path = path.slice(base.length) || '/';
+  if (path.length > 1 && path.endsWith('/')) path = path.slice(0, -1);
+  if (!PATH_TO_TAB.has(path) && !PATH_TO_TAB.has(path.toLowerCase())) return null;
+  return parseRoute(pathname, search);
+}
+
+/**
+ * Перехват внутренних ссылок внутри SPA: обычный клик по <a href> не
+ * перезагружает страницу, а Ctrl/⌘/Shift/средняя кнопка и «Открыть в новой
+ * вкладке» остаются браузеру — навигация работает как на обычном сайте.
+ */
+export function interceptInternalLinks(): () => void {
+  if (!hasWindow) return () => {};
+  const handler = (e: MouseEvent) => {
+    if (e.defaultPrevented || e.button !== 0) return;
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const target = e.target as HTMLElement | null;
+    const a = target?.closest?.('a[href]') as HTMLAnchorElement | null;
+    if (!a || a.target === '_blank' || a.hasAttribute('download')) return;
+    const href = a.getAttribute('href');
+    if (!href || href.startsWith('#')) return;
+    const url = new URL(href, window.location.href);
+    if (url.origin !== window.location.origin) return;
+    const route = matchRoute(url.pathname, url.search);
+    if (!route) return;
+    e.preventDefault();
+    navigate(route);
+  };
+  document.addEventListener('click', handler);
+  return () => document.removeEventListener('click', handler);
+}
+
 export function currentRoute(): Route {
   if (!hasWindow) return { ...HOME_ROUTE };
   return parseRoute(window.location.pathname, window.location.search);

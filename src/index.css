@@ -1,6 +1,15 @@
 @import "tailwindcss";
 @import "./styles/dark.css";
 
+/* Tailwind v4 оставляет кнопкам курсор-стрелку — возвращаем указатель,
+   чтобы кликабельность была видна без пробы кликом */
+@layer base {
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

@@ -30,7 +30,7 @@ import { sportOf, productSettingsKey } from '../utils/sport';
 import { ProductCardModal, ProductImage } from './ProductCardModal';
 import { DelistedProductModal } from './DelistedProductModal';
 import type { DelistedProduct } from '../utils/historyCore';
-import { useProductRoute } from '../utils/router';
+import { useProductRoute, routeToPath } from '../utils/router';
 import { SportBadge } from './SportBadge';
 import type { InventoryItem } from '../types';
 
@@ -762,15 +762,14 @@ export function InventoryTable() {
                   )}
                   <div className="min-w-0">
                     <div className="text-sm leading-snug" title={product.name}>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openProductCard(product.id);
-                        }}
-                        className="font-medium text-gray-800 hover:text-blue-600 hover:underline text-left break-words line-clamp-2"
+                      <a
+                        href={routeToPath({ tab: 'inventory', product: product.id })}
+                        onClick={(e) => e.stopPropagation()}
+                        className="font-medium text-gray-800 hover:text-blue-600 hover:underline text-left break-words line-clamp-2 cursor-pointer"
+                        title="Открыть карточку товара (Ctrl/средняя кнопка — в новой вкладке)"
                       >
                         {product.name}
-                      </button>
+                      </a>
                       {product.link && (
                         <a
                           href={product.link}

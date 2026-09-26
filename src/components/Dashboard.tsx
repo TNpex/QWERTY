@@ -38,6 +38,7 @@ import {
 } from '../utils/storeScope';
 import { useStoreScope } from '../hooks/useStoreScope';
 import { StoreDigest } from './StoreDigest';
+import { routeToPath } from '../utils/router';
 import type { TabId } from '../types';
 
 /**
@@ -86,19 +87,22 @@ function FractionCard({
   sublabel,
   tone,
   onClick,
-}: FractionCardProps) {
+  href,
+}: FractionCardProps & { href?: string }) {
   const colors = TONES[tone];
   const percent = sharePercent(part, total);
-  const Tag = onClick ? 'button' : 'div';
+  const Tag = (href ? 'a' : onClick ? 'button' : 'div') as 'a';
   return (
     <Tag
-      {...(onClick
-        ? {
-            onClick,
-            type: 'button' as const,
-            title: 'Открыть соответствующую вкладку',
-          }
-        : {})}
+      {...(href
+        ? { href, title: 'Открыть соответствующую страницу (Ctrl/средняя кнопка — в новой вкладке)' }
+        : onClick
+          ? {
+              onClick,
+              type: 'button' as const,
+              title: 'Открыть соответствующую вкладку',
+            }
+          : {})}
       className={`${colors.card} rounded-xl shadow-sm border border-gray-100 p-4 text-left w-full ${
         onClick ? 'hover:shadow-md hover:border-gray-200 transition-all cursor-pointer' : ''
       }`}
@@ -131,14 +135,19 @@ interface NumberCardProps {
   sublabel?: string;
   tone: Tone;
   onClick?: () => void;
+  href?: string;
 }
 
-function NumberCard({ icon, label, value, sublabel, tone, onClick }: NumberCardProps) {
+function NumberCard({ icon, label, value, sublabel, tone, onClick, href }: NumberCardProps) {
   const colors = TONES[tone];
-  const Tag = onClick ? 'button' : 'div';
+  const Tag = (href ? 'a' : onClick ? 'button' : 'div') as 'a';
   return (
     <Tag
-      {...(onClick ? { onClick, type: 'button' as const } : {})}
+      {...(href
+        ? { href, title: 'Открыть соответствующую страницу (Ctrl/средняя кнопка — в новой вкладке)' }
+        : onClick
+          ? { onClick, type: 'button' as const }
+          : {})}
       className={`${colors.card} rounded-xl shadow-sm border border-gray-100 p-4 text-left w-full ${
         onClick ? 'hover:shadow-md hover:border-gray-200 transition-all cursor-pointer' : ''
       }`}
@@ -359,7 +368,7 @@ export function Dashboard({ onNavigate }: { onNavigate?: (tab: TabId) => void })
           tone="red"
           caption={`${sharePercent(overview.positions.outOfStock, overview.positions.carried)}% позиций с нулём`}
           sublabel="товар × размер × магазин"
-          onClick={onNavigate ? () => onNavigate('inventory') : undefined}
+          href={onNavigate ? routeToPath({ tab: 'inventory' }) : undefined}
         />
         <FractionCard
           icon={<Flame className="w-4 h-4" />}
@@ -369,7 +378,7 @@ export function Dashboard({ onNavigate }: { onNavigate?: (tab: TabId) => void })
           tone="orange"
           caption="нет ни одной штуки"
           sublabel={scope === ALL_SCOPE ? 'по всей сети' : `в «${scope}»`}
-          onClick={onNavigate ? () => onNavigate('sales') : undefined}
+          href={onNavigate ? routeToPath({ tab: 'sales' }) : undefined}
         />
         <FractionCard
           icon={<Package className="w-4 h-4" />}
@@ -379,7 +388,7 @@ export function Dashboard({ onNavigate }: { onNavigate?: (tab: TabId) => void })
           tone="emerald"
           caption="хотя бы одна штука"
           sublabel={`артикулов всего: ${overview.products}`}
-          onClick={onNavigate ? () => onNavigate('inventory') : undefined}
+          href={onNavigate ? routeToPath({ tab: 'inventory' }) : undefined}
         />
         <NumberCard
           icon={<BarChart3 className="w-4 h-4" />}
@@ -401,7 +410,7 @@ export function Dashboard({ onNavigate }: { onNavigate?: (tab: TabId) => void })
           value={`${incomingMoves} поз.`}
           sublabel={`${incomingUnits} шт. · ${incoming.length} вариантов`}
           tone="amber"
-          onClick={onNavigate ? () => onNavigate('transfers') : undefined}
+          href={onNavigate ? routeToPath({ tab: 'transfers' }) : undefined}
         />
         <NumberCard
           icon={<ArrowUpFromLine className="w-4 h-4" />}
@@ -409,7 +418,7 @@ export function Dashboard({ onNavigate }: { onNavigate?: (tab: TabId) => void })
           value={`${outgoingMoves} поз.`}
           sublabel={scope === ALL_SCOPE ? 'размер × магазин-донор' : 'можно вывезти из точки'}
           tone="amber"
-          onClick={onNavigate ? () => onNavigate('transfers') : undefined}
+          href={onNavigate ? routeToPath({ tab: 'transfers' }) : undefined}
         />
         <NumberCard
           icon={<ShoppingCart className="w-4 h-4" />}
@@ -417,7 +426,7 @@ export function Dashboard({ onNavigate }: { onNavigate?: (tab: TabId) => void })
           value={`${restocks.length} поз.`}
           sublabel={`${restockUnits} шт. у поставщика`}
           tone="rose"
-          onClick={onNavigate ? () => onNavigate('restock') : undefined}
+          href={onNavigate ? routeToPath({ tab: 'restock' }) : undefined}
         />
         <NumberCard
           icon={<TrendingUp className="w-4 h-4" />}
@@ -425,7 +434,7 @@ export function Dashboard({ onNavigate }: { onNavigate?: (tab: TabId) => void })
           value={`${scopedOverstock.length} поз.`}
           sublabel="размеров сверх неснижаемого остатка"
           tone="orange"
-          onClick={onNavigate ? () => onNavigate('transfers') : undefined}
+          href={onNavigate ? routeToPath({ tab: 'transfers' }) : undefined}
         />
       </div>
 
@@ -573,12 +582,12 @@ export function Dashboard({ onNavigate }: { onNavigate?: (tab: TabId) => void })
             ))}
           </div>
           {onNavigate && (
-            <button
-              onClick={() => onNavigate('transfers')}
-              className="mt-3 text-xs text-blue-600 hover:text-blue-800 hover:underline"
+            <a
+              href={routeToPath({ tab: 'transfers' })}
+              className="mt-3 inline-block text-xs text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
             >
               Открыть «Перемещения» →
-            </button>
+            </a>
           )}
         </div>
       </div>
