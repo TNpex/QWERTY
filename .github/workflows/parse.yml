@@ -73,6 +73,11 @@ jobs:
           echo "Удалено оригиналов с готовым WebP: $deleted"
           du -sh public/data/product_images
 
+      - name: Удалить фото-сироты убранного с сайта товара
+        # Фото товаров, которых нет в products.csv, иначе копятся в каждом
+        # деплое и раздувают Deployment Storage Vercel.
+        run: node scripts/clean-orphan-images.mjs
+
       - name: Закоммитить обновлённые данные
         run: |
           git config user.name "saletennis-parser[bot]"
