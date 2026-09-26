@@ -84,3 +84,21 @@ Python-парсер → public/data/*.csv|json → Vite public → браузе�
 - Тесты покрывают только utils; компонентов нет. Новые фичи в utils → добавлять тесты (стиль проекта).
 - Русская локализация UI и комментариев — стиль проекта, соблюдать.
 - CI на каждый push: lint + typecheck + test + build — всё должно проходить перед коммитом.
+
+## Реализовано 2026-09-26 (ветка fix/sidebar-menu-and-service-panel)
+
+- Сайдбар: меню без цветных эмодзи (только lucide-иконки), «Мой магазин» — только
+  названия; панель «Настройки и данные» в потоке flex-колонки (не перекрывает меню),
+  секции «Данные / Настройки товаров / О данных» с единообразными строками-кнопками.
+- Название сайта: «SaleTennis Analytics» (index.html, document.title, FileUpload, сайдбар).
+- Тёмная тема: сплошные фоны вместо полупрозрачных белых (карточка товара, «Продажи»);
+  Recharts темизирован (currentColor для осей/сетки, CSS-переменные --tip-* для тултипов);
+  короткие имена точек на осях/легендах, полные — в тултипах.
+- insights.ts (+12 тестов): продажи по (товар × магазин) из снимков, runwayDays/
+  runwayLevel, abcClasses (A=80%/B=95%/C), deadStock (≥60 дней), stockValueByStore,
+  availabilityTrend, sizeProfile.
+- UI: вкладка «Матрица» (/matrix, StockMatrix.tsx); колонка «Дней запаса» в инвентаре и
+  RunwayBadge в карточке товара; «Утро магазина» (StoreDigest.tsx) на Обзоре при
+  выбранной точке; в «Аналитике» — AvailabilityTrendChart, StockValueChart,
+  AbcCoverageCard, DeadStockCard (+XLSX), SizeProfileCard; XLSX-экспорт перемещений;
+  code-splitting вкладок (lazy + Suspense, чанки по разделам).
