@@ -14,7 +14,7 @@ import {
 } from '../utils/sport';
 import { SportBadge } from './SportBadge';
 import { compareSizes } from '../utils/sizes';
-import { isWarehouse, getStoreCity, shortStoreLabel } from '../utils/storeGroups';
+import { isWarehouse, cityHint, shortStoreLabel } from '../utils/storeGroups';
 import { storeRuleText, storeRuleView, storeRuleViews } from '../utils/storeRules';
 import type { InventoryItem, Product } from '../types';
 
@@ -662,9 +662,11 @@ export function ProductCardModal({
                         {warehouse ? '📦 ' : ''}
                         {store.name}
                       </span>
-                      <span className="text-[10px] text-gray-400 ml-2">
-                        {getStoreCity(store.name)}
-                      </span>
+                      {cityHint(store.name) && (
+                        <span className="text-[10px] text-gray-400 ml-2">
+                          {cityHint(store.name)}
+                        </span>
+                      )}
                       {rule.status !== 'allowed' && (
                         <span
                           className="text-[10px] ml-1.5"
