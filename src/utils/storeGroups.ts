@@ -27,6 +27,16 @@ export function getStoreCity(storeName: string): string {
   return beforeParen || 'Прочие';
 }
 
+/**
+ * Подсказка города для подписи магазина: возвращает null, если город уже
+ * содержится в названии («Уфа», «Санкт-Петербург (Спортивная)»), иначе имя
+ * города («Полевской тракт» → «Екатеринбург»). Защищает от дублей в UI.
+ */
+export function cityHint(storeName: string): string | null {
+  const city = getStoreCity(storeName);
+  return storeName.toLowerCase().includes(city.toLowerCase()) ? null : city;
+}
+
 const CITY_ORDER = ['Санкт-Петербург', 'Екатеринбург', 'Тюмень', 'Уфа', 'Ижевск'];
 
 function cityRank(city: string): number {
@@ -92,14 +102,23 @@ const CITY_PREFIX: Record<string, string> = {
 };
 
 /**
+ * Переопределения коротких подписей: когда первая буква улицы совпадает
+ * с другим магазином города («Парина» и «Полевской тракт» → обе «П»).
+ */
+const SHORT_LABEL_OVERRIDES: Record<string, string> = {
+  'Екатеринбург (Полевской тракт)': 'ЕКБ-ПТ',
+};
+
+/**
  * Короткая подпись магазина для колонок таблиц:
  * «Санкт-Петербург (Ярослава Гашека)» → «СПБ-Я»,
- * «Екатеринбург (Парина)» → «ЕКБ-П»,
+ * «Екатеринбург (Парина)» → «ЕКБ-П», «Екатеринбург (Полевской тракт)» → «ЕКБ-ПТ»,
  * «Тюмень (Народная)» → «ТЮМ-Н», «Уфа» → «УФА»,
  * «Екатеринбург (Основной склад)» → «СКЛАД» (в UI выделяется синим).
  */
 export function shortStoreLabel(name: string): string {
   if (isWarehouse(name)) return 'СКЛАД';
+  if (SHORT_LABEL_OVERRIDES[name]) return SHORT_LABEL_OVERRIDES[name];
   const lower = name.toLowerCase();
 
   let prefix = '';
